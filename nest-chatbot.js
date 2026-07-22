@@ -101,6 +101,7 @@
     var removed = false;    // torn down (403)
     var lastInitStatus = 0; // most recent init outcome — 429 turns "error" into "retry"
     var initWaiters = null; // callbacks queued behind an in-flight init
+    var sendQueue = [];     // turns queued behind an in-flight turn — one at a time
     var introPlayed = false;
     var els = {};
 
@@ -220,8 +221,7 @@
 
     /* ============================================================== api ===== */
     /*
-     * THE SEAM. This is the only section that talks to the network, and the only
-     * section the API session needs to touch.
+     * THE SEAM. The only section that talks to the network.
      *
      * Contract (docs/wsuite/integration-guide.md §3):
      *   init  POST {apiBase}/api/v1/chatbot/conversations
@@ -237,9 +237,9 @@
      * codes to behaviour.
      *
      * NOTE (open item, see CLAUDE.md): `locale` in the turn body is an additive
-     * field not present in the frozen v1 spec — a v1 server ignores it. It exists
-     * so a guest can switch language mid-conversation. Confirm it server-side when
-     * the contract is revisited.
+     * field not in the contract (1.2.0) — the server ignores it. It exists so a
+     * guest can switch language mid-conversation. Raised with the platform team
+     * as a candidate 1.3.0 minor.
      */
 
     // The response-contract version this widget was built against. The init
@@ -286,16 +286,25 @@
      * stays a documented follow-up rather than a quick add. */
     function request(method, path, body, done) {
         var xhr = new XMLHttpRequest();
-        xhr.open(method, cfg.apiBase + path, true);
-        xhr.setRequestHeader('Authorization', 'Bearer ' + cfg.key);
-        if (body != null) { xhr.setRequestHeader('Content-Type', 'application/json'); }
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState !== 4) { return; }
-            var parsed = null;
-            try { parsed = JSON.parse(xhr.responseText); } catch (e) { parsed = null; }
-            done(xhr.status, parsed);
-        };
-        try { xhr.send(body == null ? null : JSON.stringify(body)); } catch (e) { done(0, null); }
+        // The whole setup is guarded, not just send(): open() throws
+        // synchronously on an unparseable data-api-base (stray space, bare
+        // scheme…), and an uncaught throw here would wedge the initWaiters
+        // queue. done() cannot fire twice — a sync throw means the request
+        // never reached readyState 4.
+        try {
+            xhr.open(method, cfg.apiBase + path, true);
+            xhr.setRequestHeader('Authorization', 'Bearer ' + cfg.key);
+            if (body != null) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) { return; }
+                var parsed = null;
+                try { parsed = JSON.parse(xhr.responseText); } catch (e) { parsed = null; }
+                done(xhr.status, parsed);
+            };
+            xhr.send(body == null ? null : JSON.stringify(body));
+        } catch (e) {
+            done(0, null);
+        }
     }
 
     var API = {
@@ -1001,6 +1010,11 @@
             return;
         }
 
+        // One turn in flight at a time. submit() gates on busy, but several
+        // messages queued behind one init drain here together — serialize them
+        // (their guest bubbles are already on screen, in order).
+        if (busy) { sendQueue.push(text); return; }
+
         busy = true;
         els.send.disabled = true;
         var thinking = showThinking();
@@ -1017,6 +1031,7 @@
                 var bubble = body.reply ? addBubble('bot', '') : null;
                 if (bubble) { typeText(bubble, body.reply); }
                 renderActions(body.actions, bubble);
+                drainSend();
                 return;
             }
 
@@ -1029,14 +1044,20 @@
                 conversationUuid = null;
                 started = false;
                 startConversation(function () { sendMessage(text, true); });
-                return;
+                return;   // the retry's own callback drains the queue
             }
 
             if (status === 403) { teardown(); return; }
-            if (status === 429) { addBubble('bot', t('retry')); return; }
+            if (status === 429) { addBubble('bot', t('retry')); drainSend(); return; }
 
             addBubble('bot', t('error'));
+            drainSend();
         });
+    }
+
+    function drainSend() {
+        if (removed || busy || !sendQueue.length) { return; }
+        sendMessage(sendQueue.shift(), false);
     }
 
     function teardown() {
