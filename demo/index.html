@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Nest Chatbot AI — demo host page</title>
+
+    <!--
+        This page is a STAND-IN FOR A CUSTOMER SITE, not the product.
+
+        Everything below the <style> block is deliberately hostile to a badly
+        scoped widget: it uses the generic class names (.hidden, .message,
+        .chat-header) and global element styles that a widget with unscoped CSS
+        would trample. If the widget is behaving, nothing on this page changes
+        appearance when it loads.
+
+        The widget itself is ONE script tag, at the bottom. Nothing else.
+    -->
+    <style>
+        body {
+            margin: 0;
+            padding: 0 24px 120px;
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: 18px;
+            line-height: 1.7;
+            color: #2b2b2b;
+            background: linear-gradient(#0D6F82, #53CED1) fixed;
+            min-height: 100vh;
+        }
+
+        .page {
+            max-width: 720px;
+            margin: 0 auto;
+            background: #fffdf8;
+            padding: 48px 56px;
+            border-radius: 4px;
+        }
+
+        h1 { font-size: 2.4rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+        h2 { font-size: 1.3rem; margin: 40px 0 12px; }
+        p  { margin: 0 0 20px; }
+        code { background: #f0ece2; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; }
+
+        /* --- the collision traps --------------------------------------------
+           These class names are exactly the ones the old stylesheet defined
+           globally. They must keep these styles, not the widget's. */
+        .message {
+            border-left: 4px solid #0D6F82;
+            padding: 12px 18px;
+            background: #f4f1e8;
+            font-style: italic;
+        }
+
+        .chat-header { font-weight: bold; color: #b1560f; }
+
+        .hidden { display: block; color: #7a7a7a; font-size: 0.8rem; }
+
+        .spaced { margin: 40px 0; padding: 24px; border: 1px dashed #c9c2b0; }
+    </style>
+</head>
+
+<body>
+    <div class="page">
+        <h1>Las Eras Nest Hostel</h1>
+        <p class="chat-header">A demo host page — this text must stay orange and bold.</p>
+
+        <p>
+            This page exists to prove one thing: the chatbot can be dropped onto a site it knows
+            nothing about without changing a single pixel of that site. Everything you see here
+            is styled by this page's own CSS.
+        </p>
+
+        <h2>Deliberate collisions</h2>
+
+        <p class="message">
+            This paragraph uses <code>.message</code> — the same class the widget's old stylesheet
+            claimed globally. It must keep its cream background, italics and left rule.
+        </p>
+
+        <p class="hidden">
+            This paragraph uses <code>.hidden</code>. The old stylesheet declared
+            <code>.hidden { display: none !important }</code> globally, which would have made this
+            line vanish. If you can read it, the scoping works.
+        </p>
+
+        <div class="spaced">
+            <p style="margin: 0;">
+                A box with its own margins and padding. The old stylesheet's global
+                <code>* { margin: 0; padding: 0 }</code> reset would have flattened this.
+            </p>
+        </div>
+
+        <h2>How a site embeds it</h2>
+
+        <p>
+            One tag, nothing else — no markup to paste, no stylesheet to link. Assets resolve
+            against the script's own URL, so it works from any origin or CDN path.
+        </p>
+
+        <p>
+            Try the widget with <code>book</code>, <code>contact</code>, <code>rooms</code>,
+            <code>link</code> or <code>available</code> to exercise each element type from the
+            response contract. <code>!xss</code>, <code>!unknown</code>, <code>!410</code>,
+            <code>!403</code> and <code>!429</code> drive the defensive paths.
+        </p>
+
+        <p>
+            The transport is currently stubbed (<code>USE_MOCK = true</code> in
+            <code>nest-chatbot.js</code>) — replies come from local fixtures, not the API.
+        </p>
+    </div>
+
+    <!-- ============ everything a host site adds, start to finish ============ -->
+    <script src="../nest-chatbot.js"
+            data-locale="auto"
+            data-property="Las Eras Nest Hostel"
+            data-debug="true"
+            defer></script>
+    <!-- ===================================================================== -->
+</body>
+
+</html>
