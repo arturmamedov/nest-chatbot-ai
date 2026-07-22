@@ -60,8 +60,9 @@ key, never a provider key (OpenAI, Voiceflow, Mistral…), never anything with w
 
 No secret of any kind belongs in this repo. A live Voiceflow Dialog Manager key was committed
 here from `219a265` until the 2.0 refactor; it was shipped to every browser that loaded the
-page and has to be treated as compromised. The same commit also carried a commented-out
-Google Gemini key (`AIzaSy…`) — equally compromised, equally in need of rotation.
+page and has to be treated as compromised. A live Google Gemini key (`AIzaSy…`) shipped the
+same way even earlier — from `b837cff` until `219a265` merely commented it out — and is
+equally compromised, equally in need of rotation.
 
 ### 4. Every CSS rule is scoped
 
@@ -211,8 +212,8 @@ what a customer hits. Run a second static server on another port with a page tha
   stalled connection pins `busy` until the browser gives up. Adding one needs a
   double-callback guard (`ontimeout` and `onreadystatechange` both fire); do it deliberately
   or not at all.
-- **Rotate the leaked Voiceflow key** if it has not been done, and the commented-out Google
-  Gemini key from the same commit `219a265` (see rule 3).
+- **Rotate the leaked Voiceflow key** if it has not been done, and the Google Gemini key
+  that shipped live from `b837cff` and was only commented out in `219a265` (see rule 3).
 - **Origin allow-listing shipped platform-side (D-039)** — opt-in per site, default
   allow-all. Once a site configures a list, every embedding origin must be registered
   (guide §7, exact `scheme://host[:port]`) or requests are refused with
