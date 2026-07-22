@@ -1,1 +1,9 @@
+# This repo has no build step and no dependencies — see CLAUDE.md.
+# node_modules is listed only to catch an accidental `npm install`.
 /node_modules/
+
+# Local tooling / editor scratch
+.playwright-mcp/
+*.log
+.DS_Store
+Thumbs.db
