@@ -99,6 +99,8 @@
     var started = false;    // a conversation exists
     var busy = false;       // a request is in flight
     var removed = false;    // torn down (403)
+    var lastInitStatus = 0; // most recent init outcome — 429 turns "error" into "retry"
+    var initWaiters = null; // callbacks queued behind an in-flight init
     var introPlayed = false;
     var els = {};
 
@@ -694,14 +696,16 @@
     function digits(value) { return String(value || '').replace(/[^0-9]/g, ''); }
 
     /**
-     * Element-supplied urls are honoured ONLY for http(s). javascript:, data: and
-     * anything hidden behind leading whitespace or control characters fails here
-     * and is dropped. Defence in depth — these urls are code-emitted server-side
-     * from the catalog, never chosen by the model.
+     * Element-supplied urls are honoured ONLY for http(s). Innocent surrounding
+     * whitespace is trimmed off the returned href; javascript:, data: and
+     * anything hidden behind control characters fails the anchored test and is
+     * dropped. Defence in depth — these urls are code-emitted server-side from
+     * the catalog, never chosen by the model.
      */
     function safeHttpUrl(url) {
         if (typeof url !== 'string') { return null; }
-        return /^\s*https?:\/\//i.test(url) ? url : null;
+        var trimmed = url.trim();
+        return /^https?:\/\//i.test(trimmed) ? trimmed : null;
     }
 
     function linkButton(label, url, style) {
@@ -793,6 +797,10 @@
     function channelLink(label, href) {
         var link = el('a', 'nc-channel', label);
         attrs(link, { href: href, rel: 'noopener noreferrer' });
+        // Only the wa.me channel navigates — open it in a new tab so the guest
+        // keeps the host page (deliberate divergence from the reference, which
+        // lets it navigate away). tel:/mailto: hand off to external handlers.
+        if (/^https:/.test(href)) { attrs(link, { target: '_blank' }); }
         return link;
     }
 
@@ -938,8 +946,18 @@
             return;
         }
 
+        // One init at a time. The intro fires one, and a fast first submit would
+        // fire a second (two conversations created, last uuid wins) — queue
+        // behind the in-flight call instead.
+        if (initWaiters) { initWaiters.push(cb); return; }
+        initWaiters = [cb];
+
         API.init(function (status, body) {
+            var waiters = initWaiters || [];
+            initWaiters = null;
+            if (removed) { return; }
             log('init', status, body);
+            lastInitStatus = status;
 
             if (status === 403) { teardown(); return; }
             if (status === 201 && body && body.conversation && body.conversation.uuid) {
@@ -953,7 +971,7 @@
                 // and let the first real turn retry.
                 intro.greeting = t('greeting');
             }
-            cb();
+            for (var i = 0; i < waiters.length; i++) { waiters[i](); }
         });
     }
 
@@ -976,13 +994,19 @@
     }
 
     function sendMessage(text, isRetry) {
-        if (!conversationUuid) { addBubble('bot', t('error')); return; }
+        if (!conversationUuid) {
+            // A failed re-init lands here; a throttled one deserves "try again
+            // shortly", not a hard error.
+            addBubble('bot', lastInitStatus === 429 ? t('retry') : t('error'));
+            return;
+        }
 
         busy = true;
         els.send.disabled = true;
         var thinking = showThinking();
 
         API.send(conversationUuid, text, function (status, body) {
+            if (removed) { return; }
             busy = false;
             els.send.disabled = false;
             log('turn', status, body);
@@ -996,8 +1020,10 @@
                 return;
             }
 
-            // Idled out: re-init transparently and resend once. The guest sees one
-            // reply, never a duplicate and never an error.
+            // Idled out (410) or unknown uuid (404 — guide §5: "treat the
+            // conversation as gone; re-init"): re-init transparently and resend
+            // once. The guest sees one reply, never a duplicate and never an
+            // error. The reference re-inits on 410 only; §5 says 404 too.
             if ((status === 410 || status === 404) && !isRetry) {
                 clearStore();
                 conversationUuid = null;
@@ -1015,6 +1041,10 @@
 
     function teardown() {
         removed = true;
+        // The only two listeners the widget ever attaches outside #nest-chatbot —
+        // a destroyed widget must leave the document untouched.
+        document.removeEventListener('click', onDocumentClick);
+        document.removeEventListener('keydown', onDocumentKeydown);
         if (els.root && els.root.parentNode) { els.root.parentNode.removeChild(els.root); }
     }
 
@@ -1036,6 +1066,7 @@
         var delay = POLL_START_MS;
 
         function schedule() {
+            if (removed) { return; }   // the 120s give-up must not bubble post-teardown
             if ((Date.now() - startedAt) >= POLL_GIVE_UP_MS) {
                 addBubble('bot', t('timeout'));
                 return;
@@ -1056,7 +1087,7 @@
                     // the same transcript row.
                     if (bubble) { typeText(bubble, body.reply || ''); }
                     else { typeText(addBubble('bot', ''), body.reply || ''); }
-                    renderActions(body.actions);
+                    renderActions(body.actions, bubble);
                     return;
                 }
 
@@ -1151,15 +1182,20 @@
             closeLanguageMenu();
         });
 
-        document.addEventListener('click', function () {
-            if (els.controls.classList.contains('nc-lang-open')) { closeLanguageMenu(); }
-        });
-
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && isOpen()) { close(); els.toggler.focus(); }
-        });
+        document.addEventListener('click', onDocumentClick);
+        document.addEventListener('keydown', onDocumentKeydown);
 
         adjustInputHeight();   // run once for any prefilled content
+    }
+
+    // Named so teardown() can unregister them — everything else the widget wires
+    // lives inside #nest-chatbot and leaves with it.
+    function onDocumentClick() {
+        if (els.controls.classList.contains('nc-lang-open')) { closeLanguageMenu(); }
+    }
+
+    function onDocumentKeydown(e) {
+        if (e.key === 'Escape' && isOpen()) { close(); els.toggler.focus(); }
     }
 
     function boot() {
