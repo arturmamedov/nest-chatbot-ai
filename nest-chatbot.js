@@ -223,7 +223,8 @@
      *
      * Contract (docs/wsuite/integration-guide.md §3):
      *   init  POST {apiBase}/api/v1/chatbot/conversations
-     *         body {locale, property?}            → 201 {conversation:{uuid}, greeting}
+     *         body {locale, property?}            → 201 {conversation:{uuid}, greeting,
+     *                                                    contract_version}
      *   turn  POST {apiBase}/api/v1/chatbot/conversations/{uuid}/messages
      *         body {message, locale}              → 200 {reply, actions[], turn}
      *   poll  GET  {apiBase}{relative async_result.url}
@@ -238,6 +239,42 @@
      * so a guest can switch language mid-conversation. Confirm it server-side when
      * the contract is revisited.
      */
+
+    // The response-contract version this widget was built against. The init
+    // response reports the server's live contract_version; if it is higher, the
+    // server ships an element or field we do not render yet — warn ONCE and carry
+    // on (the ignore-unknown rule keeps the widget fully functional; NEVER
+    // hard-fail).
+    var BUILT_AGAINST = '1.2.0';
+    var contractWarned = false;
+
+    // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
+    function compareVersions(a, b) {
+        var pa = String(a || '0').split('.');
+        var pb = String(b || '0').split('.');
+        for (var i = 0; i < 3; i++) {
+            var na = parseInt(pa[i], 10) || 0;
+            var nb = parseInt(pb[i], 10) || 0;
+            if (na !== nb) { return na - nb; }
+        }
+        return 0;
+    }
+
+    // Deliberately NOT gated by data-debug — the sole production log. It fires at
+    // most once per page load, only on real drift, and exists precisely for sites
+    // where nobody sets data-debug (integration-guide §3.1).
+    function checkContractVersion(serverVersion) {
+        if (contractWarned || !serverVersion) { return; }
+        if (compareVersions(serverVersion, BUILT_AGAINST) > 0) {
+            contractWarned = true;
+            if (window.console && console.warn) {
+                console.warn('nest-chatbot: server response contract ' + serverVersion +
+                    ' is newer than this widget (built against ' + BUILT_AGAINST + '). ' +
+                    'Unrecognised elements are ignored safely; update the widget to render them. ' +
+                    'See docs/wsuite/response-contract.md (Changelog).');
+            }
+        }
+    }
 
     /* Transport — XHR, mirroring the reference widget's post()/get() (no Promise
      * dependency, ES5-safe). A network or CORS failure surfaces as done(0, null),
@@ -304,7 +341,8 @@
             init: function (done) {
                 reply(done, 201, {
                     conversation: { uuid: 'mock-' + Math.random().toString(36).slice(2, 10) },
-                    greeting: t('greeting')
+                    greeting: t('greeting'),
+                    contract_version: '1.2.0'
                 }, 700);
             },
 
@@ -908,6 +946,7 @@
                 conversationUuid = body.conversation.uuid;
                 started = true;
                 writeStore(conversationUuid);
+                checkContractVersion(body.contract_version);
                 intro.greeting = body.greeting || t('greeting');
             } else {
                 // Never strand the guest behind a failed init — greet them anyway
