@@ -20,7 +20,9 @@
  *   Element-supplied urls are honoured for http(s) only; tel:/mailto:/wa.me hrefs
  *   are constructed here from channel values, never taken verbatim.
  *
- * Built against the frozen v1 contract in docs/wsuite/. The reference
+ * Built against response contract 1.2.0 (BUILT_AGAINST, api section) in
+ * docs/wsuite/. The server reports its live contract_version at init; the widget
+ * warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
  * the transport or the element contract is unclear.
  */
@@ -64,6 +66,17 @@
     function log() {
         if (!cfg.debug || !window.console) { return; }
         console.info.apply(console, ['[nest-chatbot]'].concat([].slice.call(arguments)));
+    }
+
+    // The fixtures in the api section are the dev harness, and reaching them is
+    // an explicit opt-in (the demo page sets data-mock="true"). A production tag
+    // that forgot its config must fail loudly — no widget at all — never silently
+    // serve a convincing fake chatbot, and never boot into a widget that errors
+    // on every turn.
+    var USE_MOCK = data.mock === 'true';
+    if (!USE_MOCK && (!cfg.apiBase || !cfg.key)) {
+        log('missing data-api-base or data-key — not booting');
+        return;
     }
 
     function resolveLocale(pref) {
@@ -218,8 +231,7 @@
      *   All three: Authorization: Bearer <public ws_live_ key>.
      *
      * Every callback is done(status, data) — the flow section below maps status
-     * codes to behaviour and is already complete, so switching USE_MOCK to false
-     * is the whole job.
+     * codes to behaviour.
      *
      * NOTE (open item, see CLAUDE.md): `locale` in the turn body is an additive
      * field not present in the frozen v1 spec — a v1 server ignores it. It exists
@@ -227,29 +239,42 @@
      * the contract is revisited.
      */
 
-    var USE_MOCK = true;
+    /* Transport — XHR, mirroring the reference widget's post()/get() (no Promise
+     * dependency, ES5-safe). A network or CORS failure surfaces as done(0, null),
+     * and an unparseable body parses to null — the flow section handles both. No
+     * timeout, matching the reference: a stalled connection pins `busy` until the
+     * browser gives up; adding xhr.timeout needs a double-callback guard, so it
+     * stays a documented follow-up rather than a quick add. */
+    function request(method, path, body, done) {
+        var xhr = new XMLHttpRequest();
+        xhr.open(method, cfg.apiBase + path, true);
+        xhr.setRequestHeader('Authorization', 'Bearer ' + cfg.key);
+        if (body != null) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) { return; }
+            var parsed = null;
+            try { parsed = JSON.parse(xhr.responseText); } catch (e) { parsed = null; }
+            done(xhr.status, parsed);
+        };
+        try { xhr.send(body == null ? null : JSON.stringify(body)); } catch (e) { done(0, null); }
+    }
 
     var API = {
         init: function (done) {
             if (USE_MOCK) { return Mock.init(done); }
-            // TODO(api-session): real transport. Mirror chatbot.reference.js:72-98.
-            // request('POST', '/api/v1/chatbot/conversations',
-            //         { locale: locale, property: cfg.property || undefined }, done);
-            done(0, null);
+            request('POST', '/api/v1/chatbot/conversations',
+                { locale: locale, property: cfg.property || undefined }, done);
         },
 
         send: function (uuid, text, done) {
             if (USE_MOCK) { return Mock.send(uuid, text, done); }
-            // TODO(api-session):
-            // request('POST', '/api/v1/chatbot/conversations/' + encodeURIComponent(uuid) + '/messages',
-            //         { message: text, locale: locale }, done);
-            done(0, null);
+            request('POST', '/api/v1/chatbot/conversations/' + encodeURIComponent(uuid) + '/messages',
+                { message: text, locale: locale }, done);
         },
 
         poll: function (path, done) {
             if (USE_MOCK) { return Mock.poll(path, done); }
-            // TODO(api-session): GET cfg.apiBase + path with the same Bearer header.
-            done(0, null);
+            request('GET', path, null, done);
         }
     };
 

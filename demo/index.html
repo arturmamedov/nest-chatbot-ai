@@ -107,13 +107,16 @@
         </p>
 
         <p>
-            The transport is currently stubbed (<code>USE_MOCK = true</code> in
-            <code>nest-chatbot.js</code>) — replies come from local fixtures, not the API.
+            This page opts into the mock transport (<code>data-mock="true"</code> below) —
+            replies come from the local fixtures in <code>nest-chatbot.js</code>, not the API.
+            Drop the attribute and add <code>data-api-base</code> + <code>data-key</code> to
+            hit a real backend.
         </p>
     </div>
 
     <!-- ============ everything a host site adds, start to finish ============ -->
     <script src="../nest-chatbot.js"
+            data-mock="true"
             data-locale="auto"
             data-property="Las Eras Nest Hostel"
             data-debug="true"
