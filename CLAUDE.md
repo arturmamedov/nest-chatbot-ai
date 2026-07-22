@@ -60,7 +60,8 @@ key, never a provider key (OpenAI, Voiceflow, Mistral…), never anything with w
 
 No secret of any kind belongs in this repo. A live Voiceflow Dialog Manager key was committed
 here from `219a265` until the 2.0 refactor; it was shipped to every browser that loaded the
-page and has to be treated as compromised.
+page and has to be treated as compromised. The same commit also carried a commented-out
+Google Gemini key (`AIzaSy…`) — equally compromised, equally in need of rotation.
 
 ### 4. Every CSS rule is scoped
 
@@ -105,7 +106,8 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the frozen v1 reply envelope and every element type.
+- **`response-contract.md`** — the versioned reply envelope (currently 1.2.0 — see its
+  Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
   contract detail is unclear, read how this does it. Pinned copy; may drift from upstream.
@@ -113,7 +115,8 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 Three endpoints: init a conversation, post a turn, poll an async turn.
 
 ```
-POST {apiBase}/api/v1/chatbot/conversations               → 201 {conversation:{uuid}, greeting}
+POST {apiBase}/api/v1/chatbot/conversations               → 201 {conversation:{uuid}, greeting,
+                                                                 contract_version}
 POST {apiBase}/api/v1/chatbot/conversations/{uuid}/messages → 200 {reply, actions[], turn}
 GET  {apiBase}{async_result.url}                          → 200 {status, reply?, actions?, turn}
 ```
@@ -122,10 +125,17 @@ GET  {apiBase}{async_result.url}                          → 200 {status, reply
 
 - **A turn always returns `200`.** Provider, budget and LLM failures degrade server-side to a
   localized "busy" reply. A 5xx is a bug, not a business outcome. The non-200s are resolution
-  failures only: `401` bad key, `403` disabled/revoked, `404` unknown uuid, `410` idled out,
-  `422` config, `429` throttled.
+  failures only: `401` bad key, `403` disabled/revoked or the request `Origin` is not on the
+  site's allow-list (body `{"message":"Origin not allowed."}` — guide §7), `404` unknown uuid,
+  `410` idled out, `422` config, `429` throttled.
 - **`410` is normal.** Conversations idle out after 24h. Re-init transparently and resend the
   message once — the guest should never see it happen. Already implemented in `sendMessage`.
+  A `404` rides the same branch: guide §5 says an unknown uuid means "treat the conversation
+  as gone; re-init".
+- **The init response reports `contract_version`.** Compare it to `BUILT_AGAINST` (api
+  section) and `console.warn` once when the server is ahead — never gate, never hard-fail
+  (guide §3.1); the ignore-unknown rule keeps the widget functional. That warn is the sole
+  exception to the `data-debug` logging gate.
 - **Do not send chat history.** The turn body is `{message}`. The server owns the transcript,
   keyed by the conversation uuid. An earlier version of this widget accumulated a `chatHistory`
   array and never sent it; do not resurrect it.
@@ -149,15 +159,16 @@ Set on the `<script>` tag. `document.currentScript.dataset` reads them at boot.
 
 | Attribute | Default | Notes |
 |---|---|---|
-| `data-api-base` | — | API origin. Required once the transport is live. |
-| `data-key` | — | Public-scoped `ws_live_…` key. |
+| `data-api-base` | — | API origin. Required (with `data-key`) unless `data-mock` — the widget does not boot without them. |
+| `data-key` | — | Public-scoped `ws_live_…` key. Required unless `data-mock`. |
 | `data-property` | — | Soft property-name hint, sent at init. Unknown names are not an error. |
 | `data-locale` | `auto` | `auto` matches `navigator.languages` against `en es it de fr`. |
 | `data-position` | `right` | `right` \| `left` |
-| `data-color` | `#0D6F82` | Sets `--nc-secondary`. |
-| `data-z-index` | `2147483000` | For hosts with their own stacking conflicts. |
+| `data-color` | `#0D6F82` | Sets `--nc-secondary`. (Defaults live as CSS custom properties in `css/nest-chatbot.css`; the JS default `''` means "don't override".) |
+| `data-z-index` | `2147483000` | For hosts with their own stacking conflicts. Same CSS-default mechanism as `data-color`. |
 | `data-auto-open` | `false` | |
-| `data-debug` | `false` | Gates **all** `console` output. Nothing logs in production. |
+| `data-debug` | `false` | Gates **all** `console` output — sole exception: the one-time contract-drift warn (guide §3.1). |
+| `data-mock` | `false` | Serves replies from the local fixtures instead of the API — the dev harness. The demo page sets it; never a production page. |
 
 Runtime API: `window.NestChatbot` → `{ version, open, close, toggle, destroy, setLocale, locale }`.
 
@@ -170,8 +181,9 @@ python -m http.server 5501        # from the repo root
 
 `.vscode/settings.json` already pins Live Server to 5501.
 
-The transport is currently **stubbed** (`USE_MOCK = true`). Fixtures live in the `Mock` object
-and are shaped exactly like the real envelope. Drive them from the composer:
+The demo page runs on the local fixtures via `data-mock="true"`; drop the attribute (and add
+`data-api-base` + `data-key`) to hit a real backend. Fixtures live in the `Mock` object and
+are shaped exactly like the real envelope. Drive them from the composer:
 
 | Type this | Exercises |
 |---|---|
@@ -190,17 +202,22 @@ what a customer hits. Run a second static server on another port with a page tha
 
 ## Open items
 
-- **Wire the real transport.** Flip `USE_MOCK` to `false` and fill the three `TODO(api-session)`
-  blocks in the `api` section. The status-code handling around them is already complete, so this
-  is roughly 40 lines mirroring `chatbot.reference.js:72-98`. Nothing else should need to change.
-- **Per-turn `locale` is not in the frozen contract.** The turn body in v1 is `{message}` only.
+- **Per-turn `locale` is not in the contract.** The turn body in v1 is `{message}` only.
   The widget sends `locale` alongside it as an additive field so a guest can switch language
   mid-conversation; a v1 server ignores it harmlessly. To make that switch authoritative, the
-  contract needs `locale` added to `POST /conversations/{uuid}/messages`. Raise it when the
-  contract is next revisited.
-- **Rotate the leaked Voiceflow key** if it has not been done (see rule 3).
-- **Origin allow-listing** is planned platform-side; today CORS allows all origins, so a copied
-  public key works from anywhere. When it ships, production origins must be registered per site.
+  contract needs `locale` added to `POST /conversations/{uuid}/messages` (a 1.3.0 minor).
+  Raised with the platform team.
+- **No transport timeout.** `request()` sets no `xhr.timeout`, matching the reference — a
+  stalled connection pins `busy` until the browser gives up. Adding one needs a
+  double-callback guard (`ontimeout` and `onreadystatechange` both fire); do it deliberately
+  or not at all.
+- **Rotate the leaked Voiceflow key** if it has not been done, and the commented-out Google
+  Gemini key from the same commit `219a265` (see rule 3).
+- **Origin allow-listing shipped platform-side (D-039)** — opt-in per site, default
+  allow-all. Once a site configures a list, every embedding origin must be registered
+  (guide §7, exact `scheme://host[:port]`) or requests are refused with
+  `403 {"message":"Origin not allowed."}`. Register production and staging origins before a
+  public launch.
 
 ## Conventions
 
