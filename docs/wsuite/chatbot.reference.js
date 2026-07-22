@@ -54,11 +54,19 @@
     var POLL_MAX_MS = 5000;
     var POLL_GIVE_UP_MS = 120000;
 
+    // The response-contract version this widget was built against (O-40). The init
+    // response reports the server's live `contract_version`; if it is higher, the
+    // server ships an element/field we don't render yet — we warn ONCE and carry on
+    // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
+    // the exact pattern the external nest-chatbot-ai widget copies.
+    var BUILT_AGAINST = '1.2.0';
+
     // ---- state ---------------------------------------------------------------
     var conversationUuid = null;
     var started = false;   // a conversation exists this session
     var busy = false;      // a request is in flight
     var removed = false;   // widget torn down (403)
+    var contractWarned = false; // contract-drift warning emitted once (O-40)
     var els = {};
 
     // ---- localStorage helpers -----------------------------------------------
@@ -74,11 +82,40 @@
     }
 
     function writeStore(uuid) {
-        try { window.localStorage.setItem(STORE_KEY, JSON.stringify({ uuid: uuid, ts: Date.now() })); } catch (e) {}
+        try { window.localStorage.setItem(STORE_KEY, JSON.stringify({ uuid: uuid, ts: Date.now() })); } catch (e) { }
     }
 
     function clearStore() {
-        try { window.localStorage.removeItem(STORE_KEY); } catch (e) {}
+        try { window.localStorage.removeItem(STORE_KEY); } catch (e) { }
+    }
+
+    // ---- contract-version drift check (O-40) ---------------------------------
+    // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
+    function compareVersions(a, b) {
+        var pa = String(a || '0').split('.');
+        var pb = String(b || '0').split('.');
+        for (var i = 0; i < 3; i++) {
+            var na = parseInt(pa[i], 10) || 0;
+            var nb = parseInt(pb[i], 10) || 0;
+            if (na !== nb) { return na - nb; }
+        }
+        return 0;
+    }
+
+    // Warn ONCE when the server's contract_version is newer than BUILT_AGAINST: a
+    // new element/field exists that this widget does not render yet. Forward-compat
+    // still holds (unknown types are ignored), so this is advisory — never a fault.
+    function checkContractVersion(serverVersion) {
+        if (contractWarned || !serverVersion) { return; }
+        if (compareVersions(serverVersion, BUILT_AGAINST) > 0) {
+            contractWarned = true;
+            if (window.console && console.warn) {
+                console.warn('wSuite chatbot widget: server response contract ' + serverVersion +
+                    ' is newer than this widget (built against ' + BUILT_AGAINST + '). ' +
+                    'Unrecognised elements are ignored safely; update the widget to render them. ' +
+                    'See modules/chatbot/docs/response-contract.md (Changelog).');
+            }
+        }
     }
 
     // ---- transport (XHR — no Promise dependency) -----------------------------
@@ -320,6 +357,7 @@
             conversationUuid = data.conversation.uuid;
             started = true;
             writeStore(conversationUuid);
+            checkContractVersion(data.contract_version);
             if (data.greeting) { addBubble('bot', data.greeting); }
             cb();
         });
