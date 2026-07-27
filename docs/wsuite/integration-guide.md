@@ -2,7 +2,7 @@
 
 |                  |                                                                                                                                                                                                                        |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Version**      | matches `response-contract.md` 1.2.0 (the server reports the live version as `contract_version` — see §3.1)                                                                                                            |
+| **Version**      | matches `response-contract.md` 1.4.1 (the server reports the live version as `contract_version` — see §3.1)                                                                                                            |
 | **Audience**     | Any external website embedding a **custom** chat UI on top of the wSuite chatbot API — e.g. the branded `nest-chatbot-ai` microsite.                                                                                   |
 | **Scope**        | The **transport + auth** layer: base URL, the three endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS.                                                                            |
 | **Not in scope** | The **response envelope** (`reply` / typed `actions[]` / element types). That is fully specified in [`response-contract.md`](response-contract.md) — read it alongside this document; do not duplicate its rules here. |
@@ -60,10 +60,10 @@ Content-Type: application/json
 { "locale": "es-ES", "property": "Las Eras Nest Hostel" }
 ```
 
-| Field      | Type            | Required | Notes                                                                                                                                                                                                                                   |
-| ---------- | --------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `locale`   | `string` (≤5)   | no       | The guest's language hint — send `navigator.language`. Drives the reply language.                                                                                                                                                       |
-| `property` | `string` (≤255) | no       | A **soft** property-name lookup within the key's tenant. An unknown name is not an error — it simply yields a conversation with no property pre-scoped. No DB `exists` check; the site/tenant always come from the key, never the body. |
+| Field      | Type            | Required | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------- | --------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `locale`   | `string` (≤5)   | no       | The guest's language hint — send `navigator.language`. Drives the reply language.                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `property` | `string` (≤255) | no       | A **soft** property-name lookup within the key's tenant. An unknown name is not an error — it simply yields a conversation with no property pre-scoped. No DB `exists` check; the site/tenant always come from the key, never the body. A **matched** name also seeds the conversation's working memory, so answers — from turn 1 — are scoped to that property until the guest names another one; send it whenever your page is about one specific property (the bundled widget does via `data-property`). |
 
 **`201` response:**
 
@@ -71,7 +71,7 @@ Content-Type: application/json
 {
   "conversation": { "uuid": "9b2c…" },
   "greeting": "Hi! How can I help?",
-  "contract_version": "1.2.0"
+  "contract_version": "1.4.1"
 }
 ```
 
@@ -79,13 +79,14 @@ Persist `uuid` (the reference widget keys it to `localStorage` per API key). Ren
 
 #### `contract_version` — detecting you're behind
 
-The init response carries `contract_version` (`MAJOR.MINOR.PATCH`), the live version of the [`response-contract.md`](response-contract.md) envelope your UI renders. The same value is echoed in an **`X-Chatbot-Contract`** response header (a transport-level convenience for server-side/proxy consumers; a browser can only read it cross-origin if it is CORS-exposed, so the **body field is the primary channel** for a browser widget).
+The init response carries `contract_version` (`MAJOR.MINOR.PATCH`), the live version of the [`response-contract.md`](response-contract.md) envelope your UI renders — and, since 1.3.0, of the guest API's request fields too (a consumer tracks one number for the whole surface). The same value is echoed in an **`X-Chatbot-Contract`** response header, which is **CORS-exposed**, so a browser can read either channel; the **body field stays the documented primary** (one less thing to get wrong behind a proxy that strips headers).
 
 Use it for **drift visibility, never for gating**:
 
 - Record the version your UI was **built against** (a constant).
 - On init, compare. If the server reports a **higher** version, `console.warn` once — a new element type or field exists that you don't render yet — then carry on. You **stay fully functional**: the [ignore-unknown rule](response-contract.md#extension-rule-the-dry-seam) (§4) means unrecognised element types are simply skipped. **Never hard-fail on a version mismatch.**
 - A **lower** server version than yours cannot happen in practice (the server only moves forward) and is likewise not an error.
+- **A higher version is never a migration.** By the contract's [breaking-change guarantee](response-contract.md#versioning), **MINOR and PATCH can never break you** — only a MAJOR could, and the envelope is frozen so one should never be issued. Read the Changelog's **Breaking** column to confirm per row. Each version is tagged upstream as `chatbot-contract-v<X.Y.Z>`, so you can ask for an exact packet snapshot or a diff from the version you are on.
 
 The reference widget ([`chatbot.js`](../resources/widget/chatbot.js), `BUILT_AGAINST`) implements exactly this one-time warn; copy that pattern.
 
@@ -96,12 +97,24 @@ POST /api/v1/chatbot/conversations/{uuid}/messages
 Authorization: Bearer ws_live_...
 Content-Type: application/json
 
-{ "message": "do you have wifi?" }
+{ "message": "do you have wifi?", "locale": "es" }
 ```
 
-| Field     | Type     | Required | Notes                                                                |
-| --------- | -------- | -------- | -------------------------------------------------------------------- |
-| `message` | `string` | yes      | Max length = `wsuite.chatbot.message.max_length` (default **2000**). |
+| Field     | Type          | Required | Notes                                                                        |
+| --------- | ------------- | -------- | ---------------------------------------------------------------------------- |
+| `message` | `string`      | yes      | Max length = `wsuite.chatbot.message.max_length` (default **2000**).         |
+| `locale`  | `string` (≤5) | no       | **Since 1.3.0.** An explicit reply-language override for **this turn only**. |
+
+#### `locale` — override vs. detection
+
+**You usually do not need this.** The server **detects the guest's language on every turn** and replies in it, so a guest who switches from English to Spanish mid-conversation is already answered in Spanish — the init `locale` (§3.1) is only a hint for the pre-first-message greeting, not a lock.
+
+Send a per-turn `locale` when **your UI owns the language**, i.e. you have a language switcher and the user's choice must win over what the text looks like. It is the fix for the case detection cannot get right: short or ambiguous messages (`ok`, `2`, a date, a property name) where there is nothing to detect from.
+
+- **Stateless / per turn.** It applies to the turn you send it on. If you have a switcher, **resend it on every turn** — dropping it silently hands the next turn back to detection.
+- **Format.** Send a full tag if that is what you have — only the 2-letter primary subtag is used (`es-ES` → `es`), and the field is capped at 5 characters (longer → `422`, so truncate a long tag yourself). Validation is by **shape, not by registry**: any two ASCII letters are accepted and passed straight to the model, deliberately — the reply language is not restricted to a fixed list. A value that yields no 2-letter primary subtag (`spa`, `1`, empty) is ignored and the turn falls back to detection rather than erroring. Sending a code that is not a real language (`zz`) is therefore honored, not corrected — send what your switcher actually offers.
+- **Scope.** It sets the reply language: the generated prose and the server-localized element labels ("Book now"). It does not translate the guest's own message or re-translate the transcript.
+- The reference widget does **not** send it — it has no switcher, and hardcoding one would override the very detection that makes mid-conversation switching work.
 
 **`200` response** — the frozen envelope from [`response-contract.md`](response-contract.md):
 
@@ -109,7 +122,7 @@ Content-Type: application/json
 { "reply": "Yes, free wifi throughout.", "actions": [ … ], "turn": 3 }
 ```
 
-A turn **always returns `200`** on success — the orchestrator degrades any LLM/provider/budget failure to a localized "busy" reply at `200`, never a 5xx. Render `reply`, then render each element of `actions` **in order** (§4).
+A turn **always returns `200`** on success — the orchestrator degrades any LLM/provider/budget failure to a localized "busy" reply at `200`, never a 5xx. Render `reply`, then render each element of `actions` **in order** (§4). A conversation may also hit a server-side **turn cap**: past it, the turn returns a canned "message limit reached" reply in the same `200 {reply, actions, turn}` shape (no special field, no handling needed — render it like any reply); the guest should start a new conversation to continue. This capped reply **may** include a `contact_channels` element (the property's call/WhatsApp/email), an existing element you already render per §4 — no special handling.
 
 ### 3.3 Poll — resolve an async turn
 
@@ -148,25 +161,40 @@ The element types (`link_button`, `contact_channels`, `booking_link`, `availabil
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `401`  | Missing/invalid/revoked key, or token not prefixed `ws_live_`.                                                                                                                     | Fatal — bad key. Stop.                                                                                                                       |
 | `403`  | Init: `chatbot.enabled` is off for the site. Or: key scope not admitted. Or: the request `Origin` is not on the site's allow-list (§7) — body `{"message":"Origin not allowed."}`. | Hide the widget silently (register your origin — §7 — if the allow-list is the cause).                                                       |
-| `404`  | Unknown/foreign `uuid`, or a non-async/unknown turn on poll.                                                                                                                       | Treat the conversation as gone; re-init.                                                                                                     |
+| `404`  | **Endpoint-specific — see below.** Turn: unknown/foreign `uuid`. Poll: the turn row is not visible to this request (or is not an async turn).                                      | Turn: treat the conversation as gone → **re-init** (as for `410`). Poll: treat as **transient** → keep backing off until give-up.            |
 | `410`  | Conversation idled out (24h since last activity).                                                                                                                                  | **Re-init transparently** (open a new conversation, optionally resend the last message once) — the reference widget does this automatically. |
 | `422`  | Init: no site resolved for the key.                                                                                                                                                | Configuration error.                                                                                                                         |
 | `429`  | Rate limit exceeded (§6).                                                                                                                                                          | Back off; show a soft "one moment" message and retry.                                                                                        |
 
 Note: turn/poll **content** is always `200`; the non-200s above are resolution/auth failures only.
 
+### 5.1 `404` means different things on the turn and the poll endpoint
+
+This is the one error whose handling is **not** uniform — get it wrong in either direction and you either wedge a browser or abandon a live answer.
+
+- **Turn** (`POST …/messages`) — a `404` means the stored `uuid` no longer resolves for your key. It is **terminal for that conversation**: clear the stored uuid, re-init, and resend the message once (exactly your `410` path). If you instead show a generic error **without clearing your stored uuid**, that browser retries the same dead uuid on every message until your retention window expires — up to 24h of a permanently broken widget for that visitor.
+- **Poll** (`GET …/turns/{turn}`) — treat a `404` as **transient**: keep backing off exactly as for `pending`, and stop only at your give-up deadline (~120s). You cannot tell a permanently unknown turn from a row that is simply not visible to _this_ request yet (replica lag, a request that raced the write), and the costs are asymmetric — backing off just ends at give-up, whereas re-initing throws away a conversation that is perfectly alive and abandons an answer that is still being generated.
+
+The reference widget implements both: `sendMessage` treats `404` like `410`; `pollResult` folds `404` into its transient/back-off branch.
+
 ---
 
 ## 6. Rate limits
 
-Two independent per-minute buckets, **keyed per API key** (so all visitors of a site embedding the same public key share them):
+Two independent buckets (turns and polls never eat each other's budget). **Each enforces two limits per request** — a **per-visitor** budget and a **per-key site ceiling** — and a `429` means whichever one tripped:
 
-| Bucket          | Default      | Route       |
-| --------------- | ------------ | ----------- |
-| `chatbot-guest` | **20 / min** | init + turn |
-| `chatbot-poll`  | **60 / min** | poll        |
+| Bucket          | Per visitor (key + IP) | Per key (whole site) | Route       |
+| --------------- | ---------------------- | -------------------- | ----------- |
+| `chatbot-guest` | **20 / min**           | **300 / min**        | init + turn |
+| `chatbot-poll`  | **60 / min**           | **900 / min**        | poll        |
 
-Tunable via `WSUITE_CHATBOT_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_POLL_PER_MINUTE`. These HTTP throttles are the abuse layer; the real per-provider AI cost limiting lives inside the platform gateway and is invisible to consumers.
+Tunable per deployment via `WSUITE_CHATBOT_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_POLL_PER_MINUTE` and `WSUITE_CHATBOT_SITE_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_SITE_POLL_PER_MINUTE`. These HTTP throttles are the abuse layer; the real per-provider AI cost limiting lives inside the platform gateway and is invisible to consumers.
+
+**What "per visitor" honestly means.** The embed key is public and identical for every visitor, so the per-visitor bucket is keyed on **key + client IP** — the only visitor signal available at throttle time. Consequences worth designing around:
+
+- Visitors sharing an egress IP (corporate NAT, a hotel's own wifi, a mobile carrier CGNAT, a proxy) share **one** bucket. On a site whose guests are mostly on the property's wifi, budget for that.
+- A client that rotates IPs gets a fresh bucket each time — which is exactly why the **per-key site ceiling** exists as the backstop, and why it also caps the AI spend a copied key can drive.
+- **Per-site _configurable_ limits are not available**, by construction: the throttle runs before the API key is resolved, so no site is known yet. The numbers above are deployment-wide config, not per-site settings. (Per-_key_ isolation you do get — a separate key gets a separate ceiling, which is the argument for a separate staging key in §7.)
 
 ---
 
@@ -186,11 +214,23 @@ Two independent layers apply to `api/v1/chatbot/*`:
 - **Rejection:** a configured site refuses an unlisted origin with `403 {"message":"Origin not allowed."}` (logged server-side).
 - **Register before a public launch:** once you set a list, add every production/staging origin that embeds the widget, or it will be refused. `Origin` is browser-asserted (see §2) — this is a leak-blast-radius control, not authentication.
 
+### 7.1 Staging vs production: use a separate site + key
+
+**Recommended: give staging its own site and its own public key**, rather than adding staging origins to the production site's allow-list.
+
+The decisive reason is §6: **the rate-limit ceiling is per key.** Share one key and a staging load test, a crawl, or a runaway retry loop eats the production site's budget and 429s real guests. A separate key can't. It also separates what you almost certainly want separated anyway — conversations and metrics (staging noise stays out of the production panel), `chatbot.enabled`, the greeting, the handoff email — and a leaked/committed staging key exposes nothing production.
+
+Same-site is workable if you accept that coupling (one shared bucket, one shared transcript history). If you go that way:
+
+- `https://*.example.com` covers preview deploys at any subdomain depth — but **never the apex**; list `https://example.com` separately.
+- `http://localhost:5173` must match **scheme and explicit port exactly**; add one entry per port you actually serve from.
+- The platform's own origin (`APP_URL`) is implicitly allowed, so the admin panel's Widget Preview keeps working without an entry.
+
 ---
 
 ## 8. Minimal reference flow
 
-Illustrative only — [`../resources/widget/chatbot.js`](../resources/widget/chatbot.js) is the hardened version (410 re-init, poll backoff, XSS-safe rendering, scheme checks):
+Illustrative only — [`../resources/widget/chatbot.js`](../resources/widget/chatbot.js) is the hardened version (410/404 re-init, poll backoff, XSS-safe rendering, scheme checks):
 
 ```js
 const BASE = "https://nest-mind.test";
@@ -220,8 +260,8 @@ r = await fetch(`${BASE}/api/v1/chatbot/conversations/${uuid}/messages`, {
   headers: H,
   body: JSON.stringify({ message: "do you have wifi?" }),
 });
-if (r.status === 410) {
-  /* re-init and resend once */
+if (r.status === 410 || r.status === 404) {
+  /* conversation gone: clear uuid, re-init, resend once (§5.1) */
 }
 const turn = await r.json(); // { reply, actions, turn }
 

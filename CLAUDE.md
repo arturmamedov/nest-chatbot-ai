@@ -107,11 +107,19 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.2.0 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.4.1 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
   contract detail is unclear, read how this does it. Pinned copy; may drift from upstream.
+
+**Contract sync.** `docs/wsuite/` is a vendored, read-only packet: at a sync it is replaced
+wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited.
+`BUILT_AGAINST` (api section) moves **only** during a sync — it is a claim about what this
+code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
+line; it and `window.NestChatbot.version` are the only version sites (no package.json —
+rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: pinned 2026-07-28 from
+upstream tag `chatbot-contract-v1.4.1`.
 
 Three endpoints: init a conversation, post a turn, poll an async turn.
 
@@ -131,17 +139,24 @@ GET  {apiBase}{async_result.url}                          → 200 {status, reply
   `410` idled out, `422` config, `429` throttled.
 - **`410` is normal.** Conversations idle out after 24h. Re-init transparently and resend the
   message once — the guest should never see it happen. Already implemented in `sendMessage`.
-  A `404` rides the same branch: guide §5 says an unknown uuid means "treat the conversation
-  as gone; re-init".
+  On the **turn** endpoint a `404` rides the same branch (guide §5.1: the stored uuid is
+  dead — re-init, or this browser retries it for the full 24h retention window). On the
+  **poll** endpoint a `404` is **transient** instead: back off exactly as for `pending` and
+  stop only at the give-up deadline — re-initing there would abandon an answer still being
+  generated.
 - **The init response reports `contract_version`.** Compare it to `BUILT_AGAINST` (api
   section) and `console.warn` once when the server is ahead — never gate, never hard-fail
   (guide §3.1); the ignore-unknown rule keeps the widget functional. That warn is the sole
   exception to the `data-debug` logging gate.
-- **Do not send chat history.** The turn body is `{message}`. The server owns the transcript,
+- **Do not send chat history.** The turn body is `{message}` plus the optional per-turn
+  `locale` (contract 1.3.0). The server owns the transcript,
   keyed by the conversation uuid. An earlier version of this widget accumulated a `chatHistory`
   array and never sent it; do not resurrect it.
-- **Rate limit is 20/min per API key, shared by every visitor of a site** — not per user. Poll
-  has its own lighter 60/min bucket.
+- **Every request faces two rate limits** (guide §6), on two independent buckets: a
+  per-**visitor** budget keyed on key + client IP (20/min turn, 60/min poll) and a
+  per-**key** site ceiling (300/min turn, 900/min poll); a `429` means whichever tripped.
+  Visitors sharing an egress IP (a hostel's own wifi, corporate NAT, carrier CGNAT) share
+  **one** visitor bucket — our guests are mostly on property wifi, so budget for that.
 - **`actions[]` is always an array**, never null. Render elements in order.
 - **Ignore unknown element types silently.** The server ships new types ahead of any given
   widget. Throwing on one would take the whole reply down. Adding support for a new type is
@@ -162,7 +177,7 @@ Set on the `<script>` tag. `document.currentScript.dataset` reads them at boot.
 |---|---|---|
 | `data-api-base` | — | API origin. Required (with `data-key`) unless `data-mock` — the widget does not boot without them. |
 | `data-key` | — | Public-scoped `ws_live_…` key. Required unless `data-mock`. |
-| `data-property` | — | Soft property-name hint, sent at init. Unknown names are not an error. |
+| `data-property` | — | Property-name hint, sent at init. A matched name seeds the conversation's working memory, so answers are scoped to that property from turn 1. Unknown names are not an error. |
 | `data-locale` | `auto` | `auto` matches `navigator.languages` against `en es it de fr`. |
 | `data-position` | `right` | `right` \| `left` |
 | `data-color` | `#0D6F82` | Sets `--nc-secondary`. (Defaults live as CSS custom properties in `css/nest-chatbot.css`; the JS default `''` means "don't override".) |
@@ -191,7 +206,7 @@ are shaped exactly like the real envelope. Drive them from the composer:
 | `book` | `booking_link` with a stay summary |
 | `contact` | `contact_channels` (phone + whatsapp + email) |
 | `rooms` | `availability` with room options |
-| `link` | two `link_button`s, one with `style: primary` |
+| `link` | three `link_button`s (book / website / directions), one with `style: primary` |
 | `available` | `async_result` — interim reply, then the poll replaces it in place |
 | `!unknown` | an unrecognised element type (must be ignored, sibling still renders) |
 | `!xss` | a hostile reply and a `javascript:` url (both must be inert) |
@@ -203,11 +218,6 @@ what a customer hits. Run a second static server on another port with a page tha
 
 ## Open items
 
-- **Per-turn `locale` is not in the contract.** The turn body in v1 is `{message}` only.
-  The widget sends `locale` alongside it as an additive field so a guest can switch language
-  mid-conversation; a v1 server ignores it harmlessly. To make that switch authoritative, the
-  contract needs `locale` added to `POST /conversations/{uuid}/messages` (a 1.3.0 minor).
-  Raised with the platform team.
 - **No transport timeout.** `request()` sets no `xhr.timeout`, matching the reference — a
   stalled connection pins `busy` until the browser gives up. Adding one needs a
   double-callback guard (`ontimeout` and `onreadystatechange` both fire); do it deliberately
@@ -218,7 +228,9 @@ what a customer hits. Run a second static server on another port with a page tha
   allow-all. Once a site configures a list, every embedding origin must be registered
   (guide §7, exact `scheme://host[:port]`) or requests are refused with
   `403 {"message":"Origin not allowed."}`. Register production and staging origins before a
-  public launch.
+  public launch. Prefer giving staging its **own site + key** (guide §7.1): the rate ceiling
+  is per key, so a shared key lets a staging load test or retry loop 429 real production
+  guests.
 
 ## Conventions
 

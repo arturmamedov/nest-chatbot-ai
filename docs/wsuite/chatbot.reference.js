@@ -1,16 +1,3 @@
-/* -----------------------------------------------------------------------------
- * VENDORED COPY — DO NOT EDIT, DO NOT LOAD.
- *
- * This is the wSuite platform's own drop-in widget (`resources/widget/chatbot.js`),
- * pinned here on 2026-07-22 as the canonical, security-reviewed reference for the
- * v1 transport and the response contract. `nest-chatbot.js` is the branded Nests
- * consumer of the same API; when a transport or contract detail is unclear, read
- * how this file does it.
- *
- * It is reference material only: nothing in this repo imports or ships it, and it
- * WILL drift from upstream. Re-pin it rather than patching it.
- * -------------------------------------------------------------------------- */
-
 /*!
  * wSuite (wChatbot) embeddable guest chat widget — plain JS, no dependencies,
  * no build step (D-004/MD-45). Drop-in:
@@ -18,7 +5,11 @@
  *   <script src="https://<host>/chatbot/widget.js"
  *           data-key="ws_live_<prefix>.<secret>"
  *           data-locale="" data-color="#4f46e5" data-title="Chat with us"
+ *           data-property="Duque Nest"
  *           defer></script>
+ *
+ * data-property (optional): the property name of the page embedding the widget —
+ * seeds the conversation so turn-1 answers are scoped to that property.
  *
  * ES5-safe. Every guest/LLM string is rendered via textContent / created DOM
  * nodes — NEVER innerHTML — so a hostile reply cannot inject markup (XSS). The
@@ -41,6 +32,7 @@
     var locale = (cfg.locale ? cfg.locale.slice(0, 2) : '') || (navigator.language || 'en').slice(0, 2);
     var color = cfg.color || '#4f46e5';
     var title = cfg.title || 'Chat with us';
+    var property = cfg.property || null;
 
     var STORE_KEY = 'wsuite-chatbot:' + apiKey;
     var IDLE_MS = 24 * 60 * 60 * 1000; // O-9 — mirrors conversation.idle_hours
@@ -59,7 +51,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.2.0';
+    var BUILT_AGAINST = '1.4.1';
 
     // ---- state ---------------------------------------------------------------
     var conversationUuid = null;
@@ -113,7 +105,7 @@
                 console.warn('wSuite chatbot widget: server response contract ' + serverVersion +
                     ' is newer than this widget (built against ' + BUILT_AGAINST + '). ' +
                     'Unrecognised elements are ignored safely; update the widget to render them. ' +
-                    'See modules/chatbot/docs/response-contract.md (Changelog).');
+                    'See the response-contract Changelog in your integration packet.');
             }
         }
     }
@@ -271,7 +263,8 @@
 
     // The versioned response contract (modules/chatbot/docs/response-contract.md):
     // iterate the typed actions[] list, one renderer branch per element `type`.
-    // A new rich type = one new branch here + one Element class server-side.
+    // A new rich type = one new branch here + one Element class server-side + a
+    // server-side contract version bump and Changelog row (see response-contract.md).
     function renderActions(actions, botBubble) {
         if (!actions || !actions.length) { return; }
         for (var i = 0; i < actions.length; i++) { renderAction(actions[i], botBubble); }
@@ -348,7 +341,7 @@
     function startConversation(cb) {
         if (busy) { return; }
         busy = true;
-        post('/api/v1/chatbot/conversations', { locale: locale }, function (status, data) {
+        post('/api/v1/chatbot/conversations', { locale: locale, property: property }, function (status, data) {
             busy = false;
             if (status === 403) { teardown(); return; }
             if (status === 429) { addBubble('bot', retryText()); return; }
@@ -390,8 +383,13 @@
                     renderActions(data.actions, botBubble);
                     return;
                 }
-                if (status === 410 && !isRetry) {
-                    // Session idled out — re-init transparently and resend once.
+                // 410 = idled out, 404 = the conversation is gone (pruned, or a uuid
+                // this deployment no longer knows). Both mean "this stored uuid is
+                // dead" on the TURN endpoint, so both re-init transparently and
+                // resend once — without clearing the store, a stale uuid would wedge
+                // this browser for the full 24h retention window. (On the POLL
+                // endpoint a 404 is transient instead — see pollResult.)
+                if ((status === 410 || status === 404) && !isRetry) {
                     clearStore();
                     conversationUuid = null;
                     started = false;

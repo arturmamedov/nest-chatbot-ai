@@ -110,7 +110,9 @@
             This page opts into the mock transport (<code>data-mock="true"</code> below) —
             replies come from the local fixtures in <code>nest-chatbot.js</code>, not the API.
             Drop the attribute and add <code>data-api-base</code> + <code>data-key</code> to
-            hit a real backend.
+            hit a real backend — the key must be a <strong>public-scoped</strong>
+            <code>ws_live_…</code> key, and if the site has an origin allow-list configured,
+            this page's origin must be registered on it first.
         </p>
     </div>
 

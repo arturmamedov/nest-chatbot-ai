@@ -312,6 +312,11 @@
     align-self: flex-start;
     display: inline-block;
     margin-left: 56px;
+    /* Labels are server-localized (a German compound can be long): they must
+       wrap inside the pill — .nc-body is overflow-x: hidden, so an unbroken
+       token would be clipped, not scrolled. */
+    max-width: calc(100% - 56px);
+    overflow-wrap: break-word;
     padding: 10px 16px;
     border-radius: 12px;
     font-size: 0.9rem;
@@ -320,6 +325,12 @@
     color: #fff;
     background: var(--nc-secondary);
     transition: 0.2s ease;
+}
+
+/* Consecutive CTAs belong to one reply (contract 1.4.0 ships three) — group
+   them: the 20px .nc-body gap minus 12px leaves 8px between adjacent buttons. */
+#nest-chatbot .nc-action + .nc-action {
+    margin-top: -12px;
 }
 
 #nest-chatbot .nc-action:hover {
@@ -702,6 +713,10 @@
     #nest-chatbot .nc-channels,
     #nest-chatbot .nc-options {
         margin-left: 0;
+    }
+
+    #nest-chatbot .nc-action {
+        max-width: 100%;   /* margin-left is zeroed above */
     }
 }
 

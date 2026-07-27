@@ -20,7 +20,7 @@
  *   Element-supplied urls are honoured for http(s) only; tel:/mailto:/wa.me hrefs
  *   are constructed here from channel values, never taken verbatim.
  *
- * Built against response contract 1.2.0 (BUILT_AGAINST, api section) in
+ * Built against response contract 1.4.1 (BUILT_AGAINST, api section) in
  * docs/wsuite/. The server reports its live contract_version at init; the widget
  * warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
@@ -29,7 +29,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.0.0';
+    var VERSION = '2.1.0';
 
     /* =========================================================== config ===== */
 
@@ -236,10 +236,10 @@
      * Every callback is done(status, data) — the flow section below maps status
      * codes to behaviour.
      *
-     * NOTE (open item, see CLAUDE.md): `locale` in the turn body is an additive
-     * field not in the contract (1.2.0) — the server ignores it. It exists so a
-     * guest can switch language mid-conversation. Raised with the platform team
-     * as a candidate 1.3.0 minor.
+     * NOTE: `locale` in the turn body is contractual since 1.3.0 (guide §3.2) —
+     * a stateless per-turn reply-language override for a UI that owns a language
+     * switcher, which this widget does. Resend it on EVERY turn: dropping it
+     * hands the next turn back to server-side detection.
      */
 
     // The response-contract version this widget was built against. The init
@@ -247,7 +247,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.2.0';
+    var BUILT_AGAINST = '1.4.1';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -332,7 +332,7 @@
      *
      *   "book"      → booking_link with a stay summary
      *   "contact"   → contact_channels (phone + whatsapp + email)
-     *   "link"      → two link_buttons
+     *   "link"      → three link_buttons (book / website / directions)
      *   "available" → async_result: interim reply now, final reply after polling
      *   "rooms"     → availability with room options
      *   "!unknown"  → an unrecognised element type (must be ignored silently)
@@ -353,7 +353,7 @@
                 reply(done, 201, {
                     conversation: { uuid: 'mock-' + Math.random().toString(36).slice(2, 10) },
                     greeting: t('greeting'),
-                    contract_version: '1.2.0'
+                    contract_version: '1.4.1'
                 }, 700);
             },
 
@@ -436,11 +436,15 @@
                 }
 
                 if (q.indexOf('link') !== -1) {
+                    // Since contract 1.4.0 the information path emits three
+                    // deterministic link_buttons (booking_url / website / map_url),
+                    // deduped by URL — the fixture mirrors that.
                     return reply(done, 200, {
-                        reply: 'Here are the two places to look.',
+                        reply: 'Here is everything for Las Eras — booking, the website, and how to find us.',
                         actions: [
                             { type: 'link_button', label: 'Book now', url: 'https://book.nestshostels.com', style: 'primary' },
-                            { type: 'link_button', label: 'Visit our website', url: 'https://nestshostels.com' }
+                            { type: 'link_button', label: 'Visit our website', url: 'https://nestshostels.com' },
+                            { type: 'link_button', label: 'Get directions', url: 'https://maps.google.com/?q=Las+Eras+Nest+Hostel' }
                         ],
                         turn: turn
                     });
@@ -1035,10 +1039,12 @@
                 return;
             }
 
-            // Idled out (410) or unknown uuid (404 — guide §5: "treat the
-            // conversation as gone; re-init"): re-init transparently and resend
-            // once. The guest sees one reply, never a duplicate and never an
-            // error. The reference re-inits on 410 only; §5 says 404 too.
+            // Idled out (410) or unknown uuid (404). On the TURN endpoint both
+            // mean "this stored uuid is dead" (guide §5.1): re-init transparently
+            // and resend once — without clearing the store, a stale uuid would
+            // wedge this browser for the full 24h retention window. The guest
+            // sees one reply, never a duplicate and never an error. (On the POLL
+            // endpoint a 404 is transient instead — see pollResult.)
             if ((status === 410 || status === 404) && !isRetry) {
                 clearStore();
                 conversationUuid = null;
@@ -1112,7 +1118,10 @@
                     return;
                 }
 
-                schedule();   // pending / 429 / network / unparseable → back off
+                // pending / 404 / 429 / network / unparseable body → transient:
+                // back off (guide §5.1 — a poll 404 may be a row not yet visible
+                // to this request; re-initing would abandon a live answer).
+                schedule();
             });
         }
 

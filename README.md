@@ -17,7 +17,9 @@ Vanilla JavaScript. No dependencies, no build step, no framework. One script tag
 
 That is the entire integration. The widget builds its own DOM and loads its own stylesheet —
 there is no markup to paste and no CSS to link. Assets resolve against the script's own URL, so
-it works from a CDN, a subdirectory, or any origin.
+it works from a CDN, a subdirectory, or any origin. (If the site has an origin allow-list
+configured on the chatbot API, the embedding page's origin must be registered — see
+[Origins](#origins) below.)
 
 It will not touch your page: all of its CSS is scoped to `#nest-chatbot`, it defines no global
 styles, and it never modifies your `<html>`, `<body>` or anything outside its own container.
@@ -28,13 +30,23 @@ styles, and it never modifies your `<html>`, `<body>` or anything outside its ow
 |---|---|---|
 | `data-api-base` | — | The chatbot API origin. |
 | `data-key` | — | Your public-scoped `ws_live_…` API key. Safe to expose — it is scoped to the guest chat routes of one site. |
-| `data-property` | — | Which property the conversation is about. A name hint; unknown names are not an error. |
+| `data-property` | — | Which property the conversation is about. A matched name seeds the conversation's working memory, so answers are scoped to that property from the first message. Unknown names are not an error. |
 | `data-locale` | `auto` | `auto` picks from the visitor's browser languages. Or force one of `en` `es` `it` `de` `fr`. |
 | `data-position` | `right` | `right` or `left`. |
 | `data-color` | `#0D6F82` | Accent colour for the launcher, buttons and focus ring. |
 | `data-z-index` | `2147483000` | Raise or lower it if it fights with your own overlays. |
 | `data-auto-open` | `false` | Open the panel on load instead of waiting for a click. |
 | `data-debug` | `false` | Verbose console logging. Leave off in production. |
+| `data-mock` | `false` | Serve replies from the built-in local fixtures instead of the API — the dev harness the demo page uses. Never on a production page. |
+
+The key must be **public**-scoped — never embed a `full`-scope key or any provider key.
+
+### Origins
+
+By default the chatbot API accepts the widget from any origin, so local development needs no
+registration step. If the site has an origin allow-list configured, the exact origin of every
+page that embeds the widget (`scheme://host[:port]`) must be registered on it, or requests are
+refused with `403 {"message":"Origin not allowed."}`.
 
 ## Controlling it from your own code
 
@@ -45,7 +57,7 @@ NestChatbot.toggle();
 NestChatbot.setLocale('es');
 NestChatbot.destroy();
 NestChatbot.locale;    // 'es'
-NestChatbot.version;   // '2.0.0'
+NestChatbot.version;   // '2.1.0'
 ```
 
 ## What the visitor gets
@@ -67,8 +79,9 @@ python -m http.server 5501
 open http://127.0.0.1:5501/demo/index.html
 ```
 
-`demo/index.html` is a stand-in for a customer site. The transport is currently stubbed with
-local fixtures — see [CLAUDE.md](CLAUDE.md) for the keywords that drive each response type, the
-architecture, and the rules any change to this repo has to respect.
+`demo/index.html` is a stand-in for a customer site. The live transport is the default; the
+demo opts into the built-in fixtures with `data-mock="true"` — see [CLAUDE.md](CLAUDE.md) for
+the keywords that drive each mock response type, the architecture, and the rules any change to
+this repo has to respect.
 
 The API contract lives in [`docs/wsuite/`](docs/wsuite/).
