@@ -739,18 +739,36 @@
         return /^https?:\/\//i.test(trimmed) ? trimmed : null;
     }
 
-    function linkButton(label, url, style) {
+    /**
+     * `row` is the CTA row this button joins — null opens a new one. Returns the row
+     * so the caller can hand it to the next button: consecutive CTAs (contract 1.4.0
+     * ships three) then share one wrapping row instead of stacking into a column of
+     * full-width bars. A dropped url returns `row` untouched, so a rejected link
+     * never leaves an empty row behind.
+     */
+    function linkButton(label, url, style, row) {
         var href = safeHttpUrl(url);
-        if (!href) { log('dropped a non-http(s) url', url); return; }
+        if (!href) { log('dropped a non-http(s) url', url); return row; }
         var link = el('a', 'nc-action' + (style === 'primary' ? ' nc-action--primary' : ''), label || t('open_link'));
         attrs(link, { href: href, target: '_blank', rel: 'noopener noreferrer' });
-        els.body.appendChild(link);
+        if (!row) {
+            row = el('div', 'nc-action-row');
+            els.body.appendChild(row);
+        }
+        row.appendChild(link);
         scrollDown();
+        return row;
     }
 
     function renderActions(actions, bubble) {
         if (!actions || !actions.length) { return; }
-        for (var i = 0; i < actions.length; i++) { renderAction(actions[i], bubble); }
+        // The open CTA row travels with the pass rather than living module-side, so
+        // DOM order still follows payload order and an element that renders something
+        // else closes the group.
+        var row = null;
+        for (var i = 0; i < actions.length; i++) {
+            row = renderAction(actions[i], bubble, row);
+        }
     }
 
     /**
@@ -760,36 +778,40 @@
      * Unknown types are ignored silently and deliberately — the server ships new
      * element types ahead of any given widget, and breaking on one would take the
      * whole reply down with it.
+     *
+     * Returns the CTA row left open for the next element: carrying it is what groups
+     * consecutive buttons. An element that renders something of its own returns null
+     * and closes the group; one that renders nothing passes `row` straight through.
      */
-    function renderAction(action, bubble) {
-        if (!action || !action.type) { return; }
+    function renderAction(action, bubble, row) {
+        if (!action || !action.type) { return row; }
 
         switch (action.type) {
             case 'async_result':
                 if (action.url) { pollResult(action.url, bubble); }
-                return;
+                return row;
 
             case 'link_button':
-                linkButton(action.label, action.url, action.style);
-                return;
+                return linkButton(action.label, action.url, action.style, row);
 
             case 'booking_link':
-                linkButton(t('book'), action.url, 'primary');
-                return;
+                return linkButton(t('book'), action.url, 'primary', row);
 
             case 'availability':
-                renderAvailability(action);
-                return;
+                return renderAvailability(action);
 
             case 'contact_channels':
                 renderChannels(action);
-                return;
+                return null;
 
             default:
                 log('ignoring unknown element type', action.type);
+                return row;
         }
     }
 
+    // The options card closes any open CTA group; the trailing booking button opens a
+    // fresh row, which is returned for whatever follows.
     function renderAvailability(action) {
         if (action.available === false) {
             els.body.appendChild(el('div', 'nc-options', t('noAvailability')));
@@ -802,8 +824,9 @@
             });
             els.body.appendChild(list);
         }
-        if (action.url) { linkButton(t('book'), action.url, 'primary'); }
+        var row = action.url ? linkButton(t('book'), action.url, 'primary', null) : null;
         scrollDown();
+        return row;
     }
 
     function renderChannels(action) {

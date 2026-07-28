@@ -226,7 +226,7 @@
 #nest-chatbot .nc-body {
     background-color: var(--nc-surface-alt);
     padding: 15px;
-    gap: 20px;
+    gap: 15px;
     display: flex;
     height: var(--nc-body-h);
     flex: 1 1 auto;
@@ -320,16 +320,24 @@
 
 /* ------------------------------------------------------- actions[] renderables */
 
+/* One reply's CTAs share this row (contract 1.4.0 ships three) so they read as a
+   group and reflow at the panel edge instead of stacking into a column of bars.
+   No align-self: the row takes the full body width, which is what makes wrapping
+   predictable rather than dependent on its content width. */
+#nest-chatbot .nc-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
 #nest-chatbot .nc-action {
-    align-self: flex-start;
     display: inline-block;
-    margin-left: 56px;
     /* Labels are server-localized (a German compound can be long): they must
        wrap inside the pill — .nc-body is overflow-x: hidden, so an unbroken
        token would be clipped, not scrolled. */
-    max-width: calc(100% - 56px);
+    max-width: 100%;
     overflow-wrap: break-word;
-    padding: 10px 16px;
+    padding: 9px 12px;
     border-radius: 12px;
     font-size: 0.9rem;
     font-weight: 600;
@@ -337,12 +345,6 @@
     color: #fff;
     background: var(--nc-secondary);
     transition: 0.2s ease;
-}
-
-/* Consecutive CTAs belong to one reply (contract 1.4.0 ships three) — group
-   them: the 20px .nc-body gap minus 12px leaves 8px between adjacent buttons. */
-#nest-chatbot .nc-action + .nc-action {
-    margin-top: -12px;
 }
 
 #nest-chatbot .nc-action:hover {
@@ -359,12 +361,12 @@
     color: #fff;
 }
 
+/* Wrapping row, same as the CTAs: call / whatsapp / email sit side by side and
+   break onto a second line only when they have to. */
 #nest-chatbot .nc-channels {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 6px;
-    margin-left: 56px;
-    align-self: flex-start;
 }
 
 #nest-chatbot .nc-channel {
@@ -386,9 +388,10 @@
     color: #fff;
 }
 
+/* Keeps align-self: the availability card hugs its content instead of stretching
+   into a full-width panel. */
 #nest-chatbot .nc-options {
     align-self: flex-start;
-    margin-left: 56px;
     font-size: 0.85rem;
     color: var(--nc-ink);
     background: var(--nc-surface);
@@ -724,16 +727,6 @@
 
     #nest-chatbot .nc-footer {
         padding: 10px 15px 15px;
-    }
-
-    #nest-chatbot .nc-action,
-    #nest-chatbot .nc-channels,
-    #nest-chatbot .nc-options {
-        margin-left: 0;
-    }
-
-    #nest-chatbot .nc-action {
-        max-width: 100%;   /* margin-left is zeroed above */
     }
 }
 
