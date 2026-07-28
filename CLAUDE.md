@@ -190,8 +190,8 @@ Set on the `<script>` tag. `document.currentScript.dataset` reads them at boot.
 | `data-property` | — | Property-name hint, sent at init. A matched name seeds the conversation's working memory, so answers are scoped to that property from turn 1. Unknown names are not an error. |
 | `data-locale` | `auto` | `auto` matches `navigator.languages` against `en es it de fr`. |
 | `data-position` | `right` | `right` \| `left` |
-| `data-offset-x` | `35` | Bare px number → `--nc-edge-x`. Non-numeric values are ignored. |
-| `data-offset-y` | `30` | Bare px number → `--nc-edge-y`. The panel derives its `bottom` from it. |
+| `data-offset-x` | `24` | Bare px number → `--nc-edge-x`. Non-numeric values are ignored. |
+| `data-offset-y` | `22` | Bare px number → `--nc-edge-y`. The panel derives its `bottom` from it. |
 | `data-color` | `#0D6F82` | Sets `--nc-secondary`. (Defaults live as CSS custom properties in `css/nest-chatbot.css`; the JS default `''` means "don't override".) |
 | `data-z-index` | `2147483000` | For hosts with their own stacking conflicts. Same CSS-default mechanism as `data-color`. |
 | `data-auto-open` | `false` | |
@@ -252,3 +252,6 @@ what a customer hits. Run a second static server on another port with a page tha
 - Anything user-visible goes through `t()` / `tf()`, never a hardcoded string.
 - Never touch `document.documentElement.lang`, the host's `<body>`, or anything outside
   `#nest-chatbot`. The host page is not ours.
+- Version bumps err small: little changes are a **patch**, even when they touch behaviour.
+  Reserve minor for genuinely new surface (a config attribute, a UI feature, a contract
+  sync), major for breaking the embed contract.
