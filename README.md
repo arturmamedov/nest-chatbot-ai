@@ -57,7 +57,7 @@ NestChatbot.toggle();
 NestChatbot.setLocale('es');
 NestChatbot.destroy();
 NestChatbot.locale;    // 'es'
-NestChatbot.version;   // '2.1.0'
+NestChatbot.version;   // '2.1.1'
 ```
 
 ## What the visitor gets

@@ -5,6 +5,37 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.1.1 — 2026-07-28
+
+Presentation only — no transport, contract or API surface change. `BUILT_AGAINST` stays 1.4.1.
+
+- **Flags fill their circle.** `.nc-flag` relied on `object-fit: cover`, which does nothing on an
+  inline `<svg>` — the property only applies to replaced elements, so every flag letterboxed
+  inside its 35px button. The crop now comes from `preserveAspectRatio="xMidYMid slice"` in the
+  markup, applied through one `FLAG_FIT` constant so it cannot drift between flags. The button's
+  hairline moved from `outline` into the `box-shadow` ring: it follows the border-radius on every
+  engine, and freeing `outline` restores the keyboard focus ring the permanent one was masking.
+- **One brand mark in two colour variants.** The launcher, the header and the bot avatar were
+  three different pictures. All three are now the Nests wing — `avatar-header.png` (white) on the
+  coloured launcher and header, `logotipo-nests-tenerife.png` (teal) on the white message body,
+  matching the intro loader. The avatar sits on a faint `color-mix()` tint of `--nc-primary`, so
+  the disc follows a host's colour override instead of hardcoding teal. `object-fit: contain` on
+  the launcher icon and header logo stops the 300×325 mark being stretched ~8% by their square
+  boxes. The three duplicated avatar call sites collapsed into one `avatarNode()`. The launcher no
+  longer rotates 90° on open — a logo should not spin — it scales to 0.92. `germanavatar.png` and
+  `nest-chatbot_white.png` are no longer referenced.
+- **A reply's CTAs share one wrapping row.** Every `actions[]` renderable was appended straight
+  into the column-flex `.nc-body`, so contract 1.4.0's three deterministic buttons each took their
+  own line and stacked into a column of bars. Consecutive CTAs now collect into one
+  `.nc-action-row` (flex, wrap, 6px), the open row travelling through the render pass as a return
+  value so DOM order still follows payload order: `contact_channels` and an availability card close
+  the group, `async_result` and unknown types pass it through, and a rejected non-http url leaves
+  no empty row. This replaces the `.nc-action + .nc-action { margin-top: -12px }` grouping shipped
+  in 2.1.0, which was a workaround for the missing container and was pinned to the 20px body gap
+  (now 15px). Dropping `margin-left: 56px` is what makes the row wide enough for all three; the
+  indent went from `.nc-channels` and `.nc-options` too, so every renderable under a reply shares
+  one left edge, and the contact channels became the same wrapping row.
+
 ## 2.1.0 — 2026-07-28
 
 Synced to wSuite chatbot response contract **1.4.1** (upstream tag `chatbot-contract-v1.4.1`,

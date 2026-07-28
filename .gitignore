@@ -11,3 +11,7 @@ Thumbs.db
 # Local test credentials (even public-scoped ws_live_ keys stay out of git —
 # this repo has shipped committed keys twice; see CLAUDE.md rule 3)
 .env
+
+# Scratch host page for hitting a real backend: it carries a live ws_live_ key in
+# its script tag. demo/index.html is the committed one and runs on data-mock.
+demo/demo.html
