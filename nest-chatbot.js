@@ -711,11 +711,12 @@
 
         /* body */
         var body = el('div', 'nc-body');
-        // `additions` WITHOUT `text`: the typer streams character by character into a
-        // Text node, and `text` makes some screen readers re-announce the growing
-        // string on every keystroke. Dropping it leaves node additions as the only
-        // trigger — see typeText(), which adds exactly one sr-only node per reply.
-        attrs(body, { role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions' });
+        // log is the right structural role, but the transcript must not be LIVE:
+        // the typer streams character by character into a Text node, and a live
+        // .nc-body re-announces the growing string on every keystroke. Announcing
+        // happens through els.announcer instead (see announce()). aria-live must
+        // be stated, not omitted — role="log" carries an implicit polite.
+        attrs(body, { role: 'log', 'aria-live': 'off' });
 
         var loader = el('div', 'nc-loader');
         var progress = svgNode(
@@ -770,12 +771,21 @@
         controls.appendChild(form);
         footer.appendChild(controls);
 
+        /* announcer — the widget's only live region.
+           A SIBLING of the panel, never a child: a closed panel is opacity:0 and
+           scale(0.2), and a live region inside hidden furniture is unreliable. It
+           reuses .nc-sr-only so there is exactly one visually-hidden recipe in the
+           stylesheet. */
+        var announcer = el('div', 'nc-sr-only nc-announcer');
+        attrs(announcer, { 'aria-live': 'polite', 'aria-relevant': 'additions' });
+
         panel.appendChild(header);
         panel.appendChild(body);
         panel.appendChild(footer);
         root.appendChild(toggler);
         root.appendChild(teaser);
         root.appendChild(panel);
+        root.appendChild(announcer);
         document.body.appendChild(root);
 
         els = {
@@ -783,7 +793,8 @@
             progress: progress, form: form, input: input, send: send, close: closeBtn,
             controls: controls, langToggle: langToggle, langOptions: langOptions,
             optionButtons: optionButtons, badge: badge, subline: subline, expand: expandBtn,
-            unread: unread, teaser: teaser, teaserBody: teaserBody, teaserClose: teaserClose
+            unread: unread, teaser: teaser, teaserBody: teaserBody, teaserClose: teaserClose,
+            announcer: announcer
         };
     }
 
@@ -791,6 +802,48 @@
 
     function scrollDown() {
         if (els.body) { els.body.scrollTop = els.body.scrollHeight; }
+    }
+
+    /* ------------------------------------------------------------- announcing */
+    /*
+     * One reply, one announcement — and the visible bubble stays in the
+     * accessibility tree, so a VoiceOver/TalkBack guest can still explore it by
+     * touch. Hiding the bubble instead (the shape this started as) bought the
+     * single announcement at the cost of making replies unreachable by pointer.
+     */
+
+    // Long enough for a polite queue to drain behind an interrupting one, short
+    // enough that the text is gone before anyone browses back to it.
+    var ANNOUNCE_CLEAR_MS = 3000;
+    var announceToken = 0;
+
+    function emptyNode(node) {
+        while (node.firstChild) { node.removeChild(node.firstChild); }
+    }
+
+    /**
+     * Announce by ADDING a node, not by writing textContent: two consecutive
+     * replies carrying the identical string (two t('error') in a row) are two
+     * additions and are both spoken, where a textContent write of the same value
+     * changes nothing and is silently skipped.
+     *
+     * The text is cleared afterwards or it sits there as a second, invisible copy
+     * of the bubble for anyone reading the page linearly — the very duplication
+     * this design exists to avoid. The token makes a stale clear a no-op, so a
+     * newer announcement is never wiped by an older timer.
+     */
+    function announce(text) {
+        if (!els.announcer || !text) { return; }
+        announceToken += 1;
+        var token = announceToken;
+
+        emptyNode(els.announcer);
+        els.announcer.appendChild(el('span', null, text));
+
+        setTimeout(function () {
+            if (removed || token !== announceToken) { return; }
+            emptyNode(els.announcer);
+        }, ANNOUNCE_CLEAR_MS);
     }
 
     /**
@@ -824,6 +877,13 @@
         wrap.appendChild(textNode);
         els.body.appendChild(wrap);
         scrollDown();
+
+        // Bot bubbles that never reach typeText — error, retry, timeout — would go
+        // silent now that .nc-body is not live, so they announce from here. The
+        // non-empty guard is what keeps a typed reply from announcing twice: it
+        // arrives as addBubble('bot', '') and typeText does the talking. A guest
+        // bubble is never announced; the guest just typed that text.
+        if (isBot && text) { announce(text); }
         return textNode;
     }
 
@@ -993,11 +1053,13 @@
      * shared token truncated the greeting the moment the guest sent a message.
      *
      * Screen readers hear the reply ONCE, whole, the moment typing starts — never
-     * the stream. Three pieces make that work together and only together: .nc-body
-     * is aria-relevant="additions" (build()), the streamed node is aria-hidden, and
-     * the full text is added as one sr-only sibling. Bubbles that never stream
-     * (guest turns, error/retry/timeout) keep announcing through their own node
-     * addition, so addBubble() needs none of this.
+     * the stream. That is entirely announce()'s job: .nc-body is not a live region
+     * (build()), so streaming into it says nothing, and nothing here has to hide
+     * the bubble to keep it quiet. The bubble therefore stays in the accessibility
+     * tree and stays explorable by touch.
+     *
+     * The poll re-typing a bubble announces the final text again, superseding the
+     * interim announcement — wanted, and free, since the announcer holds one node.
      */
     function typeText(node, text, done) {
         var token = (node.ncTypeToken || 0) + 1;
@@ -1005,16 +1067,9 @@
 
         var full = String(text == null ? '' : text);
 
-        node.setAttribute('aria-hidden', 'true');
-        var wrap = node.parentNode;
-        if (wrap) {
-            // Replace, never stack: the poll re-types the same node, and two
-            // sr-only siblings would leave the interim text announced alongside
-            // the final one and readable by a screen-reader's browse mode.
-            var stale = wrap.querySelector('.nc-sr-only');
-            if (stale && stale.parentNode) { stale.parentNode.removeChild(stale); }
-            wrap.appendChild(el('span', 'nc-sr-only', full));
-        }
+        // Before streaming, on BOTH paths below: the guest hears the whole reply
+        // while the eye is still watching it arrive.
+        announce(full);
 
         // A guest who asked the OS for less motion gets the reply at once. The
         // return sits above the nc-typing class on purpose: the caret is a solid
