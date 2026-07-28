@@ -22,10 +22,24 @@
     --nc-ink: #1f2430;
     --nc-line: #cccce5;
 
+    /* Phase-1 subset of the design system's token sheet (§2 in the handoff).
+       Never import that sheet wholesale: its --nc-surface is white where ours is
+       the grey the bubbles and footer depend on, and its --nc-z would silently
+       defeat data-z-index. Tokens land here one by one, with the rules that
+       consume them. */
+    --nc-accent: #EA580C;
+    --nc-border: #E6EDEE;
+    --nc-text: #12333C;
+    --nc-shadow-fab: 0 10px 26px -8px rgba(13, 111, 130, 0.45);
+
+    /* motion */
+    --nc-dur: 300ms;
+    --nc-ease: cubic-bezier(0.4, 0, 0.2, 1);
+
     /* layout */
     --nc-z: 2147483000;
-    --nc-edge-x: 35px;
-    --nc-edge-y: 30px;
+    --nc-edge-x: 24px;
+    --nc-edge-y: 22px;
     --nc-panel-w: 420px;
     --nc-body-h: 460px;
 
@@ -95,22 +109,25 @@
 
 /* ------------------------------------------------------------------- launcher */
 
+/* A white puck framed by the brand ring (design mock 2A): the teal mark carries
+   the colour, the ring frames it. data-color themes --nc-secondary only, so a
+   host's custom colour shows on the open panel, not on this ring — deliberate. */
 #nest-chatbot .nc-toggler {
     position: fixed;
     bottom: var(--nc-edge-y);
     right: var(--nc-edge-x);
     z-index: var(--nc-z);
-    height: 50px;
-    width: 50px;
-    border: none;
+    height: 60px;
+    width: 60px;
+    border: 2px solid var(--nc-primary);
     display: flex;
     cursor: pointer;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: var(--nc-secondary);
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease;
+    background: var(--nc-surface-alt);
+    box-shadow: var(--nc-shadow-fab);
+    transition: transform var(--nc-dur) var(--nc-ease);
 }
 
 #nest-chatbot[data-position="left"] .nc-toggler {
@@ -118,17 +135,107 @@
     left: var(--nc-edge-x);
 }
 
+#nest-chatbot .nc-toggler:hover {
+    transform: scale(1.05);
+}
+
 /* A shrink rather than a spin: the launcher carries the brand mark now, and a logo
-   should not rotate. */
+   should not rotate. Same specificity as the :hover rule above — this one must
+   stay AFTER it in source order, or hovering the open launcher pops it to 1.05. */
 #nest-chatbot.nc-open .nc-toggler {
     transform: scale(0.92);
 }
 
 /* The mark is 300x325, not square — contain keeps the wing from stretching. */
 #nest-chatbot .nc-toggler-icon {
-    width: 33px;
-    height: 33px;
+    width: 34px;
+    height: 34px;
     object-fit: contain;
+}
+
+/* Quiet unread affordance (mock 2A): no count, no pulse. Decorative only — the
+   launcher's aria-label carries the "1 new message" meaning. */
+#nest-chatbot .nc-unread {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--nc-accent);
+    border: 2px solid #fff;
+}
+
+/* The scoped reset above zeroes outline-offset and box-shadow on buttons, so
+   keyboard focus rings have to be declared, not inherited. */
+#nest-chatbot .nc-toggler:focus-visible,
+#nest-chatbot .nc-teaser-body:focus-visible,
+#nest-chatbot .nc-teaser-close:focus-visible {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------- teaser */
+
+/* One nudge per session, above the launcher. The base state is invisible AND
+   click-through: while the exit fade runs, an invisible bubble must not swallow
+   the host page's clicks. */
+#nest-chatbot .nc-teaser {
+    position: fixed;
+    right: var(--nc-edge-x);
+    /* 60px launcher + a 12px gap. */
+    bottom: calc(var(--nc-edge-y) + 72px);
+    z-index: var(--nc-z);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 250px;
+    padding: 10px 12px;
+    background: var(--nc-surface-alt);
+    border-radius: 14px 14px 4px 14px;
+    box-shadow: 0 10px 24px -12px rgba(13, 111, 130, 0.5), 0 0 0 1px var(--nc-border);
+    opacity: 0;
+    transform: translateY(6px);
+    pointer-events: none;
+    transition: opacity var(--nc-dur) var(--nc-ease), transform var(--nc-dur) var(--nc-ease);
+}
+
+#nest-chatbot .nc-teaser.nc-teaser--in {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+#nest-chatbot[data-position="left"] .nc-teaser {
+    right: auto;
+    left: var(--nc-edge-x);
+    border-radius: 14px 14px 14px 4px;   /* the tail keeps pointing at the launcher */
+}
+
+#nest-chatbot .nc-teaser-body {
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    /* Explicit: the reset makes buttons inherit the root's 16px. */
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--nc-text);
+}
+
+#nest-chatbot .nc-teaser-close {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    border: none;
+    cursor: pointer;
+    border-radius: 50%;
+    background: #F1F6F7;
+    color: #7b939a;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* ---------------------------------------------------------------------- panel */
@@ -136,9 +243,9 @@
 #nest-chatbot .nc-panel {
     position: fixed;
     right: var(--nc-edge-x);
-    /* Derived, not hardcoded: 50px launcher + a 10px gap above it. A host that
+    /* Derived, not hardcoded: 60px launcher + a 10px gap above it. A host that
        nudges --nc-edge-y moves the launcher and the panel together. */
-    bottom: calc(var(--nc-edge-y) + 60px);
+    bottom: calc(var(--nc-edge-y) + 70px);
     z-index: var(--nc-z);
     width: var(--nc-panel-w);
     max-width: calc(100vw - 40px);
@@ -716,16 +823,28 @@
 
 /* ------------------------------------------------------------------- responsive */
 
-@media (max-width: 520px) {
-    /* Tighter edges on a phone, expressed through the vars rather than by
-       overriding right/bottom — otherwise a host's --nc-edge-* override would
-       silently stop applying below this breakpoint. data-offset-* writes an
-       inline style on the root, so it outranks this and holds at every width. */
+/* The design system's mobile breakpoint owns the tighter edges and the smaller
+   launcher. Expressed through the vars rather than by overriding right/bottom —
+   otherwise a host's --nc-edge-* override would silently stop applying below
+   this breakpoint. data-offset-* writes an inline style on the root, so it
+   outranks this and holds at every width. */
+@media (max-width: 639px) {
     #nest-chatbot {
         --nc-edge-x: 20px;
         --nc-edge-y: 20px;
     }
 
+    #nest-chatbot .nc-toggler {
+        height: 56px;
+        width: 56px;
+    }
+
+    #nest-chatbot .nc-teaser {
+        max-width: calc(100vw - 88px);
+    }
+}
+
+@media (max-width: 520px) {
     #nest-chatbot .nc-panel {
         right: 0;
         left: 0;
@@ -754,6 +873,13 @@
 /* Respect a guest who has asked the OS for less motion: the intro and the caret
    are decoration, not information. */
 @media (prefers-reduced-motion: reduce) {
+    /* Everything driven by the motion tokens (launcher, teaser) collapses to
+       instant here; the JS timing around the teaser is information, not motion,
+       and stays untouched. */
+    #nest-chatbot {
+        --nc-dur: 0ms;
+    }
+
     #nest-chatbot .nc-panel,
     #nest-chatbot .nc-toggler,
     #nest-chatbot .nc-loader,

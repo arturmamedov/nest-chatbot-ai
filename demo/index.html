@@ -75,6 +75,24 @@
         h2 { font-family: Georgia, serif; line-height: 4.5rem; letter-spacing: 0.32px; }
         textarea:focus { box-shadow: 0 0 0 1px #2563eb; outline: 2px solid transparent; }
         a { text-decoration: underline; color: #b1560f; }
+
+        /* --- the furniture trap ----------------------------------------------
+           A stand-in for the cookie banner nestshostels.com pins bottom-left.
+           The widget's launcher and teaser are bottom-right (or bottom-left with
+           data-position="left") — neither may overlap this. */
+        .cookie-banner {
+            position: fixed;
+            left: 16px;
+            bottom: 16px;
+            z-index: 50;
+            max-width: 300px;
+            background: #1f2430;
+            color: #f4f1e8;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            padding: 12px 16px;
+            border-radius: 8px;
+        }
     </style>
 </head>
 
@@ -131,6 +149,11 @@
             <code>ws_live_…</code> key, and if the site has an origin allow-list configured,
             this page's origin must be registered on it first.
         </p>
+    </div>
+
+    <div class="cookie-banner">
+        This site uses cookies to improve your stay. This banner is host-page furniture —
+        the widget's launcher and teaser must never overlap it.
     </div>
 
     <!-- ============ everything a host site adds, start to finish ============ -->

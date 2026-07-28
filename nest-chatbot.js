@@ -29,7 +29,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.2.0';
+    var VERSION = '2.3.0';
 
     /* =========================================================== config ===== */
 
@@ -114,7 +114,9 @@
             subtitle: 'Nests Hostels AI assistant',
             placeholder: 'Message...',
             greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nHi, I\'m Germán, your AI assistant for everything about Nests Hostels!\nHow can I help you today?',
-            open: 'Open the chat', close: 'Minimise the chat',
+            open: 'Open Germán, the Nests AI assistant', close: 'Minimise the chat',
+            openUnread: 'Open Germán — 1 new message',
+            teaser: 'Need a hand picking your Nest?', teaserDismiss: 'Dismiss',
             send: 'Send message', input: 'Type your message',
             language: 'Change language', languageOf: 'Switch to %s',
             book: 'Book now', open_link: 'Open',
@@ -128,7 +130,9 @@
             subtitle: 'Asistente IA de Nests Hostels',
             placeholder: 'Mensaje...',
             greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\n¡Soy Germán, tu asistente IA para todo lo relacionado con Nests Hostels!\n¿En qué puedo ayudarte?',
-            open: 'Abrir el chat', close: 'Minimizar el chat',
+            open: 'Abrir Germán, el asistente IA de Nests', close: 'Minimizar el chat',
+            openUnread: 'Abrir Germán — 1 mensaje nuevo',
+            teaser: '¿Te ayudo a elegir tu Nest?', teaserDismiss: 'Descartar',
             send: 'Enviar mensaje', input: 'Escribe tu mensaje',
             language: 'Cambiar idioma', languageOf: 'Cambiar a %s',
             book: 'Reservar ahora', open_link: 'Abrir',
@@ -142,7 +146,9 @@
             subtitle: 'Assistente IA di Nests Hostels',
             placeholder: 'Messaggio...',
             greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nSono Germán, il tuo assistente IA per tutto ciò che riguarda Nests Hostels!\nCome posso aiutarti?',
-            open: 'Apri la chat', close: 'Riduci la chat',
+            open: 'Apri Germán, l\'assistente IA di Nests', close: 'Riduci la chat',
+            openUnread: 'Apri Germán — 1 nuovo messaggio',
+            teaser: 'Ti aiuto a scegliere il tuo Nest?', teaserDismiss: 'Chiudi',
             send: 'Invia messaggio', input: 'Scrivi il tuo messaggio',
             language: 'Cambia lingua', languageOf: 'Passa a %s',
             book: 'Prenota ora', open_link: 'Apri',
@@ -156,7 +162,9 @@
             subtitle: 'KI-Assistent von Nests Hostels',
             placeholder: 'Nachricht...',
             greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nIch bin Germán, dein KI-Assistent für alles rund um Nests Hostels!\nWie kann ich dir helfen?',
-            open: 'Chat öffnen', close: 'Chat minimieren',
+            open: 'Germán öffnen, den KI-Assistenten von Nests', close: 'Chat minimieren',
+            openUnread: 'Germán öffnen — 1 neue Nachricht',
+            teaser: 'Soll ich dir helfen, dein Nest zu finden?', teaserDismiss: 'Schließen',
             send: 'Nachricht senden', input: 'Schreibe deine Nachricht',
             language: 'Sprache wechseln', languageOf: 'Zu %s wechseln',
             book: 'Jetzt buchen', open_link: 'Öffnen',
@@ -170,7 +178,9 @@
             subtitle: 'Assistant IA de Nests Hostels',
             placeholder: 'Message...',
             greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nJe suis Germán, ton assistant IA pour tout ce qui concerne Nests Hostels !\nComment puis-je t\'aider ?',
-            open: 'Ouvrir le chat', close: 'Réduire le chat',
+            open: 'Ouvrir Germán, l\'assistant IA de Nests', close: 'Réduire le chat',
+            openUnread: 'Ouvrir Germán — 1 nouveau message',
+            teaser: 'Besoin d\'aide pour choisir ton Nest ?', teaserDismiss: 'Fermer',
             send: 'Envoyer le message', input: 'Écris ton message',
             language: 'Changer de langue', languageOf: 'Passer en %s',
             book: 'Réserver', open_link: 'Ouvrir',
@@ -219,6 +229,23 @@
 
     function clearStore() {
         try { window.localStorage.removeItem(STORE_KEY); } catch (e) { }
+    }
+
+    /* Launcher-attention flags. Deliberately NOT suffixed with the site key the
+       way STORE_KEY is: they describe this visitor's relationship with the widget
+       on this origin — has it ever been opened, did they wave the teaser away —
+       not a conversation, and a key rotation must not resurrect the teaser for a
+       returning guest. */
+    var FLAG_OPENED = 'nest-chatbot:opened';                      // sessionStorage
+    var FLAG_TEASER_SHOWN = 'nest-chatbot:teaser-shown';          // sessionStorage
+    var FLAG_TEASER_DISMISSED = 'nest-chatbot:teaser-dismissed';  // localStorage
+
+    function readFlag(storeName, key) {
+        try { return window[storeName].getItem(key) === '1'; } catch (e) { return false; }
+    }
+
+    function writeFlag(storeName, key) {
+        try { window[storeName].setItem(key, '1'); } catch (e) { /* private mode — degrade to per-load */ }
     }
 
     /* ============================================================== api ===== */
@@ -593,14 +620,39 @@
 
         /* launcher */
         var toggler = el('button', 'nc-toggler');
-        attrs(toggler, { type: 'button', 'aria-label': t('open'), 'aria-expanded': 'false' });
-        // The same mark as the header, white variant: launcher, header and avatar are
-        // one logo in two colours rather than three different pictures.
+        // The unread affordance lasts until the first open of the session; while
+        // it shows, the accessible name carries the "1 new message" the visual
+        // dot only hints at.
+        var hasUnread = !readFlag('sessionStorage', FLAG_OPENED);
+        attrs(toggler, {
+            type: 'button',
+            'aria-label': hasUnread ? t('openUnread') : t('open'),
+            'aria-expanded': 'false'
+        });
+        // The same teal mark as the message avatar and the loader — one logo in
+        // one colour rather than three different pictures.
         var togglerIcon = el('img', 'nc-toggler-icon');
         attrs(togglerIcon, {
-            src: assetBase + 'img/avatar-header.png', alt: '', width: '31', height: '33'
+            src: assetBase + 'img/logotipo-nests-tenerife.png', alt: '', width: '34', height: '34'
         });
         toggler.appendChild(togglerIcon);
+
+        var unread = null;
+        if (hasUnread) {
+            unread = el('div', 'nc-unread');
+            attrs(unread, { 'aria-hidden': 'true' });
+            toggler.appendChild(unread);
+        }
+
+        /* teaser — built hidden; the flow section's timers decide if it shows */
+        var teaser = el('div', 'nc-teaser nc-hidden');
+        attrs(teaser, { role: 'status' });
+        var teaserBody = el('button', 'nc-teaser-body', t('teaser'));
+        attrs(teaserBody, { type: 'button' });
+        var teaserClose = el('button', 'nc-teaser-close', '✕');
+        attrs(teaserClose, { type: 'button', 'aria-label': t('teaserDismiss') });
+        teaser.appendChild(teaserBody);
+        teaser.appendChild(teaserClose);
 
         /* panel */
         var panel = el('div', 'nc-panel');
@@ -686,6 +738,7 @@
         panel.appendChild(body);
         panel.appendChild(footer);
         root.appendChild(toggler);
+        root.appendChild(teaser);
         root.appendChild(panel);
         document.body.appendChild(root);
 
@@ -693,7 +746,8 @@
             root: root, toggler: toggler, panel: panel, body: body, loader: loader,
             progress: progress, form: form, input: input, send: send, close: closeBtn,
             controls: controls, langToggle: langToggle, langOptions: langOptions,
-            optionButtons: optionButtons, subtitle: subtitle
+            optionButtons: optionButtons, subtitle: subtitle,
+            unread: unread, teaser: teaser, teaserBody: teaserBody, teaserClose: teaserClose
         };
     }
 
@@ -983,8 +1037,22 @@
         if (removed || isOpen()) { return; }
         els.root.classList.add('nc-open');
         els.toggler.setAttribute('aria-expanded', 'true');
+        markOpened();
+        hideTeaser();
         playIntro();
         setTimeout(function () { els.input.focus(); }, 320);
+    }
+
+    // The first open of the session retires the unread affordance for good:
+    // flag, dot, and the launcher's label drops its "1 new message". Every open
+    // path lands here — toggler, teaser body, NestChatbot.open(), auto-open.
+    function markOpened() {
+        writeFlag('sessionStorage', FLAG_OPENED);
+        if (els.unread) {
+            if (els.unread.parentNode) { els.unread.parentNode.removeChild(els.unread); }
+            els.unread = null;
+            els.toggler.setAttribute('aria-label', t('open'));
+        }
     }
 
     function close() {
@@ -995,6 +1063,62 @@
     }
 
     function toggle() { isOpen() ? close() : open(); }
+
+    /* ----------------------------------------------------------- teaser ----- */
+
+    // One nudge per session: armed at boot, fires after 8s of the panel staying
+    // closed, gone by itself 6s later. Timers follow the teardown contract —
+    // teardown() clears nothing, so every callback early-returns on `removed`
+    // and re-checks its guards: state can change while a timer waits.
+    var TEASER_SHOW_MS = 8000;
+    var TEASER_HIDE_MS = 6000;
+    var TEASER_EXIT_MS = 320;   // just past the 300ms exit transition
+    var teaserVisible = false;
+
+    function scheduleTeaser() {
+        if (readFlag('localStorage', FLAG_TEASER_DISMISSED)) { return; }
+        if (readFlag('sessionStorage', FLAG_OPENED)) { return; }
+        if (readFlag('sessionStorage', FLAG_TEASER_SHOWN)) { return; }
+        setTimeout(showTeaser, TEASER_SHOW_MS);
+    }
+
+    function showTeaser() {
+        if (removed || teaserVisible || isOpen()) { return; }
+        // Re-checked at fire time: the guest can open the panel, or another tab
+        // can dismiss forever, inside the 8s window.
+        if (readFlag('sessionStorage', FLAG_OPENED)) { return; }
+        if (readFlag('localStorage', FLAG_TEASER_DISMISSED)) { return; }
+        teaserVisible = true;
+        writeFlag('sessionStorage', FLAG_TEASER_SHOWN);
+        // Re-set rather than just unhide: a role="status" region announces
+        // changed content far more reliably than un-hidden content.
+        els.teaserBody.textContent = t('teaser');
+        els.teaser.classList.remove('nc-hidden');
+        // Force a style flush between display and the transition class, or the
+        // browser may paint the final state directly and skip the rise.
+        void els.teaser.offsetWidth;
+        els.teaser.classList.add('nc-teaser--in');
+        setTimeout(hideTeaser, TEASER_HIDE_MS);
+    }
+
+    function hideTeaser() {
+        if (removed || !teaserVisible) { return; }
+        teaserVisible = false;
+        // Never strand keyboard focus on a node about to vanish.
+        if (els.teaser.contains(document.activeElement)) { els.toggler.focus(); }
+        els.teaser.classList.remove('nc-teaser--in');
+        // A fixed timer, not transitionend: reduced-motion zeroes --nc-dur, and
+        // a 0ms transition never fires the event.
+        setTimeout(function () {
+            if (removed || teaserVisible) { return; }
+            els.teaser.classList.add('nc-hidden');
+        }, TEASER_EXIT_MS);
+    }
+
+    function dismissTeaserForever() {
+        writeFlag('localStorage', FLAG_TEASER_DISMISSED);
+        hideTeaser();
+    }
 
     function startConversation(cb) {
         var stored = readStore();
@@ -1222,7 +1346,9 @@
         els.input.setAttribute('aria-label', t('input'));
         els.send.setAttribute('aria-label', t('send'));
         els.close.setAttribute('aria-label', t('close'));
-        els.toggler.setAttribute('aria-label', t('open'));
+        els.toggler.setAttribute('aria-label', els.unread ? t('openUnread') : t('open'));
+        els.teaserBody.textContent = t('teaser');
+        els.teaserClose.setAttribute('aria-label', t('teaserDismiss'));
         els.subtitle.textContent = t('subtitle');
         els.panel.setAttribute('aria-label', 'Germán — ' + t('subtitle'));
 
@@ -1236,6 +1362,8 @@
     function wire() {
         els.toggler.addEventListener('click', toggle);
         els.close.addEventListener('click', close);
+        els.teaserBody.addEventListener('click', open);
+        els.teaserClose.addEventListener('click', dismissTeaserForever);
         els.form.addEventListener('submit', submit);
 
         els.input.addEventListener('input', adjustInputHeight);
@@ -1291,6 +1419,9 @@
         };
 
         if (cfg.autoOpen) { open(); }
+        // After the auto-open check: an auto-opened session has already written
+        // the opened flag, so the teaser timer never arms.
+        scheduleTeaser();
         log('booted', VERSION, { locale: locale, assetBase: assetBase, mock: USE_MOCK });
     }
 

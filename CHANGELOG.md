@@ -5,7 +5,39 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
-## 2.2.0 — 2026-07-28
+## 2.3.0 — 2026-07-28
+
+Phase 1 of the launcher redesign (option 2A in the design handoff under `plans/`): the closed
+state only — launcher restyle, a per-session unread dot, a self-dismissing teaser. New UI
+surface, four new or changed i18n keys and three new storage flags, hence minor. No transport
+or contract change; `BUILT_AGAINST` stays 1.4.1.
+
+- **The launcher is a white puck carrying the teal mark.** The 50px solid `--nc-secondary`
+  circle became a 60px (56px below 640px) white circle with a 2px `--nc-primary` ring and
+  `--nc-shadow-fab`, holding `logotipo-nests-tenerife.png` at 34×34 — launcher, message avatar
+  and loader now show one mark in one colour. Hover scales to 1.05 over the new motion tokens
+  (`--nc-dur`/`--nc-ease`, the Phase-1 subset of the design system's sheet — never import that
+  sheet wholesale, its `--nc-surface` and `--nc-z` collide with ours); the open state keeps
+  the 0.92 shrink, and the equal-specificity hover rule sits before it in source order so a
+  hovered open launcher stays shrunk. Default edges moved 35/30 → 24/22, the 640px breakpoint
+  now owns the 20/20 mobile edges (`data-offset-*` still outranks every width), and the
+  panel's derived bottom follows the taller launcher (`+ 70px`). `img/avatar-header.png` is no
+  longer referenced but stays for cached copies of older builds.
+- **A quiet unread dot until the first open.** 14px `--nc-accent` circle at the launcher's
+  top-right — no count, no animation, `aria-hidden`. While it shows, the launcher's accessible
+  name is "Open Germán — 1 new message" (`openUnread`, all five packs); the first open of the
+  session removes it (`sessionStorage`) and the label reverts to the new "Open Germán, the
+  Nests AI assistant".
+- **A self-dismissing teaser.** "Need a hand picking your Nest?" in a white bubble 12px above
+  the launcher — once per session, 8s after boot with the panel still closed, gone by itself
+  6s later. The copy and the ✕ are real buttons: the copy opens the panel, the ✕ dismisses
+  permanently (`localStorage`); opening the panel by any path dismisses it too, and an
+  auto-opened session never arms the timer. Timers follow the teardown contract (nothing is
+  cleared; callbacks early-return on `removed`), the hidden bubble is `pointer-events: none`
+  so its exit fade cannot swallow host clicks, and under `prefers-reduced-motion` the zeroed
+  duration tokens make it appear and vanish instantly while the 8s/6s timing stays identical.
+
+
 
 Adds config surface (`data-offset-x` / `data-offset-y`), hence minor. No transport or contract
 change; `BUILT_AGAINST` stays 1.4.1. Both fixes below were measured on the live widget at
