@@ -111,12 +111,14 @@
 
     var STRINGS = {
         en: {
-            subtitle: 'Nests Hostels AI assistant',
+            assistantRole: 'Nests Hostels AI assistant',
             placeholder: 'Message...',
             greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nHi, I\'m Germán, your AI assistant for everything about Nests Hostels!\nHow can I help you today?',
             open: 'Open Germán, the Nests AI assistant', close: 'Minimise the chat',
             openUnread: 'Open Germán — 1 new message',
             teaser: 'Need a hand picking your Nest?', teaserDismiss: 'Dismiss',
+            subline: 'Nests Hostels · replies in seconds', aiAssistant: 'AI assistant',
+            expand: 'Expand the chat', shrink: 'Shrink the chat',
             send: 'Send message', input: 'Type your message',
             language: 'Change language', languageOf: 'Switch to %s',
             book: 'Book now', open_link: 'Open',
@@ -127,12 +129,14 @@
             timeout: 'This is taking longer than expected — please use the booking link above, or ask me again in a moment.'
         },
         es: {
-            subtitle: 'Asistente IA de Nests Hostels',
+            assistantRole: 'Asistente IA de Nests Hostels',
             placeholder: 'Mensaje...',
             greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\n¡Soy Germán, tu asistente IA para todo lo relacionado con Nests Hostels!\n¿En qué puedo ayudarte?',
             open: 'Abrir Germán, el asistente IA de Nests', close: 'Minimizar el chat',
             openUnread: 'Abrir Germán — 1 mensaje nuevo',
             teaser: '¿Te ayudo a elegir tu Nest?', teaserDismiss: 'Descartar',
+            subline: 'Nests Hostels · responde en segundos', aiAssistant: 'Asistente IA',
+            expand: 'Ampliar el chat', shrink: 'Reducir el chat',
             send: 'Enviar mensaje', input: 'Escribe tu mensaje',
             language: 'Cambiar idioma', languageOf: 'Cambiar a %s',
             book: 'Reservar ahora', open_link: 'Abrir',
@@ -143,12 +147,14 @@
             timeout: 'Esto está tardando más de lo esperado — usa el enlace de reserva de arriba o pregúntame de nuevo en un momento.'
         },
         it: {
-            subtitle: 'Assistente IA di Nests Hostels',
+            assistantRole: 'Assistente IA di Nests Hostels',
             placeholder: 'Messaggio...',
             greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nSono Germán, il tuo assistente IA per tutto ciò che riguarda Nests Hostels!\nCome posso aiutarti?',
             open: 'Apri Germán, l\'assistente IA di Nests', close: 'Riduci la chat',
             openUnread: 'Apri Germán — 1 nuovo messaggio',
             teaser: 'Ti aiuto a scegliere il tuo Nest?', teaserDismiss: 'Chiudi',
+            subline: 'Nests Hostels · risponde in pochi secondi', aiAssistant: 'Assistente IA',
+            expand: 'Espandi la chat', shrink: 'Riduci la chat',
             send: 'Invia messaggio', input: 'Scrivi il tuo messaggio',
             language: 'Cambia lingua', languageOf: 'Passa a %s',
             book: 'Prenota ora', open_link: 'Apri',
@@ -159,12 +165,14 @@
             timeout: 'Ci sta mettendo più del previsto — usa il link di prenotazione qui sopra, o richiedimelo tra poco.'
         },
         de: {
-            subtitle: 'KI-Assistent von Nests Hostels',
+            assistantRole: 'KI-Assistent von Nests Hostels',
             placeholder: 'Nachricht...',
             greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nIch bin Germán, dein KI-Assistent für alles rund um Nests Hostels!\nWie kann ich dir helfen?',
             open: 'Germán öffnen, den KI-Assistenten von Nests', close: 'Chat minimieren',
             openUnread: 'Germán öffnen — 1 neue Nachricht',
             teaser: 'Soll ich dir helfen, dein Nest zu finden?', teaserDismiss: 'Schließen',
+            subline: 'Nests Hostels · antwortet in Sekunden', aiAssistant: 'KI-Assistent',
+            expand: 'Chat vergrößern', shrink: 'Chat verkleinern',
             send: 'Nachricht senden', input: 'Schreibe deine Nachricht',
             language: 'Sprache wechseln', languageOf: 'Zu %s wechseln',
             book: 'Jetzt buchen', open_link: 'Öffnen',
@@ -175,12 +183,14 @@
             timeout: 'Das dauert länger als erwartet — nutze bitte den Buchungslink oben oder frag mich gleich noch einmal.'
         },
         fr: {
-            subtitle: 'Assistant IA de Nests Hostels',
+            assistantRole: 'Assistant IA de Nests Hostels',
             placeholder: 'Message...',
             greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nJe suis Germán, ton assistant IA pour tout ce qui concerne Nests Hostels !\nComment puis-je t\'aider ?',
             open: 'Ouvrir Germán, l\'assistant IA de Nests', close: 'Réduire le chat',
             openUnread: 'Ouvrir Germán — 1 nouveau message',
             teaser: 'Besoin d\'aide pour choisir ton Nest ?', teaserDismiss: 'Fermer',
+            subline: 'Nests Hostels · répond en quelques secondes', aiAssistant: 'Assistant IA',
+            expand: 'Agrandir le chat', shrink: 'Réduire le chat',
             send: 'Envoyer le message', input: 'Écris ton message',
             language: 'Changer de langue', languageOf: 'Passer en %s',
             book: 'Réserver', open_link: 'Ouvrir',
@@ -530,7 +540,13 @@
     }
 
     var ICONS = {
-        minus: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon" viewBox="0 0 448 512" aria-hidden="true"><path d="M432 256c0 13.3-10.7 24-24 24H40c-13.3 0-24-10.7-24-24s10.7-24 24-24h368c13.3 0 24 10.7 24 24z"/></svg>',
+        x: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z"/></svg>',
+        // Arrows-out (expand) / arrows-in (shrink): the CSS swaps which one is
+        // visible in .nc-expand — both markup so the toggle is instant, no re-render.
+        expand: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon nc-icon--expand" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M5.828 10.172a.5.5 0 0 0-.707 0l-4.096 4.096V11.5a.5.5 0 0 0-1 0v3.975a.5.5 0 0 0 .5.5H4.5a.5.5 0 0 0 0-1H1.732l4.096-4.096a.5.5 0 0 0 0-.707m4.344-4.344a.5.5 0 0 0 .707 0l4.096-4.096V4.5a.5.5 0 1 0 1 0V.525a.5.5 0 0 0-.5-.5H11.5a.5.5 0 0 0 0 1h2.768l-4.096 4.096a.5.5 0 0 0 0 .707"/></svg>',
+        shrink: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon nc-icon--shrink" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M.172 15.828a.5.5 0 0 0 .707 0l4.096-4.096V14.5a.5.5 0 1 0 1 0v-3.975a.5.5 0 0 0-.5-.5H1.5a.5.5 0 0 0 0 1h2.768L.172 15.121a.5.5 0 0 0 0 .707M15.828.172a.5.5 0 0 0-.707 0l-4.096 4.096V1.5a.5.5 0 1 0-1 0v3.975a.5.5 0 0 0 .5.5H14.5a.5.5 0 0 0 0-1h-2.768L15.828.879a.5.5 0 0 0 0-.707"/></svg>',
+        // Plain chevron — unused until Task 6 wires the carousel arrows.
+        chevron: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708"/></svg>',
         send: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon" viewBox="0 0 512 512" aria-hidden="true"><path d="M498.1 5.6c10.1 7 15.4 19.1 13.5 31.2l-64 416c-1.5 9.7-7.4 18.2-16 23s-18.9 5.4-28 1.6L284 427.7l-68.5 74.1c-8.9 9.7-22.9 12.9-35.2 8.1S160 493.2 160 480v-83.6c0-4 1.5-7.8 4.2-10.8L331.8 202.8c5.8-6.3 5.6-16-.4-22s-15.7-6.4-22-.7L106 360.8 17.7 316.6C7.1 311.3.2 300.7 0 288.9s6.2-22.6 16.6-28.3l448-243.4c10.8-5.9 24-5 33.9 2.1z"/></svg>'
     };
 
@@ -656,26 +672,42 @@
 
         /* panel */
         var panel = el('div', 'nc-panel');
-        attrs(panel, { role: 'dialog', 'aria-label': 'Germán — ' + t('subtitle'), 'aria-modal': 'false' });
+        attrs(panel, { role: 'dialog', 'aria-label': 'Germán — ' + t('assistantRole'), 'aria-modal': 'false' });
 
         /* header */
         var header = el('div', 'nc-header');
         var headerInfo = el('div', 'nc-header-info');
         var headerLogo = el('img', 'nc-header-logo');
-        attrs(headerLogo, { src: assetBase + 'img/germanavatar.png', alt: '', width: '50', height: '50' });
+        attrs(headerLogo, { src: assetBase + 'img/germanavatar.png', alt: '', width: '44', height: '44' });
         var headerText = el('div', 'nc-header-text');
-        headerText.appendChild(el('h2', 'nc-title', 'Germán'));
-        var subtitle = el('span', 'nc-subtitle', t('subtitle'));
-        headerText.appendChild(subtitle);
+        var nameRow = el('div', 'nc-name-row');
+        nameRow.appendChild(el('h2', 'nc-title', 'Germán'));
+        var badge = el('span', 'nc-badge', t('aiAssistant'));
+        nameRow.appendChild(badge);
+        headerText.appendChild(nameRow);
+        var subline = el('span', 'nc-subline', t('subline'));
+        headerText.appendChild(subline);
         headerInfo.appendChild(headerLogo);
         headerInfo.appendChild(headerText);
 
+        // .nc-expand: built and styled now, but display:none until Task 8 wires
+        // the ≥1024px auto-expand behaviour and its click handler. Both glyphs
+        // ship so the later CSS swap needs no DOM change, just a class toggle.
+        var headerControls = el('div', 'nc-header-controls');
+        var expandBtn = el('button', 'nc-expand');
+        attrs(expandBtn, { type: 'button', 'aria-label': t('expand') });
+        expandBtn.appendChild(svgNode(ICONS.expand));
+        expandBtn.appendChild(svgNode(ICONS.shrink));
+
         var closeBtn = el('button', 'nc-close');
         attrs(closeBtn, { type: 'button', 'aria-label': t('close') });
-        closeBtn.appendChild(svgNode(ICONS.minus));
+        closeBtn.appendChild(svgNode(ICONS.x));
+
+        headerControls.appendChild(expandBtn);
+        headerControls.appendChild(closeBtn);
 
         header.appendChild(headerInfo);
-        header.appendChild(closeBtn);
+        header.appendChild(headerControls);
 
         /* body */
         var body = el('div', 'nc-body');
@@ -746,7 +778,7 @@
             root: root, toggler: toggler, panel: panel, body: body, loader: loader,
             progress: progress, form: form, input: input, send: send, close: closeBtn,
             controls: controls, langToggle: langToggle, langOptions: langOptions,
-            optionButtons: optionButtons, subtitle: subtitle,
+            optionButtons: optionButtons, badge: badge, subline: subline, expand: expandBtn,
             unread: unread, teaser: teaser, teaserBody: teaserBody, teaserClose: teaserClose
         };
     }
@@ -1349,8 +1381,12 @@
         els.toggler.setAttribute('aria-label', els.unread ? t('openUnread') : t('open'));
         els.teaserBody.textContent = t('teaser');
         els.teaserClose.setAttribute('aria-label', t('teaserDismiss'));
-        els.subtitle.textContent = t('subtitle');
-        els.panel.setAttribute('aria-label', 'Germán — ' + t('subtitle'));
+        els.badge.textContent = t('aiAssistant');
+        els.subline.textContent = t('subline');
+        els.panel.setAttribute('aria-label', 'Germán — ' + t('assistantRole'));
+        // isExpanded() arrives in Task 8; until then the control only ever
+        // offers to expand, never to shrink.
+        els.expand.setAttribute('aria-label', t('expand'));
 
         SUPPORTED.forEach(function (code2) {
             els.optionButtons[code2].classList.toggle('nc-hidden', code2 === locale);

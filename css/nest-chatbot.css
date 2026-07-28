@@ -356,8 +356,8 @@
 }
 
 #nest-chatbot .nc-header-logo {
-    width: 50px;
-    height: 50px;
+    width: 44px;
+    height: 44px;
     flex-shrink: 0;
     border-radius: 50%;
     object-fit: contain;   /* same non-square mark as the launcher */
@@ -366,40 +366,91 @@
 #nest-chatbot .nc-header-text {
     display: flex;
     flex-direction: column;
+    gap: 3px;
     margin-left: 0.5rem;
 }
 
+#nest-chatbot .nc-name-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+/* The reset block sets font-family: inherit on h2 (a host's Poppins-at-72px-
+   line-height trap measured on nestshostels.com), so the heading font has to be
+   declared here — it will not arrive by inheritance from #nest-chatbot. */
 #nest-chatbot .nc-title {
+    font-family: var(--nc-font-heading);
     color: #fff;
     font-weight: 600;
-    font-size: 1.31rem;
+    font-size: 19px;
+    line-height: 1.2;
     letter-spacing: 0.02rem;
 }
 
-#nest-chatbot .nc-subtitle {
-    color: var(--nc-secondary);
-    font-size: 0.75rem;
+#nest-chatbot .nc-badge {
+    color: #fff;
+    background: var(--nc-secondary);
+    font-size: 9.5px;
     font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
 }
 
+/* Deep teal, never white body text on the light-teal #53CED1 header. */
+#nest-chatbot .nc-subline {
+    color: #0A5766;
+    font-size: 12px;
+}
+
+#nest-chatbot .nc-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+#nest-chatbot .nc-expand,
 #nest-chatbot .nc-close {
     border: none;
     color: #fff;
-    height: 35px;
-    width: 35px;
-    margin-right: -10px;
+    height: 30px;
+    width: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    border-radius: 50%;
-    background: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .22);
     transition: 0.2s ease;
 }
 
 #nest-chatbot .nc-close:hover {
     background: #ffffff81;
     color: var(--nc-danger);
+}
+
+/* Enabled at >=1024px in Task 8, alongside the click handler and the
+   .nc-expanded rules. Built and styled now so that task is CSS + JS wiring
+   only, no markup change. */
+#nest-chatbot .nc-expand {
+    display: none;
+}
+
+/* Both glyphs ship in the button now (Task 8 toggles which one is visible);
+   until expand/collapse state exists, only the arrows-out mark ever shows. */
+#nest-chatbot .nc-expand .nc-icon--shrink {
+    display: none;
+}
+
+/* The scoped reset zeroes outline-offset/box-shadow on buttons; these two sit
+   on the teal header bar, so their ring has to be white, not the launcher's
+   teal one. */
+#nest-chatbot .nc-expand:focus-visible,
+#nest-chatbot .nc-close:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
 }
 
 #nest-chatbot .nc-icon {
@@ -900,6 +951,14 @@
 
     #nest-chatbot .nc-teaser {
         max-width: calc(100vw - 88px);
+    }
+
+    /* A bigger touch target below the desktop breakpoint — the mock's chip
+       size (30px) is a mouse-precision target, not a thumb one. */
+    #nest-chatbot .nc-close {
+        height: 44px;
+        width: 44px;
+        border-radius: 12px;
     }
 }
 
