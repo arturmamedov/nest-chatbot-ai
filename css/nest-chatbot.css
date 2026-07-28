@@ -10,6 +10,59 @@
  * from its data-* attributes at boot.
  */
 
+/* ------------------------------------------------------------------- @font-face */
+
+/* Self-hosted latin subsets (SIL OFL). Prefixed family names so these can never
+   merge with a host page's own Poppins/Montserrat registration. Served from our
+   asset base: ../fonts/ resolves against this file's URL, i.e. the CDN.
+   NOTE: cross-origin font fetches are CORS-mode — the CDN must send
+   Access-Control-Allow-Origin on fonts/ or browsers keep the fallback stack.
+   @font-face cannot nest under #nest-chatbot (at-rules don't accept selector
+   scoping) — the nc- family-name prefix is the isolation mechanism instead. */
+@font-face {
+    font-family: "nc-Poppins";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("../fonts/nc-poppins-600.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: "nc-Montserrat";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("../fonts/nc-montserrat-400.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: "nc-Montserrat";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("../fonts/nc-montserrat-500.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: "nc-Montserrat";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("../fonts/nc-montserrat-600.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* ---------------------------------------------------------------- root + reset */
 
 #nest-chatbot {
@@ -32,6 +85,12 @@
     --nc-text: #12333C;
     --nc-shadow-fab: 0 10px 26px -8px rgba(13, 111, 130, 0.45);
 
+    /* typography — nc- families first (self-hosted, see @font-face above), then
+       the unprefixed name so a host that already serves it locally still gets
+       the right shape, then system fallbacks. */
+    --nc-font-heading: "nc-Poppins", Poppins, system-ui, sans-serif;
+    --nc-font-body: "nc-Montserrat", Montserrat, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
     /* motion */
     --nc-dur: 300ms;
     --nc-ease: cubic-bezier(0.4, 0, 0.2, 1);
@@ -43,7 +102,7 @@
     --nc-panel-w: 420px;
     --nc-body-h: 460px;
 
-    font-family: "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: var(--nc-font-body);
     font-size: 16px;
     line-height: normal;
     color: var(--nc-ink);
