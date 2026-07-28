@@ -105,6 +105,11 @@
     var initWaiters = null; // callbacks queued behind an in-flight init
     var sendQueue = [];     // turns queued behind an in-flight turn — one at a time
     var introPlayed = false;
+    // The guest has sent at least one turn. Latched, never cleared: the welcome
+    // block is a first-contact affordance, and a conversation that has started
+    // must never have it appear on top of it — including the race where the
+    // greeting is still typing when the first message goes out.
+    var guestTurned = false;
     var els = {};
 
     /* ============================================================= i18n ===== */
@@ -112,13 +117,16 @@
     var STRINGS = {
         en: {
             assistantRole: 'Nests Hostels AI assistant',
-            placeholder: 'Message...',
-            greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nHi, I\'m Germán, your AI assistant for everything about Nests Hostels!\nHow can I help you today?',
+            placeholder: 'Ask Germán anything…',
+            greeting: 'Hi! I\'m Germán, the Nests AI assistant. Your travel community in the Canaries & Ibiza — 14 hostels · 3 islands · 1 Nest Pass.',
             open: 'Open Germán, the Nests AI assistant', close: 'Minimise the chat',
             openUnread: 'Open Germán — 1 new message',
             teaser: 'Need a hand picking your Nest?', teaserDismiss: 'Dismiss',
             subline: 'Nests Hostels · replies in seconds', aiAssistant: 'AI assistant',
             expand: 'Expand the chat', shrink: 'Shrink the chat',
+            tryAsking: 'Try asking',
+            prompt1: 'Which hostel fits me best?', prompt2: 'How does the Nest Pass work?',
+            disclaimer: 'AI answers — double-check important',
             send: 'Send message', input: 'Type your message',
             language: 'Change language', languageOf: 'Switch to %s',
             book: 'Book now', open_link: 'Open',
@@ -130,13 +138,16 @@
         },
         es: {
             assistantRole: 'Asistente IA de Nests Hostels',
-            placeholder: 'Mensaje...',
-            greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\n¡Soy Germán, tu asistente IA para todo lo relacionado con Nests Hostels!\n¿En qué puedo ayudarte?',
+            placeholder: 'Pregunta lo que quieras a Germán…',
+            greeting: '¡Hola! Soy Germán, el asistente de IA de Nests. Tu comunidad viajera en Canarias e Ibiza — 14 hostels · 3 islas · 1 Nest Pass.',
             open: 'Abrir Germán, el asistente IA de Nests', close: 'Minimizar el chat',
             openUnread: 'Abrir Germán — 1 mensaje nuevo',
             teaser: '¿Te ayudo a elegir tu Nest?', teaserDismiss: 'Descartar',
             subline: 'Nests Hostels · responde en segundos', aiAssistant: 'Asistente IA',
             expand: 'Ampliar el chat', shrink: 'Reducir el chat',
+            tryAsking: 'Prueba a preguntar',
+            prompt1: '¿Qué hostel me encaja mejor?', prompt2: '¿Cómo funciona el Nest Pass?',
+            disclaimer: 'Respuestas de IA — verifica lo importante',
             send: 'Enviar mensaje', input: 'Escribe tu mensaje',
             language: 'Cambiar idioma', languageOf: 'Cambiar a %s',
             book: 'Reservar ahora', open_link: 'Abrir',
@@ -148,13 +159,16 @@
         },
         it: {
             assistantRole: 'Assistente IA di Nests Hostels',
-            placeholder: 'Messaggio...',
-            greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nSono Germán, il tuo assistente IA per tutto ciò che riguarda Nests Hostels!\nCome posso aiutarti?',
+            placeholder: 'Chiedi qualsiasi cosa a Germán…',
+            greeting: 'Ciao! Sono Germán, l\'assistente IA di Nests. La tua community di viaggio tra Canarie e Ibiza — 14 hostel · 3 isole · 1 Nest Pass.',
             open: 'Apri Germán, l\'assistente IA di Nests', close: 'Riduci la chat',
             openUnread: 'Apri Germán — 1 nuovo messaggio',
             teaser: 'Ti aiuto a scegliere il tuo Nest?', teaserDismiss: 'Chiudi',
             subline: 'Nests Hostels · risponde in pochi secondi', aiAssistant: 'Assistente IA',
             expand: 'Espandi la chat', shrink: 'Riduci la chat',
+            tryAsking: 'Prova a chiedere',
+            prompt1: 'Quale hostel fa per me?', prompt2: 'Come funziona il Nest Pass?',
+            disclaimer: 'Risposte IA — verifica ciò che è importante',
             send: 'Invia messaggio', input: 'Scrivi il tuo messaggio',
             language: 'Cambia lingua', languageOf: 'Passa a %s',
             book: 'Prenota ora', open_link: 'Apri',
@@ -166,13 +180,16 @@
         },
         de: {
             assistantRole: 'KI-Assistent von Nests Hostels',
-            placeholder: 'Nachricht...',
-            greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nIch bin Germán, dein KI-Assistent für alles rund um Nests Hostels!\nWie kann ich dir helfen?',
+            placeholder: 'Frag Germán einfach alles…',
+            greeting: 'Hi! Ich bin Germán, der KI-Assistent von Nests. Deine Reise-Community auf den Kanaren & Ibiza — 14 Hostels · 3 Inseln · 1 Nest Pass.',
             open: 'Germán öffnen, den KI-Assistenten von Nests', close: 'Chat minimieren',
             openUnread: 'Germán öffnen — 1 neue Nachricht',
             teaser: 'Soll ich dir helfen, dein Nest zu finden?', teaserDismiss: 'Schließen',
             subline: 'Nests Hostels · antwortet in Sekunden', aiAssistant: 'KI-Assistent',
             expand: 'Chat vergrößern', shrink: 'Chat verkleinern',
+            tryAsking: 'Frag zum Beispiel',
+            prompt1: 'Welches Hostel passt zu mir?', prompt2: 'Wie funktioniert der Nest Pass?',
+            disclaimer: 'KI-Antworten — Wichtiges bitte prüfen',
             send: 'Nachricht senden', input: 'Schreibe deine Nachricht',
             language: 'Sprache wechseln', languageOf: 'Zu %s wechseln',
             book: 'Jetzt buchen', open_link: 'Öffnen',
@@ -184,13 +201,16 @@
         },
         fr: {
             assistantRole: 'Assistant IA de Nests Hostels',
-            placeholder: 'Message...',
-            greeting: '¡Hola! Ciao, Hallo, Salut, Привiт... 👋\nJe suis Germán, ton assistant IA pour tout ce qui concerne Nests Hostels !\nComment puis-je t\'aider ?',
+            placeholder: 'Demandez tout à Germán…',
+            greeting: 'Salut ! Je suis Germán, l\'assistant IA de Nests. Ta communauté de voyage aux Canaries et à Ibiza — 14 hostels · 3 îles · 1 Nest Pass.',
             open: 'Ouvrir Germán, l\'assistant IA de Nests', close: 'Réduire le chat',
             openUnread: 'Ouvrir Germán — 1 nouveau message',
             teaser: 'Besoin d\'aide pour choisir ton Nest ?', teaserDismiss: 'Fermer',
             subline: 'Nests Hostels · répond en quelques secondes', aiAssistant: 'Assistant IA',
             expand: 'Agrandir le chat', shrink: 'Réduire le chat',
+            tryAsking: 'Essayez de demander',
+            prompt1: 'Quel hostel me correspond le mieux ?', prompt2: 'Comment fonctionne le Nest Pass ?',
+            disclaimer: 'Réponses IA — vérifiez l\'essentiel',
             send: 'Envoyer le message', input: 'Écris ton message',
             language: 'Changer de langue', languageOf: 'Passer en %s',
             book: 'Réserver', open_link: 'Ouvrir',
@@ -771,6 +791,11 @@
         controls.appendChild(form);
         footer.appendChild(controls);
 
+        // The AI disclosure sits under the composer, not in the header: it is
+        // about the answers, and this is the last thing read before sending one.
+        var disclaimer = el('div', 'nc-disclaimer', t('disclaimer'));
+        footer.appendChild(disclaimer);
+
         /* announcer — the widget's only live region.
            A SIBLING of the panel, never a child: a closed panel is opacity:0 and
            scale(0.2), and a live region inside hidden furniture is unreliable. It
@@ -794,7 +819,11 @@
             controls: controls, langToggle: langToggle, langOptions: langOptions,
             optionButtons: optionButtons, badge: badge, subline: subline, expand: expandBtn,
             unread: unread, teaser: teaser, teaserBody: teaserBody, teaserClose: teaserClose,
-            announcer: announcer
+            announcer: announcer, disclaimer: disclaimer,
+            // The welcome block is built later, by the intro, and removed for good
+            // on the first guest turn — declared here so every reader of els sees
+            // the whole surface in one place.
+            prompts: null, promptsLabel: null, promptButtons: null
         };
     }
 
@@ -1174,9 +1203,71 @@
 
             requestAnimationFrame(function () {
                 wrap.classList.add('nc-visible');
-                typeText(text, intro.greeting);
+                // The welcome block hangs off the typer's completion so it lands
+                // under a finished greeting, never beside a half-typed one.
+                // typeText fires `done` on both of its paths — a reduced-motion
+                // guest gets this callback synchronously, from inside the call
+                // below, which is why it reads only `wrap` and module state and
+                // nothing assigned after this line.
+                typeText(text, intro.greeting, function () {
+                    if (removed || guestTurned) { return; }
+                    showPrompts(wrap);
+                });
             });
         }, 900);
+    }
+
+    /* ------------------------------------------------------ the welcome block */
+    /*
+     * Two suggested openers under the greeting. They are PACK STRINGS, cached in
+     * the widget rather than fetched: the welcome state is the one moment the
+     * guest is watching a spinner, and it must not cost a second round trip.
+     */
+
+    var PROMPT_KEYS = ['prompt1', 'prompt2'];
+
+    /**
+     * Inserted after the greeting, never appended to .nc-body: the composer is
+     * live all through the intro, so appending would file the block behind an
+     * impatient guest's own bubble.
+     *
+     * Labels are resolved at CLICK time, not here. A guest who switches language
+     * between reading the pill and tapping it must send the sentence they can
+     * read — and setLocale() repaints the visible pills to match.
+     *
+     * Nothing here announces: this is interactive chrome reached by Tab, and the
+     * announcer exists for replies the eye may miss, not for buttons.
+     */
+    function showPrompts(after) {
+        var prompts = el('div', 'nc-prompts');
+        var label = el('span', 'nc-prompts-label', t('tryAsking'));
+        prompts.appendChild(label);
+
+        var buttons = [];
+        PROMPT_KEYS.forEach(function (key) {
+            var button = el('button', 'nc-prompt', t(key));
+            attrs(button, { type: 'button' });
+            button.addEventListener('click', function () { sendGuestText(t(key)); });
+            prompts.appendChild(button);
+            buttons.push(button);
+        });
+
+        after.parentNode.insertBefore(prompts, after.nextSibling);
+        els.prompts = prompts;
+        els.promptsLabel = label;
+        els.promptButtons = buttons;
+        scrollDown();
+    }
+
+    // Null-safe and idempotent: it runs on every guest turn, and only the first
+    // one has anything to remove.
+    function removePrompts() {
+        if (els.prompts && els.prompts.parentNode) {
+            els.prompts.parentNode.removeChild(els.prompts);
+        }
+        els.prompts = null;
+        els.promptsLabel = null;
+        els.promptButtons = null;
     }
 
     /* ============================================================= flow ===== */
@@ -1314,6 +1405,24 @@
         startConversation(cb);
     }
 
+    /**
+     * THE SEND SEAM. Everything that puts a guest turn on the wire goes through
+     * here — the composer, the suggested prompts, and any tap-to-send chip a
+     * reply carries — so "the guest sent something" means exactly one thing:
+     * the welcome block goes, the bubble lands, the turn is queued.
+     *
+     * Deliberately takes only the text: it is called straight from click
+     * handlers that have no form event and nothing to do with the composer, so
+     * it never touches els.input and never preventDefault()s anything.
+     */
+    function sendGuestText(text) {
+        if (busy || removed) { return; }
+        guestTurned = true;
+        removePrompts();
+        addBubble('guest', text);                     // textContent — a typed <img> stays text
+        ensureConversation(function () { sendMessage(text, false); });
+    }
+
     function submit(e) {
         if (e) { e.preventDefault(); }
         if (busy || removed) { return; }
@@ -1323,8 +1432,7 @@
 
         els.input.value = '';
         adjustInputHeight();
-        addBubble('guest', text);                     // textContent — a typed <img> stays text
-        ensureConversation(function () { sendMessage(text, false); });
+        sendGuestText(text);
     }
 
     function sendMessage(text, isRetry) {
@@ -1462,7 +1570,17 @@
 
     /* ------------------------------------------------------------- language */
 
+    // The open row squeezes the composer to make space for five flags, so it is a
+    // transient menu, not a mode: it times out on its own. The token is what stops
+    // an earlier timer collapsing a row the guest has since reopened — the timer
+    // follows the teardown contract (teardown() clears nothing), so its callback
+    // re-checks `removed` and its own token instead of trusting the state it was
+    // scheduled in.
+    var LANG_AUTO_CLOSE_MS = 4000;
+    var langOpenToken = 0;
+
     function closeLanguageMenu() {
+        langOpenToken += 1;   // any auto-collapse still in flight is now stale
         els.controls.classList.remove('nc-lang-open');
         els.langToggle.setAttribute('aria-expanded', 'false');
     }
@@ -1476,6 +1594,11 @@
             SUPPORTED.forEach(function (code) {
                 els.optionButtons[code].classList.toggle('nc-hidden', code === locale);
             });
+            var tok = ++langOpenToken;
+            setTimeout(function () {
+                if (removed || tok !== langOpenToken) { return; }
+                closeLanguageMenu();
+            }, LANG_AUTO_CLOSE_MS);
         }
     }
 
@@ -1501,6 +1624,16 @@
         els.teaserClose.setAttribute('aria-label', t('teaserDismiss'));
         els.badge.textContent = t('aiAssistant');
         els.subline.textContent = t('subline');
+        els.disclaimer.textContent = t('disclaimer');
+        // Only while the welcome block is still on screen — after the first turn
+        // there is nothing to repaint, and the click handlers read their label
+        // fresh anyway.
+        if (els.prompts) {
+            els.promptsLabel.textContent = t('tryAsking');
+            PROMPT_KEYS.forEach(function (key, i) {
+                els.promptButtons[i].textContent = t(key);
+            });
+        }
         els.panel.setAttribute('aria-label', 'Germán — ' + t('assistantRole'));
         // isExpanded() arrives in Task 8; until then the control only ever
         // offers to expand, never to shrink.
@@ -1522,6 +1655,11 @@
 
         els.input.addEventListener('input', adjustInputHeight);
         els.input.addEventListener('keydown', function (e) {
+            // Typing IS the guest telling us they are done with the language row:
+            // it is holding the composer at two thirds width while they write in
+            // it. Collapse on the first keystroke rather than making them wait
+            // out the 4s timer or aim at the flag again.
+            if (els.controls.classList.contains('nc-lang-open')) { closeLanguageMenu(); }
             // Enter sends on desktop; on touch it should insert a newline.
             if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) {
                 submit(e);
@@ -1554,7 +1692,12 @@
     }
 
     function onDocumentKeydown(e) {
-        if (e.key === 'Escape' && isOpen()) { close(); els.toggler.focus(); }
+        if (e.key !== 'Escape') { return; }
+        if (isOpen()) { close(); els.toggler.focus(); return; }
+        // Esc on the teaser means "not now", never "not ever": it hides the nudge
+        // for this moment and writes no flag. Dismissing it for good stays the ✕
+        // on the teaser itself — a deliberate act, not a reflex keystroke.
+        if (teaserVisible) { hideTeaser(); }
     }
 
     function boot() {
