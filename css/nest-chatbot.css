@@ -94,6 +94,10 @@
     /* The lift a property card sits on. The second layer is a hairline ring, not a
        border: a border would eat into the 190px the scroll step is measured from. */
     --nc-shadow-card: 0 6px 18px -8px rgba(13, 111, 130, 0.35), 0 0 0 1px var(--nc-border);
+    /* The one promo the mock ships style: "highlight" for (2C) — 135deg with
+       stops at 0/55/100. A design-system doc elsewhere in this project shows a
+       150deg variant; the mock wins, verbatim. */
+    --nc-focus-surface: linear-gradient(135deg, #53CED1 0%, #0D6F82 55%, #083344 100%);
 
     /* typography — nc- families first (self-hosted, see @font-face above), then
        the unprefixed name so a host that already serves it locally still gets
@@ -971,6 +975,97 @@
 #nest-chatbot .nc-card-book:focus-visible {
     outline: 2px solid var(--nc-secondary);
     outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------------- promo card */
+
+/* A tenant-authored upsell card (contract 1.5.0 `promo_card`). White and
+   bordered by default; an unrecognised `style` value falls through to this
+   same base rule rather than to anything unstyled. */
+#nest-chatbot .nc-promo {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-radius: 14px;
+    /* The image band bleeds to the top corners under this — without it the
+       photo paints square over the radius, same reason .nc-card sets it. */
+    overflow: hidden;
+    padding: 13px 14px;
+    background: var(--nc-surface-alt);
+    /* A ring, not a layout border: it paints outside the box the way
+       .nc-shadow-card's hairline does, so it never fights the image's
+       negative margins below. */
+    box-shadow: 0 0 0 1px var(--nc-border);
+}
+
+#nest-chatbot .nc-promo-image {
+    display: block;
+    /* Full-bleed top band: cancels the card's own padding on three sides so
+       the photo runs edge to edge, then the column gap resumes normal
+       spacing under it. Negative margins have to match the padding above
+       exactly, or a sliver of one or the other shows through. */
+    margin: -13px -14px 0;
+    width: calc(100% + 28px);
+    height: 88px;
+    object-fit: cover;
+}
+
+#nest-chatbot .nc-promo-title {
+    font-family: var(--nc-font-heading);
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--nc-text);
+}
+
+#nest-chatbot .nc-promo-body {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--nc-text-subtle);
+    text-wrap: pretty;
+}
+
+#nest-chatbot .nc-promo-cta {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 13px;
+    border-radius: 10px;
+    background: var(--nc-secondary);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+#nest-chatbot .nc-promo-cta:focus-visible {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: 2px;
+}
+
+/* mock 2C: the one promo that ships style: "highlight" trades the white card
+   for the brand gradient and inverts every surface painted on top of it. */
+#nest-chatbot .nc-promo--highlight {
+    background: var(--nc-focus-surface);
+    box-shadow: none;
+}
+
+#nest-chatbot .nc-promo--highlight .nc-promo-title {
+    color: #fff;
+}
+
+#nest-chatbot .nc-promo--highlight .nc-promo-body {
+    color: rgba(255, 255, 255, 0.82);
+}
+
+#nest-chatbot .nc-promo--highlight .nc-promo-cta {
+    background: #fff;
+    color: var(--nc-secondary);
+}
+
+#nest-chatbot .nc-promo--highlight .nc-promo-cta:focus-visible {
+    outline-color: #fff;
 }
 
 /* --------------------------------------------------------------- intro loader */

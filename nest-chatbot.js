@@ -1135,6 +1135,10 @@
                 renderQuickReplies(action);
                 return null;
 
+            case 'promo_card':
+                renderPromoCard(action);
+                return null;
+
             default:
                 log('ignoring unknown element type', action.type);
                 return row;
@@ -1577,6 +1581,61 @@
         var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         // Read per click, not at build: the OS preference can flip mid-session.
         track.scrollBy({ left: amount, behavior: reduced ? 'auto' : 'smooth' });
+    }
+
+    /* -------------------------------------------------------------- promo card */
+
+    /**
+     * A tenant-authored upsell card (contract 1.5.0 `promo_card`). `title`,
+     * `body` and `cta` are all wire-required — the CTA is the point of the
+     * card, so a payload missing any of the three renders nothing at all
+     * rather than a promo with a dead end, exactly the property card's rule
+     * for its booking url.
+     *
+     * `image` and `style` are optional-omitted: a missing/rejected image means
+     * no cover band, and an absent or unrecognised `style` simply falls
+     * through to the base bordered-white rule below — there is no branch that
+     * can throw on an unknown value.
+     *
+     * Closes any open CTA group (renderAction returns null for it), so the
+     * link_buttons a reply carries after the promo still group into their own
+     * wrapping row — the same contract renderPropertyCards follows.
+     */
+    function renderPromoCard(action) {
+        if (typeof action.title !== 'string' || !action.title ||
+            typeof action.body !== 'string' || !action.body) {
+            log('promo card dropped — missing title or body');
+            return;
+        }
+
+        var cta = action.cta || {};
+        var href = safeHttpUrl(cta.url);
+        if (typeof cta.label !== 'string' || !cta.label || !href) {
+            log('promo card dropped — no usable cta', action.title);
+            return;
+        }
+
+        var card = el('div', 'nc-promo' + (action.style === 'highlight' ? ' nc-promo--highlight' : ''));
+
+        var image = safeHttpUrl(action.image);
+        if (image) {
+            var img = el('img', 'nc-promo-image');
+            // alt="" on purpose: the image sits over the title/body that follow
+            // it, so announcing it too would be noise — same call as the
+            // property card's photo.
+            attrs(img, { src: image, alt: '', loading: 'lazy' });
+            card.appendChild(img);
+        }
+
+        card.appendChild(el('div', 'nc-promo-title', action.title));
+        card.appendChild(el('div', 'nc-promo-body', action.body));
+
+        var link = el('a', 'nc-promo-cta', cta.label);
+        attrs(link, { href: href, target: '_blank', rel: 'noopener noreferrer' });
+        card.appendChild(link);
+
+        els.body.appendChild(card);
+        scrollDown();
     }
 
     /* =========================================================== typing ===== */
