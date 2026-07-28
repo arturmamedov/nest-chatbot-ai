@@ -1455,16 +1455,47 @@
         // Measured at click time, never cached at build: the card widens inside an
         // expanded panel, and a step captured once would then scroll to the wrong
         // card for the rest of the conversation.
+        //
+        // firstChild is always a card — renderPropertyCards returns before it
+        // wires anything when no item survived, and nothing ever removes one — so
+        // there is deliberately no width fallback here. A literal would be a
+        // second copy of the card width that lives in CSS, and the two would
+        // disagree the moment a breakpoint changes it.
         function step() {
-            var first = track.firstChild;
-            var width = first ? first.offsetWidth : 0;
-            return (width || 190) + CARD_GAP;
+            return track.firstChild.offsetWidth + CARD_GAP;
+        }
+
+        /**
+         * Never strand keyboard focus on a node about to vanish — the same rule
+         * hideTeaser() states. `.nc-hidden` is display: none, and the browser
+         * answers that by resetting document.activeElement to <body>: the next Tab
+         * would restart from the top of the HOST page, outside the widget
+         * entirely. A guest holding Enter on "Scroll forward" hits this on the
+         * press that reaches the end.
+         */
+        function rescueFocus(vanishing, partner) {
+            if (!vanishing.contains(document.activeElement)) { return; }
+
+            // The partner arrow first: arriving at one end is exactly when the
+            // other direction becomes the only one left.
+            partner.focus();
+            if (!vanishing.contains(document.activeElement)) { return; }
+
+            // The partner was hidden too (a track short enough to need neither
+            // arrow), and focus() on a display: none node silently does nothing.
+            // Land on the card at this edge instead — one exists for as long as
+            // the carousel does.
+            var links = track.querySelectorAll('.nc-card-book');
+            if (links.length) {
+                links[vanishing === next ? links.length - 1 : 0].focus();
+            }
         }
 
         // The arrow AND its fade go together: the fade means "there is more this
         // way", so left up at the end of the travel it just bleaches the first
         // card's badge and the first letters of its title for no information.
-        function setEnd(pair, atEnd) {
+        function setEnd(pair, partner, atEnd) {
+            if (atEnd) { rescueFocus(pair[0], partner); }
             pair[0].classList.toggle('nc-hidden', atEnd);
             pair[1].classList.toggle('nc-hidden', atEnd);
         }
@@ -1472,8 +1503,8 @@
         function sync() {
             var max = track.scrollWidth - track.clientWidth;
             var atEnd = track.scrollLeft >= max - CAR_END_EPS;
-            setEnd(back, track.scrollLeft <= CAR_END_EPS);
-            setEnd(forward, atEnd);
+            setEnd(back, next, track.scrollLeft <= CAR_END_EPS);
+            setEnd(forward, prev, atEnd);
 
             var last = dots.childNodes.length - 1;
             // At the far end the LAST dot lights, whatever the division says. The
@@ -1507,6 +1538,13 @@
         // focus. THAT is the keyboard path through the strip — the arrows are a
         // pointer affordance, and a keyboard guest never has to reach them.
         wrap.addEventListener('keydown', function (event) {
+            // Alt+←/→ is Back/Forward on Windows and Linux, Cmd+←/→ on macOS.
+            // Claiming those would take the guest's browser navigation away for as
+            // long as their focus happens to sit on a card — Shift and Ctrl are in
+            // the list for the same reason, they belong to the host page's own
+            // shortcuts, never to us.
+            if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) { return; }
+
             var delta = event.key === 'ArrowRight' ? 1 : (event.key === 'ArrowLeft' ? -1 : 0);
             if (!delta) { return; }
 
@@ -1525,6 +1563,13 @@
             links[target].focus();
         });
 
+        // The arrows, fades and dots are recomputed from a scroll event, and
+        // nothing else moves them — but the panel's own width does, and changing
+        // it fires no scroll. Anything that resizes the panel has to re-run this,
+        // so the handle hangs off the node the way typeText() hangs its
+        // cancellation token off a bubble:
+        //     wrap.ncSync()   for every .nc-carousel in els.body
+        wrap.ncSync = sync;
         sync();
     }
 

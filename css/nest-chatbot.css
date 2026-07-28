@@ -758,6 +758,11 @@
     gap: 10px;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
+    /* This is the widget's first horizontal scroller, and it lands on pages we do
+       not control. Without containment an over-scroll at either end chains to the
+       ancestor scroller, and on iOS Safari / Android Chrome that is the page back
+       gesture — navigating the guest off the host page mid-conversation. */
+    overscroll-behavior-x: contain;
     /* No scrollbar under the cards: the dots are the position readout, and a
        second one 4px tall reads as a rendering artefact. */
     scrollbar-width: none;
