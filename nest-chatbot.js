@@ -29,7 +29,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.1.1';
+    var VERSION = '2.2.0';
 
     /* =========================================================== config ===== */
 
@@ -59,6 +59,8 @@
         position: data.position === 'left' ? 'left' : 'right',
         color: data.color || '',
         zIndex: data.zIndex || '',
+        offsetX: data.offsetX || '',
+        offsetY: data.offsetY || '',
         autoOpen: data.autoOpen === 'true',
         debug: data.debug === 'true'
     };
@@ -582,6 +584,11 @@
         root.setAttribute('data-position', cfg.position);
         if (cfg.color) { root.style.setProperty('--nc-secondary', cfg.color); }
         if (cfg.zIndex) { root.style.setProperty('--nc-z', cfg.zIndex); }
+        // Bare numbers only, read as px — enough to line the launcher up with a
+        // host's own floating furniture. A host wanting rem/vh/calc overrides
+        // --nc-edge-x / --nc-edge-y in CSS instead; this is the no-CSS path.
+        if (/^\d+$/.test(cfg.offsetX)) { root.style.setProperty('--nc-edge-x', cfg.offsetX + 'px'); }
+        if (/^\d+$/.test(cfg.offsetY)) { root.style.setProperty('--nc-edge-y', cfg.offsetY + 'px'); }
         root.style.setProperty('--nc-loader-logo', 'url("' + assetBase + 'img/logotipo-nests-tenerife.png")');
 
         /* launcher */

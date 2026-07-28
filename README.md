@@ -22,7 +22,10 @@ configured on the chatbot API, the embedding page's origin must be registered �
 [Origins](#origins) below.)
 
 It will not touch your page: all of its CSS is scoped to `#nest-chatbot`, it defines no global
-styles, and it never modifies your `<html>`, `<body>` or anything outside its own container.
+styles, and it never modifies your `<html>`, `<body>` or anything outside its own container. It
+also declares its own typography and form styling outright, so a CSS framework's `h2` or
+`textarea:focus` reset — Tailwind's preflight, `@tailwindcss/forms`, Bootstrap — does not reach
+inside it either.
 
 ## Options
 
@@ -33,6 +36,8 @@ styles, and it never modifies your `<html>`, `<body>` or anything outside its ow
 | `data-property` | — | Which property the conversation is about. A matched name seeds the conversation's working memory, so answers are scoped to that property from the first message. Unknown names are not an error. |
 | `data-locale` | `auto` | `auto` picks from the visitor's browser languages. Or force one of `en` `es` `it` `de` `fr`. |
 | `data-position` | `right` | `right` or `left`. |
+| `data-offset-x` | `35` | Distance in px from the side of the window. Bare number, no unit. |
+| `data-offset-y` | `30` | Distance in px from the bottom. The panel follows the launcher. |
 | `data-color` | `#0D6F82` | Accent colour for the launcher, buttons and focus ring. |
 | `data-z-index` | `2147483000` | Raise or lower it if it fights with your own overlays. |
 | `data-auto-open` | `false` | Open the panel on load instead of waiting for a click. |
@@ -40,6 +45,24 @@ styles, and it never modifies your `<html>`, `<body>` or anything outside its ow
 | `data-mock` | `false` | Serve replies from the built-in local fixtures instead of the API — the dev harness the demo page uses. Never on a production page. |
 
 The key must be **public**-scoped — never embed a `full`-scope key or any provider key.
+
+### Positioning
+
+If the launcher lands on top of your own floating furniture — a cookie bar, a back-to-top arrow,
+a toast — nudge it with `data-offset-x` / `data-offset-y`. Both take a bare number of pixels, and
+the panel is positioned from the same values, so it stays 10px above the launcher wherever you
+put it. Below 520px the widget tightens to 20px on both axes by itself; setting either attribute
+overrides that at every width.
+
+For anything the two attributes cannot express — `rem`, `vh`, `calc()`, a breakpoint of your own —
+override the custom properties instead:
+
+```css
+#nest-chatbot { --nc-edge-x: 2rem; --nc-edge-y: calc(env(safe-area-inset-bottom) + 24px); }
+```
+
+The widget injects its stylesheet into `<head>`, so put that rule in a sheet or `<style>` that
+loads after it — or use `html #nest-chatbot { … }` and stop caring about order.
 
 ### Origins
 
@@ -57,7 +80,7 @@ NestChatbot.toggle();
 NestChatbot.setLocale('es');
 NestChatbot.destroy();
 NestChatbot.locale;    // 'es'
-NestChatbot.version;   // '2.1.1'
+NestChatbot.version;   // '2.2.0'
 ```
 
 ## What the visitor gets

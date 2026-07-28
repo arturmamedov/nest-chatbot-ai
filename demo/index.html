@@ -58,6 +58,23 @@
         .hidden { display: block; color: #7a7a7a; font-size: 0.8rem; }
 
         .spaced { margin: 40px 0; padding: 24px; border: 1px dashed #c9c2b0; }
+
+        /* --- the reset traps -------------------------------------------------
+           The collision traps above catch an unscoped selector. These catch the
+           opposite failure: a host rule winning because the widget's stylesheet
+           is SILENT on that property. A bare `h2` or `textarea` rule matches the
+           widget's own elements directly, and a direct match beats inheritance
+           from #nest-chatbot no matter how specific that ancestor selector is.
+
+           These reproduce what nestshostels.com's Tailwind theme actually does
+           (@tailwindcss/forms paints its focus ring through box-shadow, not
+           outline). They are why this page's own headings look loosely spaced —
+           that is the trap working, not a bug. If the widget's header title ever
+           turns serif, or a blue ring appears inside the composer, or a CTA pill
+           picks up an underline, the widget has stopped declaring something. */
+        h2 { font-family: Georgia, serif; line-height: 4.5rem; letter-spacing: 0.32px; }
+        textarea:focus { box-shadow: 0 0 0 1px #2563eb; outline: 2px solid transparent; }
+        a { text-decoration: underline; color: #b1560f; }
     </style>
 </head>
 

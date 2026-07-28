@@ -76,7 +76,17 @@ those class names — if the demo page's appearance changes when the widget load
 is broken.
 
 Theme through the custom properties on `#nest-chatbot` (`--nc-primary`, `--nc-secondary`,
-`--nc-z`, …), never by editing rules.
+`--nc-z`, `--nc-edge-x`, `--nc-edge-y`, …), never by editing rules.
+
+**Scoping keeps us out of their page; it does not keep them out of ours.** Host CSS wins
+wherever this stylesheet is *silent*: a theme's bare `h2` or `textarea` rule matches our own
+element directly, and a direct match beats inheritance from `#nest-chatbot` however specific
+that ancestor selector is. So anything a framework reset touches has to be **declared** on
+our side — see the reset block at the top of `css/nest-chatbot.css`. The cure is never
+`!important` and never more specificity; ours already outranks theirs on every property it
+states. `demo/index.html` carries the counterpart traps (a global `h2`, `textarea:focus` and
+`a` rule copied from a real customer's Tailwind theme), so a regression shows up on the demo
+page rather than in production.
 
 ## Architecture
 
@@ -180,6 +190,8 @@ Set on the `<script>` tag. `document.currentScript.dataset` reads them at boot.
 | `data-property` | — | Property-name hint, sent at init. A matched name seeds the conversation's working memory, so answers are scoped to that property from turn 1. Unknown names are not an error. |
 | `data-locale` | `auto` | `auto` matches `navigator.languages` against `en es it de fr`. |
 | `data-position` | `right` | `right` \| `left` |
+| `data-offset-x` | `35` | Bare px number → `--nc-edge-x`. Non-numeric values are ignored. |
+| `data-offset-y` | `30` | Bare px number → `--nc-edge-y`. The panel derives its `bottom` from it. |
 | `data-color` | `#0D6F82` | Sets `--nc-secondary`. (Defaults live as CSS custom properties in `css/nest-chatbot.css`; the JS default `''` means "don't override".) |
 | `data-z-index` | `2147483000` | For hosts with their own stacking conflicts. Same CSS-default mechanism as `data-color`. |
 | `data-auto-open` | `false` | |

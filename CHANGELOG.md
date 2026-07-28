@@ -5,6 +5,39 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.2.0 — 2026-07-28
+
+Adds config surface (`data-offset-x` / `data-offset-y`), hence minor. No transport or contract
+change; `BUILT_AGAINST` stays 1.4.1. Both fixes below were measured on the live widget at
+nestshostels.com, which was running 2.1.0.
+
+- **Host CSS resets no longer reach inside the widget.** Scoping every selector under
+  `#nest-chatbot` keeps us out of a customer's page, but it does nothing about the reverse: host
+  CSS wins wherever this stylesheet is *silent*. A theme's bare `h2` or `textarea` rule matches
+  our own element directly, and a direct match beats inheritance from `#nest-chatbot` however
+  specific that ancestor selector is. Two things were getting through on nestshostels.com's
+  Tailwind theme: `@tailwindcss/forms` painted a `#2563eb` focus ring *inside* the composer pill
+  (through `box-shadow`, which is why our own `:focus-within` outline survived alongside it — the
+  guest saw a double ring), and the theme's `h2` rules put the header title in Poppins at a 72px
+  line-height, making the panel header 114px instead of 77px. The old `#nest-chatbot button`
+  font reset is now a block declaring `font-family`, `line-height`, `letter-spacing`,
+  `box-shadow` and `outline-offset` across `h2, a, form, button, textarea` — the widget's whole
+  inventory of tags a framework reset targets. No `!important` and no added specificity: ours
+  already outranks theirs on every property it states, so the fix is only to state them. Every
+  value matches what the widget already computed on a clean page, so nothing changes locally.
+  `demo/index.html` gains the counterpart traps — a global `h2`, `textarea:focus` and `a` rule
+  copied from that theme — alongside the `.hidden` / `.message` / `.chat-header` collision traps
+  it already had. They are why the demo page's own headings now look loosely spaced.
+- **The launcher offset is configurable.** `data-offset-x` / `data-offset-y` take a bare px
+  number and set `--nc-edge-x` / `--nc-edge-y` inline, the same shape as `data-color` and
+  `data-z-index`; a non-numeric value is ignored. The two custom properties already existed but
+  could not actually be moved: `.nc-panel` hardcoded `bottom: 90px` so the panel stayed put when
+  the launcher moved, and the `max-width: 520px` block hardcoded `right: 20px; bottom: 20px` on
+  the launcher, so an override died silently on phones. The panel now derives
+  `calc(var(--nc-edge-y) + 60px)` and the responsive block sets the two vars instead — one knob
+  moves launcher and panel together, at every width. Because the attributes write an inline
+  style, they also outrank the mobile block and hold across breakpoints.
+
 ## 2.1.1 — 2026-07-28
 
 Presentation only — no transport, contract or API surface change. `BUILT_AGAINST` stays 1.4.1.

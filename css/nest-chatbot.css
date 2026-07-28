@@ -51,8 +51,28 @@
     border: 0;
 }
 
-#nest-chatbot button {
+/* Host CSS reaches in only where this file is SILENT. A theme's bare `h2` or
+   `textarea` rule matches our element directly, and a direct match beats
+   inheritance from #nest-chatbot however specific that ancestor selector is —
+   so these have to be declared here, not left to cascade down from the root.
+   Measured on nestshostels.com (Tailwind preflight + @tailwindcss/forms): a
+   #2563eb ring painted through box-shadow inside the composer, and Poppins at a
+   72px line-height on the header title, which made the header 37px taller than
+   designed. Add a tag here if build() ever creates one. */
+#nest-chatbot h2,
+#nest-chatbot a,
+#nest-chatbot form,
+#nest-chatbot button,
+#nest-chatbot textarea {
     font-family: inherit;
+    line-height: normal;
+    letter-spacing: normal;
+    box-shadow: none;
+    outline-offset: 0;
+}
+
+#nest-chatbot button,
+#nest-chatbot textarea {
     font-size: inherit;
 }
 
@@ -116,7 +136,9 @@
 #nest-chatbot .nc-panel {
     position: fixed;
     right: var(--nc-edge-x);
-    bottom: 90px;
+    /* Derived, not hardcoded: 50px launcher + a 10px gap above it. A host that
+       nudges --nc-edge-y moves the launcher and the panel together. */
+    bottom: calc(var(--nc-edge-y) + 60px);
     z-index: var(--nc-z);
     width: var(--nc-panel-w);
     max-width: calc(100vw - 40px);
@@ -695,14 +717,13 @@
 /* ------------------------------------------------------------------- responsive */
 
 @media (max-width: 520px) {
-    #nest-chatbot .nc-toggler {
-        right: 20px;
-        bottom: 20px;
-    }
-
-    #nest-chatbot[data-position="left"] .nc-toggler {
-        right: auto;
-        left: 20px;
+    /* Tighter edges on a phone, expressed through the vars rather than by
+       overriding right/bottom — otherwise a host's --nc-edge-* override would
+       silently stop applying below this breakpoint. data-offset-* writes an
+       inline style on the root, so it outranks this and holds at every width. */
+    #nest-chatbot {
+        --nc-edge-x: 20px;
+        --nc-edge-y: 20px;
     }
 
     #nest-chatbot .nc-panel {
