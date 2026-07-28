@@ -83,6 +83,10 @@
     --nc-accent: #EA580C;
     --nc-border: #E6EDEE;
     --nc-text: #12333C;
+    /* The recessed tint the bot bubble and the teaser's dismiss chip sit on. NOT a
+       replacement for --nc-surface (#ececec): the footer strip and the shipped
+       pills read against that grey and stay on it. */
+    --nc-surface-sunken: #F1F6F7;
     --nc-shadow-fab: 0 10px 26px -8px rgba(13, 111, 130, 0.45);
 
     /* typography — nc- families first (self-hosted, see @font-face above), then
@@ -289,7 +293,7 @@
     border: none;
     cursor: pointer;
     border-radius: 50%;
-    background: #F1F6F7;
+    background: var(--nc-surface-sunken);
     color: #7b939a;
     font-size: 11px;
     display: flex;
@@ -479,13 +483,31 @@
 
 #nest-chatbot .nc-message {
     display: flex;
-    gap: 11px;
+    gap: 9px;
     align-items: center;
 }
 
+/* Every message rises into place — except the greeting, which runs its own
+   opacity/height/transform transition on .nc-visible; two enter effects on one
+   node fight each other, and the greeting's is the one the intro times against. */
+#nest-chatbot .nc-message:not(.nc-greeting) {
+    animation: nc-msg-in 240ms var(--nc-ease);
+}
+
+@keyframes nc-msg-in {
+    from { opacity: 0; transform: translateY(6px); }
+}
+
+/* Consecutive bot messages drop the avatar (see followsBotMessage) — the indent
+   is what keeps their bubbles on the same left edge as the one that has it:
+   32px avatar + the 9px gap. */
+#nest-chatbot .nc-message--follow {
+    margin-left: 41px;
+}
+
 #nest-chatbot .nc-avatar {
-    width: 45px;
-    height: 45px;
+    width: 32px;
+    height: 32px;
     flex-shrink: 0;
     margin-bottom: 2px;
     align-self: flex-end;
@@ -493,7 +515,7 @@
     /* The mark is a transparent wing, so the disc has to come from here: a faint tint
        of the brand colour is what makes it read as an avatar on the white body.
        color-mix keeps it following a host's --nc-primary instead of hardcoding teal. */
-    padding: 6px;
+    padding: 5px;
     background: #eafbfb;
     background: color-mix(in srgb, var(--nc-primary) 14%, #fff);
     object-fit: contain;
@@ -501,18 +523,23 @@
 
 #nest-chatbot .nc-text {
     padding: 12px 16px;
-    max-width: 75%;
-    font-size: 0.95rem;
-    line-height: 1.4;
+    max-width: 82%;
+    font-size: 14px;
+    line-height: 1.5;
     /* pre-wrap lets replies keep their newlines without any markup, which is what
        makes the textContent-only rule (never innerHTML) cost us nothing. */
     white-space: pre-wrap;
     overflow-wrap: break-word;
+    /* Server replies are prose of unpredictable length; pretty is what keeps a
+       two-word orphan off the last line. Ignored where unsupported. */
+    text-wrap: pretty;
 }
 
 #nest-chatbot .nc-message--bot .nc-text {
-    background: var(--nc-surface);
-    border-radius: 15px 15px 15px 2px;
+    padding: 12px 15px;
+    color: var(--nc-text);
+    background: var(--nc-surface-sunken);
+    border-radius: 16px 16px 16px 4px;
 }
 
 #nest-chatbot .nc-message--bot.nc-thinking .nc-text {
@@ -527,7 +554,7 @@
 #nest-chatbot .nc-message--guest .nc-text {
     color: #fff;
     background: var(--nc-secondary);
-    border-radius: 15px 15px 2px 15px;
+    border-radius: 16px 16px 4px 16px;
 }
 
 /* thinking dots */
@@ -1005,8 +1032,12 @@
         transition-duration: 0.01ms;
     }
 
+    /* The message enter animation is repeated with its :not() intact on purpose:
+       a media query adds no specificity, so a plain .nc-message here would lose
+       to the (id + two class) selector above and keep animating. */
     #nest-chatbot .nc-progress.nc-pulse,
     #nest-chatbot .nc-dot,
+    #nest-chatbot .nc-message:not(.nc-greeting),
     #nest-chatbot .nc-text.nc-typing::after {
         animation: none;
     }

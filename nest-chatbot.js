@@ -609,7 +609,7 @@
     function avatarNode() {
         var avatar = el('img', 'nc-avatar');
         attrs(avatar, {
-            src: assetBase + 'img/logotipo-nests-tenerife.png', alt: '', width: '45', height: '45'
+            src: assetBase + 'img/logotipo-nests-tenerife.png', alt: '', width: '32', height: '32'
         });
         return avatar;
     }
@@ -711,7 +711,11 @@
 
         /* body */
         var body = el('div', 'nc-body');
-        attrs(body, { role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions text' });
+        // `additions` WITHOUT `text`: the typer streams character by character into a
+        // Text node, and `text` makes some screen readers re-announce the growing
+        // string on every keystroke. Dropping it leaves node additions as the only
+        // trigger — see typeText(), which adds exactly one sr-only node per reply.
+        attrs(body, { role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions' });
 
         var loader = el('div', 'nc-loader');
         var progress = svgNode(
@@ -789,9 +793,31 @@
         if (els.body) { els.body.scrollTop = els.body.scrollHeight; }
     }
 
+    /**
+     * True when the bot message about to be appended lands directly on another
+     * bot message. One avatar per burst reads as one speaker; repeating it down
+     * a run of replies just adds noise (mock 2B).
+     *
+     * Two deliberate exclusions:
+     *  - `nc-thinking` never counts. It is removed from the DOM before the reply
+     *    bubble is added, so counting it would strip the avatar off the first
+     *    reply of every turn.
+     *  - renderActions() appends its rows to els.body as siblings, so a reply
+     *    that shipped CTAs is followed by a row, not a message — the next reply
+     *    correctly gets its avatar back. That is the intended reading, not a bug.
+     */
+    function followsBotMessage() {
+        var last = els.body.lastElementChild;
+        if (!last || !last.classList) { return false; }
+        return last.classList.contains('nc-message--bot') && !last.classList.contains('nc-thinking');
+    }
+
     function addBubble(role, text) {
-        var wrap = el('div', 'nc-message nc-message--' + (role === 'guest' ? 'guest' : 'bot'));
-        if (role !== 'guest') {
+        var isBot = role !== 'guest';
+        var follow = isBot && followsBotMessage();
+        var wrap = el('div', 'nc-message nc-message--' + (isBot ? 'bot' : 'guest') +
+            (follow ? ' nc-message--follow' : ''));
+        if (isBot && !follow) {
             wrap.appendChild(avatarNode());
         }
         var textNode = el('div', 'nc-text', text || '');   // textContent — never innerHTML
@@ -802,15 +828,15 @@
     }
 
     function showThinking() {
-        var wrap = el('div', 'nc-message nc-message--bot nc-thinking');
-        var avatar = avatarNode();
+        var follow = followsBotMessage();
+        var wrap = el('div', 'nc-message nc-message--bot nc-thinking' + (follow ? ' nc-message--follow' : ''));
         var text = el('div', 'nc-text');
         var dots = el('div', 'nc-dots');
         dots.appendChild(el('div', 'nc-dot'));
         dots.appendChild(el('div', 'nc-dot'));
         dots.appendChild(el('div', 'nc-dot'));
         text.appendChild(dots);
-        wrap.appendChild(avatar);
+        if (!follow) { wrap.appendChild(avatarNode()); }
         wrap.appendChild(text);
         els.body.appendChild(wrap);
         scrollDown();
@@ -965,12 +991,49 @@
      * (the async poll replacing an interim reply) supersedes the run in flight,
      * while a bubble that is still typing elsewhere finishes undisturbed. A single
      * shared token truncated the greeting the moment the guest sent a message.
+     *
+     * Screen readers hear the reply ONCE, whole, the moment typing starts — never
+     * the stream. Three pieces make that work together and only together: .nc-body
+     * is aria-relevant="additions" (build()), the streamed node is aria-hidden, and
+     * the full text is added as one sr-only sibling. Bubbles that never stream
+     * (guest turns, error/retry/timeout) keep announcing through their own node
+     * addition, so addBubble() needs none of this.
      */
     function typeText(node, text, done) {
         var token = (node.ncTypeToken || 0) + 1;
         node.ncTypeToken = token;
 
-        var chars = Array.from(String(text == null ? '' : text));
+        var full = String(text == null ? '' : text);
+
+        node.setAttribute('aria-hidden', 'true');
+        var wrap = node.parentNode;
+        if (wrap) {
+            // Replace, never stack: the poll re-types the same node, and two
+            // sr-only siblings would leave the interim text announced alongside
+            // the final one and readable by a screen-reader's browse mode.
+            var stale = wrap.querySelector('.nc-sr-only');
+            if (stale && stale.parentNode) { stale.parentNode.removeChild(stale); }
+            wrap.appendChild(el('span', 'nc-sr-only', full));
+        }
+
+        // A guest who asked the OS for less motion gets the reply at once. The
+        // return sits above the nc-typing class on purpose: the caret is a solid
+        // block that only its animation reads as a caret, and the reduced-motion
+        // rule stops that animation — the class on a node that never streams
+        // would park a rectangle after the text forever. Removing it as well
+        // covers the poll re-typing a bubble whose first pass was mid-stream when
+        // the preference flipped. `done` still fires: the welcome block hangs off
+        // it, and a reduced-motion guest must not lose it.
+        var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduced) {
+            node.classList.remove('nc-typing');
+            node.textContent = full;
+            scrollDown();
+            if (done) { done(); }
+            return;
+        }
+
+        var chars = Array.from(full);
         var textNode = document.createTextNode('');
 
         node.textContent = '';
