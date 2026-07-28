@@ -598,8 +598,10 @@
     padding: 0;
     overflow: hidden;
     flex-shrink: 0;
-    box-shadow: 0 0 8px rgba(0, 0, 0, 0.06);
-    outline: 1px solid var(--nc-line);
+    /* The hairline is the flag's only edge against the white footer (it/fr have
+       white stripes). A ring shadow rather than an outline: it always follows the
+       border-radius, and it leaves `outline` free for the keyboard focus ring. */
+    box-shadow: 0 0 0 1px var(--nc-line), 0 0 8px rgba(0, 0, 0, 0.06);
     transition: all 0.2s ease;
     position: relative;
     z-index: 2;
@@ -612,11 +614,14 @@
     transform: scale(1.15);
 }
 
+/* The full-bleed crop comes from preserveAspectRatio="xMidYMid slice" in the markup,
+   not from object-fit — that does nothing on an inline <svg>. The radius here is
+   belt-and-braces for browsers that fail to clip an SVG child to the button's. */
 #nest-chatbot .nc-flag {
     width: 100%;
     height: 100%;
     display: block;
-    object-fit: cover;
+    border-radius: 50%;
 }
 
 #nest-chatbot .nc-lang-options {

@@ -505,17 +505,22 @@
         send: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon" viewBox="0 0 512 512" aria-hidden="true"><path d="M498.1 5.6c10.1 7 15.4 19.1 13.5 31.2l-64 416c-1.5 9.7-7.4 18.2-16 23s-18.9 5.4-28 1.6L284 427.7l-68.5 74.1c-8.9 9.7-22.9 12.9-35.2 8.1S160 493.2 160 480v-83.6c0-4 1.5-7.8 4.2-10.8L331.8 202.8c5.8-6.3 5.6-16-.4-22s-15.7-6.4-22-.7L106 360.8 17.7 316.6C7.1 311.3.2 300.7 0 288.9s6.2-22.6 16.6-28.3l448-243.4c10.8-5.9 24-5 33.9 2.1z"/></svg>'
     };
 
-    // Simplified national flags. Rendered into a 35px circle with object-fit:cover,
-    // so the aspect ratio is cropped from the centre — no fine detail is needed.
+    // Simplified national flags, painted full-bleed into the 35px circle: `slice`
+    // scales each one to cover its square button and crops the overflow from the
+    // centre, so no fine detail is needed. It has to be the SVG attribute and NOT
+    // object-fit — that property only applies to replaced elements, and an inline
+    // <svg> is not one, so object-fit:cover here silently does nothing and the flag
+    // letterboxes instead.
     // The GB clip-path ids are uniquified per instance so two Union Jacks on the
     // same page cannot cross-reference each other's defs.
     var flagUid = 0;
+    var FLAG_FIT = ' preserveAspectRatio="xMidYMid slice" class="nc-flag">';
 
     function flagMarkup(code) {
         var id = 'nc-uk-' + (++flagUid);
         switch (code) {
             case 'en':
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 30" class="nc-flag">' +
+                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 30"' + FLAG_FIT +
                     '<clipPath id="' + id + 'a"><path d="M0,0 v30 h60 v-30 z"/></clipPath>' +
                     '<clipPath id="' + id + 'b"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath>' +
                     '<g clip-path="url(#' + id + 'a)">' +
@@ -526,26 +531,26 @@
                     '<path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/>' +
                     '</g></svg>';
             case 'es':
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2" class="nc-flag">' +
+                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2"' + FLAG_FIT +
                     '<rect width="3" height="2" fill="#AA151B"/>' +
                     '<rect width="3" height="1" y="0.5" fill="#F1BF00"/></svg>';
             case 'it':
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2" class="nc-flag">' +
+                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2"' + FLAG_FIT +
                     '<rect width="1" height="2" x="0" fill="#008C45"/>' +
                     '<rect width="1" height="2" x="1" fill="#F4F5F0"/>' +
                     '<rect width="1" height="2" x="2" fill="#CD212A"/></svg>';
             case 'de':
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5 3" class="nc-flag">' +
+                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5 3"' + FLAG_FIT +
                     '<rect width="5" height="1" y="0" fill="#000"/>' +
                     '<rect width="5" height="1" y="1" fill="#D00"/>' +
                     '<rect width="5" height="1" y="2" fill="#FFCE00"/></svg>';
             case 'fr':
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2" class="nc-flag">' +
+                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2"' + FLAG_FIT +
                     '<rect width="1" height="2" x="0" fill="#002395"/>' +
                     '<rect width="1" height="2" x="1" fill="#fff"/>' +
                     '<rect width="1" height="2" x="2" fill="#ED2939"/></svg>';
         }
-        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2" class="nc-flag"></svg>';
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2"' + FLAG_FIT + '</svg>';
     }
 
     function flagNode(code) { return svgNode(flagMarkup(code)); }
