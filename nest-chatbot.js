@@ -216,7 +216,7 @@
     }
 
     function clearStore() {
-        try { window.localStorage.removeItem(STORE_KEY); } catch (e) {}
+        try { window.localStorage.removeItem(STORE_KEY); } catch (e) { }
     }
 
     /* ============================================================== api ===== */
@@ -555,6 +555,20 @@
 
     function flagNode(code) { return svgNode(flagMarkup(code)); }
 
+    /**
+     * The bot's avatar, in one place because three call sites need it (a reply, the
+     * thinking dots, the intro greeting). Same mark as the launcher and the header —
+     * the teal variant, which is the one that reads on the white message body.
+     * Decorative: the bubble's text carries the meaning, so alt stays empty.
+     */
+    function avatarNode() {
+        var avatar = el('img', 'nc-avatar');
+        attrs(avatar, {
+            src: assetBase + 'img/logotipo-nests-tenerife.png', alt: '', width: '45', height: '45'
+        });
+        return avatar;
+    }
+
     function injectStyles() {
         var link = document.createElement('link');
         link.rel = 'stylesheet';
@@ -573,9 +587,11 @@
         /* launcher */
         var toggler = el('button', 'nc-toggler');
         attrs(toggler, { type: 'button', 'aria-label': t('open'), 'aria-expanded': 'false' });
+        // The same mark as the header, white variant: launcher, header and avatar are
+        // one logo in two colours rather than three different pictures.
         var togglerIcon = el('img', 'nc-toggler-icon');
         attrs(togglerIcon, {
-            src: assetBase + 'img/nest-chatbot_white.png', alt: '', width: '33', height: '33'
+            src: assetBase + 'img/avatar-header.png', alt: '', width: '31', height: '33'
         });
         toggler.appendChild(togglerIcon);
 
@@ -587,7 +603,7 @@
         var header = el('div', 'nc-header');
         var headerInfo = el('div', 'nc-header-info');
         var headerLogo = el('img', 'nc-header-logo');
-        attrs(headerLogo, { src: assetBase + 'img/avatar-header.png', alt: '', width: '55', height: '55' });
+        attrs(headerLogo, { src: assetBase + 'img/germanavatar.png', alt: '', width: '50', height: '50' });
         var headerText = el('div', 'nc-header-text');
         headerText.appendChild(el('h2', 'nc-title', 'Germán'));
         var subtitle = el('span', 'nc-subtitle', t('subtitle'));
@@ -683,9 +699,7 @@
     function addBubble(role, text) {
         var wrap = el('div', 'nc-message nc-message--' + (role === 'guest' ? 'guest' : 'bot'));
         if (role !== 'guest') {
-            var avatar = el('img', 'nc-avatar');
-            attrs(avatar, { src: assetBase + 'img/germanavatar.png', alt: '', width: '45', height: '45' });
-            wrap.appendChild(avatar);
+            wrap.appendChild(avatarNode());
         }
         var textNode = el('div', 'nc-text', text || '');   // textContent — never innerHTML
         wrap.appendChild(textNode);
@@ -696,8 +710,7 @@
 
     function showThinking() {
         var wrap = el('div', 'nc-message nc-message--bot nc-thinking');
-        var avatar = el('img', 'nc-avatar');
-        attrs(avatar, { src: assetBase + 'img/germanavatar.png', alt: '', width: '45', height: '45' });
+        var avatar = avatarNode();
         var text = el('div', 'nc-text');
         var dots = el('div', 'nc-dots');
         dots.appendChild(el('div', 'nc-dot'));
@@ -915,8 +928,7 @@
             els.loader.classList.add('nc-hidden');
 
             var wrap = el('div', 'nc-message nc-message--bot nc-greeting');
-            var avatar = el('img', 'nc-avatar');
-            attrs(avatar, { src: assetBase + 'img/germanavatar.png', alt: '', width: '45', height: '45' });
+            var avatar = avatarNode();
             var text = el('div', 'nc-text');
             wrap.appendChild(avatar);
             wrap.appendChild(text);

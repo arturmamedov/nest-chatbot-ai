@@ -98,13 +98,17 @@
     left: var(--nc-edge-x);
 }
 
+/* A shrink rather than a spin: the launcher carries the brand mark now, and a logo
+   should not rotate. */
 #nest-chatbot.nc-open .nc-toggler {
-    transform: rotate(90deg);
+    transform: scale(0.92);
 }
 
+/* The mark is 300x325, not square — contain keeps the wing from stretching. */
 #nest-chatbot .nc-toggler-icon {
     width: 33px;
     height: 33px;
+    object-fit: contain;
 }
 
 /* ---------------------------------------------------------------------- panel */
@@ -168,6 +172,7 @@
     height: 50px;
     flex-shrink: 0;
     border-radius: 50%;
+    object-fit: contain;   /* same non-square mark as the launcher */
 }
 
 #nest-chatbot .nc-header-text {
@@ -246,6 +251,13 @@
     margin-bottom: 2px;
     align-self: flex-end;
     border-radius: 50%;
+    /* The mark is a transparent wing, so the disc has to come from here: a faint tint
+       of the brand colour is what makes it read as an avatar on the white body.
+       color-mix keeps it following a host's --nc-primary instead of hardcoding teal. */
+    padding: 6px;
+    background: #eafbfb;
+    background: color-mix(in srgb, var(--nc-primary) 14%, #fff);
+    object-fit: contain;
 }
 
 #nest-chatbot .nc-text {
