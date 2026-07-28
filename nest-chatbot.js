@@ -127,6 +127,8 @@
             tryAsking: 'Try asking',
             prompt1: 'Which hostel fits me best?', prompt2: 'How does the Nest Pass work?',
             disclaimer: 'AI answers — double-check important',
+            priceFrom: 'from %s',
+            carousel: 'carousel', carouselPrev: 'Scroll back', carouselNext: 'Scroll forward',
             send: 'Send message', input: 'Type your message',
             language: 'Change language', languageOf: 'Switch to %s',
             book: 'Book now', open_link: 'Open',
@@ -148,6 +150,8 @@
             tryAsking: 'Prueba a preguntar',
             prompt1: '¿Qué hostel me encaja mejor?', prompt2: '¿Cómo funciona el Nest Pass?',
             disclaimer: 'Respuestas de IA — verifica lo importante',
+            priceFrom: 'desde %s',
+            carousel: 'carrusel', carouselPrev: 'Retroceder', carouselNext: 'Avanzar',
             send: 'Enviar mensaje', input: 'Escribe tu mensaje',
             language: 'Cambiar idioma', languageOf: 'Cambiar a %s',
             book: 'Reservar ahora', open_link: 'Abrir',
@@ -169,6 +173,8 @@
             tryAsking: 'Prova a chiedere',
             prompt1: 'Quale hostel fa per me?', prompt2: 'Come funziona il Nest Pass?',
             disclaimer: 'Risposte IA — verifica ciò che è importante',
+            priceFrom: 'da %s',
+            carousel: 'carosello', carouselPrev: 'Indietro', carouselNext: 'Avanti',
             send: 'Invia messaggio', input: 'Scrivi il tuo messaggio',
             language: 'Cambia lingua', languageOf: 'Passa a %s',
             book: 'Prenota ora', open_link: 'Apri',
@@ -190,6 +196,8 @@
             tryAsking: 'Frag zum Beispiel',
             prompt1: 'Welches Hostel passt zu mir?', prompt2: 'Wie funktioniert der Nest Pass?',
             disclaimer: 'KI-Antworten — Wichtiges bitte prüfen',
+            priceFrom: 'ab %s',
+            carousel: 'Karussell', carouselPrev: 'Zurück', carouselNext: 'Weiter',
             send: 'Nachricht senden', input: 'Schreibe deine Nachricht',
             language: 'Sprache wechseln', languageOf: 'Zu %s wechseln',
             book: 'Jetzt buchen', open_link: 'Öffnen',
@@ -211,6 +219,8 @@
             tryAsking: 'Essayez de demander',
             prompt1: 'Quel hostel me correspond le mieux ?', prompt2: 'Comment fonctionne le Nest Pass ?',
             disclaimer: 'Réponses IA — vérifiez l\'essentiel',
+            priceFrom: 'à partir de %s',
+            carousel: 'carrousel', carouselPrev: 'Précédent', carouselNext: 'Suivant',
             send: 'Envoyer le message', input: 'Écris ton message',
             language: 'Changer de langue', languageOf: 'Passer en %s',
             book: 'Réserver', open_link: 'Ouvrir',
@@ -1117,6 +1127,10 @@
                 renderChannels(action);
                 return null;
 
+            case 'property_cards':
+                renderPropertyCards(action);
+                return null;
+
             case 'quick_replies':
                 renderQuickReplies(action);
                 return null;
@@ -1216,6 +1230,308 @@
     // would end up sending the last message.
     function makeChipHandler(message) {
         return function () { sendGuestText(message); };
+    }
+
+    /* --------------------------------------------------- property carousel --- */
+
+    // No "see all" card and no page counter: the wire carries neither a `more`
+    // link nor a `total`, and inventing one would put a number on screen that
+    // nothing verified. Eight is simply where the strip stops.
+    var CARD_MAX = 8;
+
+    // Mirrors the .nc-car-track gap. The scroll step is one card plus one gap, and
+    // the gap is the one number the JS cannot read off a card.
+    var CARD_GAP = 10;
+
+    // Fractional-DPR displays (a 125%-scaled Windows desktop, most retina Macs)
+    // report scrollLeft/scrollWidth/clientWidth in fractions, so the track's real
+    // maximum scrollLeft lands up to a pixel short of scrollWidth - clientWidth
+    // and an exact comparison NEVER hides the forward arrow at the right end.
+    // Two pixels is far below one card of travel and far above the rounding.
+    var CAR_END_EPS = 2;
+
+    /**
+     * A horizontally snapping strip of property cards (contract 1.5.0
+     * `property_cards`).
+     *
+     * The TRACK is what scrolls, not the wrapper: .nc-body is overflow-x: hidden,
+     * so a card that ran past the panel edge would be clipped rather than
+     * reachable. The wrapper stays put and owns the positioning context the fades
+     * and arrows place against.
+     *
+     * Closes any open CTA group (renderAction returns null for it), so the
+     * link_buttons a reply carries after the carousel still group into one
+     * wrapping row of their own.
+     */
+    function renderPropertyCards(action) {
+        if (!action.items || !action.items.length) { return; }
+
+        var track = el('div', 'nc-car-track');
+        var count = 0;
+        for (var i = 0; i < action.items.length && count < CARD_MAX; i++) {
+            var card = propertyCard(action.items[i] || {});
+            if (!card) { continue; }
+            track.appendChild(card);
+            count += 1;
+        }
+
+        // Every item dropped ⇒ no carousel at all: an empty track would still
+        // paint its fades and float two arrows over a blank strip.
+        if (!count) { return; }
+
+        var wrap = el('div', 'nc-carousel');
+        // A group rather than a list: the cards are peers of one another, and the
+        // roledescription is what tells a screen-reader guest that ←/→ across the
+        // book links is a walk through a strip and not a jump between replies.
+        attrs(wrap, { role: 'group', 'aria-roledescription': t('carousel') });
+        wrap.appendChild(track);
+
+        var fadeL = attrs(el('div', 'nc-car-fade nc-car-fade--l'), { 'aria-hidden': 'true' });
+        var fadeR = attrs(el('div', 'nc-car-fade nc-car-fade--r'), { 'aria-hidden': 'true' });
+        wrap.appendChild(fadeL);
+        wrap.appendChild(fadeR);
+
+        var prev = carouselArrow('nc-car-prev', t('carouselPrev'));
+        var next = carouselArrow('nc-car-next', t('carouselNext'));
+        wrap.appendChild(prev);
+        wrap.appendChild(next);
+
+        // Position readout, not a control — the dots are unreachable and unspoken
+        // on purpose; the arrows carry the labels and the book links carry the
+        // keyboard path.
+        var dots = attrs(el('div', 'nc-car-dots'), { 'aria-hidden': 'true' });
+        for (var d = 0; d < count; d++) { dots.appendChild(el('span', 'nc-car-dot')); }
+        wrap.appendChild(dots);
+
+        // Appended BEFORE wiring: the first sync measures scrollWidth against
+        // clientWidth, and a node still outside the document measures 0 against 0
+        // — which reads as "already at the end" and would hide the forward arrow
+        // for good. A closed panel is only scaled and faded, never display: none,
+        // so the measurement is real even for a reply that arrives unopened.
+        els.body.appendChild(wrap);
+        wireCarousel(wrap, track, [prev, fadeL], [next, fadeR], dots);
+        scrollDown();
+    }
+
+    /**
+     * One card. The booking CTA is MANDATORY: an item whose url does not survive
+     * safeHttpUrl has nothing to tap, and a card that merely looks tappable is
+     * worse than no card — so the whole item is dropped, silently, exactly the way
+     * a malformed chip is. A nameless item goes the same way: the title IS the
+     * card, and a photo over a price is not a property.
+     *
+     * image / location / badge / price_from are optional-omitted on the wire (the
+     * platform really does have properties without a location). A missing one
+     * renders nothing at all rather than an empty line.
+     */
+    function propertyCard(item) {
+        var href = safeHttpUrl(item.url);
+        if (!href) { log('property card dropped — no usable booking url', item.key); return null; }
+        if (typeof item.name !== 'string' || !item.name) {
+            log('property card dropped — no name', item.key);
+            return null;
+        }
+
+        var card = el('div', 'nc-card');
+
+        var photo = el('div', 'nc-card-photo');
+        var image = safeHttpUrl(item.image);
+        if (image) {
+            var img = el('img');
+            // alt="" on purpose: the photo restates the title sitting directly
+            // under it, so announcing it twice is noise. Everything the card
+            // means is in its text.
+            attrs(img, { src: image, alt: '', loading: 'lazy' });
+            photo.appendChild(img);
+        }
+        if (typeof item.badge === 'string' && item.badge) {
+            // Tenant-authored and already server-localized — textContent, never t().
+            photo.appendChild(el('span', 'nc-card-badge', item.badge));
+        }
+        card.appendChild(photo);
+
+        var body = el('div', 'nc-card-body');
+        body.appendChild(cardTitle(item.name));
+        if (typeof item.location === 'string' && item.location) {
+            body.appendChild(el('div', 'nc-card-loc', item.location));
+        }
+        var price = cardPrice(item.price_from);
+        if (price) { body.appendChild(price); }
+
+        // The wire sends no label for this one — it is the same "Book now" the
+        // booking_link element uses, so it comes from the same pack key.
+        var book = el('a', 'nc-card-book', t('book'));
+        attrs(book, { href: href, target: '_blank', rel: 'noopener noreferrer' });
+        body.appendChild(book);
+
+        card.appendChild(body);
+        return card;
+    }
+
+    // Presentational, and deliberately generic: this widget serves any wSuite
+    // business, so the rule is mechanical — a title that happens to contain this
+    // standalone word gets it in its own span, and every other tenant's titles
+    // fall through the same code path as plain text. No brand is special-cased.
+    // No /g flag: exec() on a global regex advances lastIndex between calls, and
+    // this constant is shared by every card in every reply.
+    var TITLE_HIGHLIGHT = /\bNest\b/;
+
+    function cardTitle(name) {
+        var match = TITLE_HIGHLIGHT.exec(name);
+        if (!match) { return el('div', 'nc-card-title', name); }
+
+        // Split into created nodes, never assembled markup: `name` is payload, and
+        // the never-innerHTML rule does not bend for a highlight.
+        var title = el('div', 'nc-card-title');
+        var head = name.slice(0, match.index);
+        var tail = name.slice(match.index + match[0].length);
+        if (head) { title.appendChild(document.createTextNode(head)); }
+        title.appendChild(el('span', 'nc-card-nest', match[0]));
+        if (tail) { title.appendChild(document.createTextNode(tail)); }
+        return title;
+    }
+
+    /**
+     * `amount` is a STRING on the wire (matching availability.options[].price) and
+     * `currency` is whatever the tenant configured, so both have to be treated as
+     * untrusted: a non-numeric amount or a currency code Intl rejects (RangeError)
+     * costs the price LINE and nothing else — never the card, never a throw that
+     * would take the whole reply down.
+     *
+     * Only the number is formatted widget-side; the words around it come from the
+     * pack, which is why "from %s" is one key with one placeholder rather than a
+     * concatenation the renderer invents.
+     */
+    function cardPrice(price) {
+        if (!price) { return null; }
+
+        var n = parseFloat(price.amount);
+        if (!isFinite(n)) { return null; }
+
+        // "25.00" is a round price and reads as €25; a real 25.50 keeps its cents.
+        // BOTH bounds move together on purpose: minimumFractionDigits pinned at 0
+        // would render 25.5 as "$25.5", which is not how money is written.
+        var cents = (n % 1) ? 2 : 0;
+
+        var fmt;
+        try {
+            fmt = new Intl.NumberFormat(locale, {
+                style: 'currency',
+                currency: price.currency,
+                minimumFractionDigits: cents,
+                maximumFractionDigits: cents
+            }).format(n);
+        } catch (e) {
+            log('price dropped — currency not formattable', price.currency);
+            return null;
+        }
+
+        var line = el('div', 'nc-card-price-line');
+        var parts = String(t('priceFrom')).split('%s');
+        if (parts[0]) { line.appendChild(document.createTextNode(parts[0])); }
+        line.appendChild(el('span', 'nc-card-price', fmt));
+        if (parts[1]) { line.appendChild(document.createTextNode(parts[1])); }
+        return line;
+    }
+
+    // One chevron constant serves both directions — the previous arrow is the same
+    // node turned around in CSS.
+    function carouselArrow(className, label) {
+        var btn = el('button', className);
+        attrs(btn, { type: 'button', 'aria-label': label });
+        btn.appendChild(svgNode(ICONS.chevron));
+        return btn;
+    }
+
+    /**
+     * Everything this attaches lives on nodes inside #nest-chatbot and dies with
+     * the subtree, so teardown() has nothing to clear — which is exactly why there
+     * are no timers in here.
+     */
+    function wireCarousel(wrap, track, back, forward, dots) {
+        var prev = back[0];
+        var next = forward[0];
+
+        // Measured at click time, never cached at build: the card widens inside an
+        // expanded panel, and a step captured once would then scroll to the wrong
+        // card for the rest of the conversation.
+        function step() {
+            var first = track.firstChild;
+            var width = first ? first.offsetWidth : 0;
+            return (width || 190) + CARD_GAP;
+        }
+
+        // The arrow AND its fade go together: the fade means "there is more this
+        // way", so left up at the end of the travel it just bleaches the first
+        // card's badge and the first letters of its title for no information.
+        function setEnd(pair, atEnd) {
+            pair[0].classList.toggle('nc-hidden', atEnd);
+            pair[1].classList.toggle('nc-hidden', atEnd);
+        }
+
+        function sync() {
+            var max = track.scrollWidth - track.clientWidth;
+            var atEnd = track.scrollLeft >= max - CAR_END_EPS;
+            setEnd(back, track.scrollLeft <= CAR_END_EPS);
+            setEnd(forward, atEnd);
+
+            var last = dots.childNodes.length - 1;
+            // At the far end the LAST dot lights, whatever the division says. The
+            // track stops with the final cards sharing the viewport, so its
+            // maximum scrollLeft is short of the last card's own offset — by the
+            // division alone that dot would never light at any width.
+            var index = atEnd ? last : Math.round(track.scrollLeft / step());
+            if (index < 0) { index = 0; }
+            if (index > last) { index = last; }
+            for (var i = 0; i <= last; i++) {
+                dots.childNodes[i].classList.toggle('nc-car-dot--on', i === index);
+            }
+        }
+
+        // One pending frame at a time, not one queued per event: a single swipe
+        // fires scroll dozens of times, and each of those measurements forces
+        // layout for a paint that has not happened yet.
+        var frame = 0;
+        track.addEventListener('scroll', function () {
+            if (frame) { return; }
+            frame = window.requestAnimationFrame(function () {
+                frame = 0;
+                sync();
+            });
+        });
+
+        prev.addEventListener('click', function () { scrollByStep(track, -step()); });
+        next.addEventListener('click', function () { scrollByStep(track, step()); });
+
+        // ←/→ walk the book links and let the browser's scroll-into-view follow
+        // focus. THAT is the keyboard path through the strip — the arrows are a
+        // pointer affordance, and a keyboard guest never has to reach them.
+        wrap.addEventListener('keydown', function (event) {
+            var delta = event.key === 'ArrowRight' ? 1 : (event.key === 'ArrowLeft' ? -1 : 0);
+            if (!delta) { return; }
+
+            var links = wrap.querySelectorAll('.nc-card-book');
+            var at = -1;
+            for (var i = 0; i < links.length; i++) {
+                if (links[i] === document.activeElement) { at = i; break; }
+            }
+            // Focus is on an arrow or nowhere in particular: leave the key alone,
+            // so the track still scrolls the way any scroll container does.
+            if (at === -1) { return; }
+
+            var target = at + delta;
+            if (target < 0 || target >= links.length) { return; }
+            event.preventDefault();
+            links[target].focus();
+        });
+
+        sync();
+    }
+
+    function scrollByStep(track, amount) {
+        var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // Read per click, not at build: the OS preference can flip mid-session.
+        track.scrollBy({ left: amount, behavior: reduced ? 'auto' : 'smooth' });
     }
 
     /* =========================================================== typing ===== */

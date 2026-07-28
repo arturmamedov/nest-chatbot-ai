@@ -91,6 +91,9 @@
        try-asking label, the AI disclaimer, the teaser's dismiss glyph. */
     --nc-text-subtle: #7B939A;
     --nc-shadow-fab: 0 10px 26px -8px rgba(13, 111, 130, 0.45);
+    /* The lift a property card sits on. The second layer is a hairline ring, not a
+       border: a border would eat into the 190px the scroll step is measured from. */
+    --nc-shadow-card: 0 6px 18px -8px rgba(13, 111, 130, 0.35), 0 0 0 1px var(--nc-border);
 
     /* typography — nc- families first (self-hosted, see @font-face above), then
        the unprefixed name so a host that already serves it locally still gets
@@ -738,6 +741,231 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+}
+
+/* ---------------------------------------------------------- property carousel */
+
+/* The wrapper never moves — it is the positioning context the fades and the
+   arrows place against. The track inside it is what scrolls, because .nc-body is
+   overflow-x: hidden and would clip a card that ran past the panel edge instead
+   of letting the guest reach it. */
+#nest-chatbot .nc-carousel {
+    position: relative;
+}
+
+#nest-chatbot .nc-car-track {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    /* No scrollbar under the cards: the dots are the position readout, and a
+       second one 4px tall reads as a rendering artefact. */
+    scrollbar-width: none;
+    /* Room for the cards' shadow, which overflow: auto would otherwise clip flat
+       against the top and bottom edges of the track. */
+    padding: 2px 0;
+}
+
+#nest-chatbot .nc-car-track::-webkit-scrollbar {
+    display: none;
+}
+
+#nest-chatbot .nc-card {
+    width: 190px;
+    flex-shrink: 0;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    border-radius: 14px;
+    /* The photo band is flush to the top corners — without this it paints square
+       over the radius. */
+    overflow: hidden;
+    background: var(--nc-surface-alt);
+    box-shadow: var(--nc-shadow-card);
+}
+
+#nest-chatbot .nc-card-photo {
+    position: relative;
+    height: 88px;
+    flex-shrink: 0;
+    /* Brand teal shows through while the photo decodes, and stays as the whole
+       band for an item that ships no image or whose image url was rejected. */
+    background: var(--nc-primary);
+}
+
+#nest-chatbot .nc-card-photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#nest-chatbot .nc-card-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 3px 7px;
+    border-radius: 5px;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--nc-secondary);
+    /* Near-opaque rather than solid: the photo stays faintly readable through it,
+       which is what keeps the chip sitting ON the image instead of over a hole. */
+    background: rgba(255, 255, 255, 0.92);
+}
+
+#nest-chatbot .nc-card-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 9px 10px 10px;
+}
+
+#nest-chatbot .nc-card-title {
+    font-family: var(--nc-font-heading);
+    font-weight: 600;
+    font-size: 13.5px;
+    line-height: 1.25;
+    color: var(--nc-text);
+}
+
+#nest-chatbot .nc-card-nest {
+    color: var(--nc-primary);
+}
+
+#nest-chatbot .nc-card-loc {
+    font-size: 11px;
+    color: var(--nc-text-subtle);
+}
+
+/* The auto margin belongs to whichever of the two comes first: the price line
+   normally, the book link when the item ships no price. That is what keeps every
+   card's CTA on one baseline even though `location` and `price_from` are both
+   optional-omitted on the wire and the cards stretch to a shared height. */
+#nest-chatbot .nc-card-price-line,
+#nest-chatbot .nc-card-book {
+    margin-top: auto;
+}
+
+#nest-chatbot .nc-card-price-line {
+    padding-top: 6px;
+    font-size: 11.5px;
+    color: var(--nc-text-subtle);
+}
+
+#nest-chatbot .nc-card-price-line + .nc-card-book {
+    margin-top: 8px;
+}
+
+#nest-chatbot .nc-card-price {
+    font-family: var(--nc-font-heading);
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--nc-text);
+}
+
+/* The only orange in the panel. One accent, spent once per card, is what makes it
+   read as the action rather than as decoration. */
+#nest-chatbot .nc-card-book {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 34px;
+    border-radius: 10px;
+    background: var(--nc-accent);
+    color: #fff;
+    font-family: var(--nc-font-heading);
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-decoration: none;
+}
+
+/* Decoration, and pointer-events: none is load-bearing — a fade that took the
+   pointer would swallow every swipe that starts on the card under it. */
+#nest-chatbot .nc-car-fade {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 44px;
+    pointer-events: none;
+}
+
+#nest-chatbot .nc-car-fade--l {
+    left: 0;
+    background: linear-gradient(270deg, rgba(255, 255, 255, 0), #fff 70%);
+}
+
+#nest-chatbot .nc-car-fade--r {
+    right: 0;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0), #fff 70%);
+}
+
+/* Parked on the photo band rather than vertically centred: the lower half of a
+   card is text and a CTA, and a disc floating over those reads as part of the
+   card instead of as a control over the strip. */
+#nest-chatbot .nc-car-prev,
+#nest-chatbot .nc-car-next {
+    position: absolute;
+    top: 34px;
+    height: 30px;
+    width: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--nc-secondary);
+    background: var(--nc-surface-alt);
+    box-shadow: 0 4px 12px -4px rgba(13, 111, 130, 0.5), 0 0 0 1px var(--nc-border);
+}
+
+#nest-chatbot .nc-car-prev { left: 4px; }
+#nest-chatbot .nc-car-next { right: 4px; }
+
+#nest-chatbot .nc-car-prev .nc-icon,
+#nest-chatbot .nc-car-next .nc-icon {
+    width: 12px;
+    height: 12px;
+}
+
+/* One chevron constant serves both arrows — this is the same glyph turned
+   around, which is why there is no second icon in ICONS. */
+#nest-chatbot .nc-car-prev .nc-icon {
+    transform: rotate(180deg);
+}
+
+#nest-chatbot .nc-car-dots {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+}
+
+#nest-chatbot .nc-car-dot {
+    height: 5px;
+    width: 5px;
+    border-radius: 3px;
+    background: #CBD9DC;
+    /* Driven by the motion token, so the reduced-motion block's --nc-dur: 0ms
+       collapses the stretch to instant with no rule of its own. */
+    transition: width var(--nc-dur) var(--nc-ease), background var(--nc-dur) var(--nc-ease);
+}
+
+#nest-chatbot .nc-car-dot--on {
+    width: 16px;
+    background: var(--nc-secondary);
+}
+
+#nest-chatbot .nc-car-prev:focus-visible,
+#nest-chatbot .nc-car-next:focus-visible,
+#nest-chatbot .nc-card-book:focus-visible {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: 2px;
 }
 
 /* --------------------------------------------------------------- intro loader */
