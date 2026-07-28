@@ -618,6 +618,17 @@
     outline-offset: 2px;
 }
 
+/* Chips a reply carries reuse the .nc-prompt pill and change only the layout:
+   they are short answers to a question just asked, so they sit side by side and
+   wrap, where the welcome block's full sentences stack. Same 41px indent, so the
+   row hangs under the bubble that asked rather than starting a new speaker. */
+#nest-chatbot .nc-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    padding-left: 41px;
+}
+
 /* thinking dots */
 
 #nest-chatbot .nc-dots {

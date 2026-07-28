@@ -394,6 +394,10 @@
      *   "link"      → three link_buttons (book / website / directions)
      *   "available" → async_result: interim reply now, final reply after polling
      *   "rooms"     → availability with room options
+     *   "tenerife" / "canaria" / "ibiza" → property_cards + promo_card + the CTA trio
+     *   "hostel"    → quick_replies: the three island chips
+     *   "pass" / "offer" → promo_card on its own ("pass" is word-bounded, so
+     *                 "passport" and "compass" fall through to the plain reply)
      *   "!unknown"  → an unrecognised element type (must be ignored silently)
      *   "!xss"      → a hostile reply and a javascript: url (must both be inert)
      *   "!410" "!403" "!429" "!500" → force that status
@@ -407,11 +411,29 @@
             setTimeout(function () { done(status, body); }, delay == null ? 550 : delay);
         }
 
+        // Two fixtures serve the same promo — the island answer and the
+        // "pass"/"offer" answer — and the renderer has to see byte-identical
+        // payloads from both. A factory, not a shared literal: each reply gets its
+        // own object, so nothing downstream can leak state between turns.
+        function promoCard() {
+            return {
+                type: 'promo_card',
+                title: 'One booking. All Hostels.',
+                body: '7 nights for €140 — the Nest Pass moves with you between our islands.',
+                cta: { label: 'Get Your Nest Pass', url: 'https://nestshostels.com/nest-pass' },
+                style: 'highlight'
+            };
+        }
+
         return {
             init: function (done) {
                 reply(done, 201, {
                     conversation: { uuid: 'mock-' + Math.random().toString(36).slice(2, 10) },
                     greeting: t('greeting'),
+                    // The server always emits the key; [] means "this site has not
+                    // configured welcome elements", which is what makes the widget's
+                    // own TRY ASKING block the visible fallback on the demo page.
+                    actions: [],
                     contract_version: '1.4.1'
                 }, 700);
             },
@@ -505,6 +527,89 @@
                             { type: 'link_button', label: 'Visit our website', url: 'https://nestshostels.com' },
                             { type: 'link_button', label: 'Get directions', url: 'https://maps.google.com/?q=Las+Eras+Nest+Hostel' }
                         ],
+                        turn: turn
+                    });
+                }
+
+                /* -- Phase 2 element types ----------------------------------------
+                 * Deliberately AFTER every check above: none of the branches that
+                 * existed in 2.3.0 can now be reached by a different keyword, so the
+                 * regression gate is provably testing the same matcher it always did.
+                 */
+
+                // All three island chips land here on purpose — in production any
+                // reply can carry any element and the server decides which.
+                if (q.indexOf('tenerife') !== -1 || q.indexOf('canaria') !== -1 || q.indexOf('ibiza') !== -1) {
+                    return reply(done, 200, {
+                        reply: 'Three Nests match — El Médano is the surf one.',
+                        actions: [
+                            {
+                                type: 'property_cards',
+                                items: [
+                                    {
+                                        key: 'medano',
+                                        name: 'Medano Nest',
+                                        location: 'El Médano, Tenerife',
+                                        image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/3.jpg',
+                                        price_from: { amount: '22.00', currency: 'EUR' },
+                                        badge: 'Nest Pass',
+                                        url: 'https://hotels.cloudbeds.com/reservation/medano-nest'
+                                    },
+                                    {
+                                        // No `location` key at all: optional fields are
+                                        // OMITTED rather than nulled, and the platform
+                                        // really does have properties without one. The
+                                        // card must simply skip the line.
+                                        key: 'ashavana',
+                                        name: 'Ashavana Nest',
+                                        image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/6.jpg',
+                                        price_from: { amount: '24.00', currency: 'EUR' },
+                                        url: 'https://hotels.cloudbeds.com/reservation/ashavana-nest'
+                                    },
+                                    {
+                                        key: 'duque',
+                                        name: 'Duque Nest',
+                                        location: 'Costa Adeje, Tenerife',
+                                        image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/1.jpg',
+                                        price_from: { amount: '26.00', currency: 'EUR' },
+                                        badge: 'Loooong Stay',
+                                        url: 'https://hotels.cloudbeds.com/reservation/duque-nest'
+                                    }
+                                ]
+                            },
+                            promoCard(),
+                            { type: 'link_button', label: 'Book now', url: 'https://book.nestshostels.com', style: 'primary' },
+                            { type: 'link_button', label: 'Visit our website', url: 'https://nestshostels.com' },
+                            { type: 'link_button', label: 'Get directions', url: 'https://maps.google.com/?q=Las+Eras+Nest+Hostel' }
+                        ],
+                        turn: turn
+                    });
+                }
+
+                // Matches suggested prompt 1 in every pack ("Which hostel fits me
+                // best?", "Welches Hostel passt zu mir?", …).
+                if (q.indexOf('hostel') !== -1) {
+                    return reply(done, 200, {
+                        reply: 'Which island are you going to?',
+                        actions: [{
+                            type: 'quick_replies',
+                            items: [
+                                { label: 'Tenerife', message: 'Tenerife' },
+                                { label: 'Gran Canaria', message: 'Gran Canaria' },
+                                { label: 'Ibiza', message: 'Ibiza' }
+                            ]
+                        }],
+                        turn: turn
+                    });
+                }
+
+                // Word-bounded on purpose: "passport" and "compass" must not reach the
+                // promo, and neither must the German prompt 1 ("… passt zu mir?"),
+                // which belongs to the `hostel` branch above.
+                if (/\bpass\b/.test(q) || q.indexOf('offer') !== -1) {
+                    return reply(done, 200, {
+                        reply: 'One pass, every Nest — here is how it works.',
+                        actions: [promoCard()],
                         turn: turn
                     });
                 }
@@ -1012,6 +1117,10 @@
                 renderChannels(action);
                 return null;
 
+            case 'quick_replies':
+                renderQuickReplies(action);
+                return null;
+
             default:
                 log('ignoring unknown element type', action.type);
                 return row;
@@ -1064,6 +1173,49 @@
         // lets it navigate away). tel:/mailto: hand off to external handlers.
         if (/^https:/.test(href)) { attrs(link, { target: '_blank' }); }
         return link;
+    }
+
+    /**
+     * Tap-to-send chips. A chip is a shortcut for typing: it sends its `message`
+     * as an ordinary guest turn through the same seam the composer uses, so the
+     * transcript reads exactly as if the guest had written it.
+     *
+     * Chips carry NO urls, by contract — the widget's link surface stays
+     * link_button / contact_channels. An item that arrives with a `url` key is
+     * still rendered as a chip and the key is ignored; honouring it here would
+     * quietly widen the surface that safeHttpUrl() exists to keep narrow.
+     *
+     * Labels are payload strings — server-authored and already server-localized —
+     * so they go through el()/textContent and never through t().
+     */
+    function renderQuickReplies(action) {
+        if (!action.items || !action.items.length) { return; }
+
+        var row = el('div', 'nc-chip-row');
+        for (var i = 0; i < action.items.length; i++) {
+            var item = action.items[i] || {};
+            // The message IS the chip: without one there is nothing to send, so a
+            // button would be a dead end. Skip it silently, like every other
+            // malformed piece of a payload.
+            if (typeof item.message !== 'string' || !item.message) { continue; }
+            var chip = el('button', 'nc-prompt', item.label || item.message);
+            attrs(chip, { type: 'button' });
+            chip.addEventListener('click', makeChipHandler(item.message));
+            row.appendChild(chip);
+        }
+
+        // Every item skipped ⇒ no row: an empty flex box would still eat its gap
+        // and leave a phantom indent under the bubble.
+        if (!row.childNodes.length) { return; }
+        els.body.appendChild(row);
+        scrollDown();
+    }
+
+    // A factory, not a closure written inside the loop: `var` is function-scoped,
+    // so an inline handler would close over the loop's own `item` and every chip
+    // would end up sending the last message.
+    function makeChipHandler(message) {
+        return function () { sendGuestText(message); };
     }
 
     /* =========================================================== typing ===== */
@@ -1148,7 +1300,7 @@
      * nothing it was not already going to wait for.
      */
 
-    var intro = { animDone: false, greeting: null, settled: false };
+    var intro = { animDone: false, greeting: null, actions: null, settled: false };
 
     function playIntro() {
         if (introPlayed) { return; }
@@ -1211,7 +1363,16 @@
                 // nothing assigned after this line.
                 typeText(text, intro.greeting, function () {
                     if (removed || guestTurned) { return; }
-                    showPrompts(wrap);
+                    if (intro.actions) {
+                        // The server owns the welcome when it configured one, so its
+                        // elements REPLACE the pack-string block rather than joining it.
+                        // They are also transcript content — elements on the greeting
+                        // behave like elements on any other reply — so removePrompts()
+                        // must never reach them: els.prompts stays null here.
+                        renderActions(intro.actions, text);
+                    } else {
+                        showPrompts(wrap);
+                    }
                 });
             });
         }, 900);
@@ -1391,6 +1552,11 @@
                 writeStore(conversationUuid);
                 checkContractVersion(body.contract_version);
                 intro.greeting = body.greeting || t('greeting');
+                // A site can attach welcome elements to the greeting — same request,
+                // zero extra network. Absent on older servers and [] when the site has
+                // not configured any, and both mean the same thing here: fall back to
+                // the widget's own prompt block.
+                intro.actions = (body.actions && body.actions.length) ? body.actions : null;
             } else {
                 // Never strand the guest behind a failed init — greet them anyway
                 // and let the first real turn retry.
@@ -1625,10 +1791,12 @@
         els.badge.textContent = t('aiAssistant');
         els.subline.textContent = t('subline');
         els.disclaimer.textContent = t('disclaimer');
-        // Only while the welcome block is still on screen — after the first turn
-        // there is nothing to repaint, and the click handlers read their label
-        // fresh anyway.
-        if (els.prompts) {
+        // Only while the widget's OWN welcome block is on screen — after the first
+        // turn there is nothing to repaint, and the click handlers read their label
+        // fresh anyway. Guarded on promptsLabel, not prompts: those are the fields
+        // this branch actually dereferences, and server-rendered welcome chips are
+        // payload strings that must never be repainted from a pack.
+        if (els.promptsLabel) {
             els.promptsLabel.textContent = t('tryAsking');
             PROMPT_KEYS.forEach(function (key, i) {
                 els.promptButtons[i].textContent = t(key);
