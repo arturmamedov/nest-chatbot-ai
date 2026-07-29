@@ -5,6 +5,112 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.4.0 — 2026-07-29
+
+Phase 2 of the redesign (options 2B/2C/2D in the design handoff under `plans/`): the panel
+itself — typography, header, message list, welcome state, three new element renderers and a
+wide expanded sheet. Genuinely new surface — twelve new i18n keys, two new storage flags and a
+`fonts/` directory — hence minor. No transport change: the turn body, the storage shape, the
+poll cadence and the three endpoints are untouched, and `BUILT_AGAINST` stays **1.4.1**. The
+three renderers ship ahead of the contract sync, so a server reporting 1.5.0 fires the
+one-time drift warn **by design** — release 2.5.0 is the sync that re-vendors `docs/wsuite/`
+and moves the constant. `docs/proposals/response-contract-phase2-elements.md` records the wire
+shapes 2.4.0 implements and the open points left for the platform team.
+
+- **Poppins and Montserrat ship with the widget.** Four WOFF2 latin subsets in `fonts/`
+  (`nc-poppins-600`, `nc-montserrat-400/500/600`), declared by `@font-face` at the top of
+  `css/nest-chatbot.css` and resolved against `assetBase` like every other asset — never
+  `fonts.googleapis.com`, so a host still trusts exactly one extra origin (rule 1). They are
+  registered under `nc-`-prefixed family names because `@font-face` cannot be scoped under
+  `#nest-chatbot` — at-rules take no selector — so the prefix is the isolation mechanism: a
+  host page's own Poppins registration can never merge with ours, and ours can never repaint
+  theirs. `--nc-font-heading` / `--nc-font-body` carry them with the previous system stack
+  still behind them, and the SIL OFL texts ship beside the files. **Deployment requirement:**
+  a cross-origin `@font-face` fetch is CORS-mode, so the CDN must send
+  `Access-Control-Allow-Origin` on `fonts/`. Without it every host page keeps the fallback
+  stack — the widget still works, nothing on screen says otherwise, and the only trace is the
+  browser's own CORS error in devtools.
+- **The header says who is answering.** A 44px avatar, "Germán" in Poppins beside an "AI
+  assistant" badge and a "Nests Hostels · replies in seconds" subline, with the controls
+  restyled as chips on the teal ground. A second control joins the first: ⤢ docks the panel as
+  the wide sheet below. Per the plan review the minimise control is **✕ at every breakpoint** —
+  no labelled `Hide ⌄`, no chevron — keeping the 30px chip on desktop, the 44×44 target below
+  640px and the accessible name "Minimise the chat". The i18n key `subtitle` was renamed
+  `assistantRole` (values unchanged in all five packs) now that it serves only the panel's
+  `aria-label`, while the new `subline` carries the visible line.
+- **A message list from the mock, and one announcement per reply.** Bot bubbles sit on
+  `--nc-surface-sunken` (#F1F6F7) at a 16/16/16/4 radius, guest bubbles mirror it, text is
+  14px/1.5 at 82% width, the avatar drops 45px → 32px, and consecutive bot replies lose the
+  avatar and indent so their bubbles hold one left edge. The screen-reader fix does **not**
+  match what was planned: marking the visible bubble `aria-hidden` buys a single clean
+  announcement by removing every reply from the accessibility tree for good, which kills
+  VoiceOver and TalkBack touch exploration. Instead the widget gained one live region,
+  `.nc-announcer` — a **sibling of the panel**, never a child, because a closed panel is
+  `opacity: 0` and `scale(0.2)` and a live region inside hidden furniture is unreliable.
+  `.nc-body` states `aria-live="off"` (the implicit polite that rides on `role="log"` has to
+  be overridden, not merely left unstated), and `typeText` announces the finished string once,
+  on the streaming and the reduced-motion path alike. It speaks by *adding* a span, so two
+  replies carrying the same string are two announcements, and clears itself after 3s so the
+  text does not linger as an invisible second copy of the bubble. **Guest bubbles are no
+  longer announced** — a deliberate change from 2.3.0: the guest just typed that text, and the
+  bubble stays reachable by browsing and by touch.
+- **A welcome state, not a bare greeting.** The approved 2B greeting in all five packs, a "Try
+  asking" label with two suggested openers under it, and the AI disclosure under the composer.
+  The prompts are **pack strings cached in the widget** rather than fetched: the welcome state
+  is the one moment the guest is watching a spinner and it must not cost a second round trip.
+  Their labels resolve at click time, so a guest who switches language between reading a pill
+  and tapping it sends the sentence they could read. The init response now also carries
+  `actions[]` (same request, zero extra network): a site that has configured welcome elements
+  gets those rendered after the greeting *instead of* the widget's block — the server owns the
+  welcome when it has one — and they are transcript content, so the first guest turn never
+  sweeps them away. Everything that puts a guest turn on the wire now goes through a single
+  `sendGuestText()` seam.
+- **Three new element renderers**, the contract 1.5.0 shapes. `quick_replies` — tap-to-send
+  chips reusing the prompt pill; chips carry **no urls**, an item `url` is ignored rather than
+  honoured, so the link surface stays `link_button` / `contact_channels`. `property_cards` — a
+  horizontally snapping strip of 200px cards over a photo band, with an optional badge, an
+  optional location line, a locale-formatted "from €25" price and a mandatory book CTA; the
+  arrows, edge fades and position dots ride one rAF-throttled scroll listener, the end
+  comparisons carry a 2px epsilon because `scrollLeft` is fractional while `scrollWidth` and
+  `clientWidth` are integers, and `overscroll-behavior-x: contain` keeps an over-scroll at
+  either edge from chaining into the mobile back gesture on a page we do not control.
+  `promo_card` — a tenant-authored upsell in a gradient `highlight` variant or a bordered
+  plain one. All three keep the existing posture: every string reaches the DOM via
+  `textContent`, every `url`/`image` passes `safeHttpUrl`, and anything that would render a
+  dead end (an item with no booking url or no name, a chip with no message, a promo missing
+  title, body or CTA) is dropped silently rather than shown broken. The strip stops at eight
+  cards — the wire carries no `more` link and no `total`, and inventing a count would put an
+  unverified number on screen. `Intl.NumberFormat` runs inside a try/catch: a currency code it
+  rejects costs the price line and nothing else.
+- **Fullscreen to 1023px, and a 670px sheet above it.** A tablet-width window has no more room
+  for a 420px card floating over the host page than a phone does. Above 1024px the header's ⤢
+  docks the panel to the right edge at **670px — not the 640 the plan called for**: three
+  200px cards need 3 × 200 + 2 × 10 = 620px of track, and the track is the panel less the
+  body's 2 × 15px padding and up to ~10px of scrollbar, so 660 clips the third card. Every
+  expanded rule lives inside `@media (min-width: 1024px)` rather than on a bare `.nc-expanded`
+  selector, and that is the whole trick: a class selector would out-specify the fullscreen
+  block and win at every width, stranding a guest who expanded on a desktop with a 670px sheet
+  after they narrow the window. Scoped this way the class simply stops matching, so a resize
+  costs no JavaScript, no rebuild and no re-render — which is why the transcript and the
+  scroll position survive it. Height interpolates through `interpolate-size: allow-keywords`
+  where Chromium supports it and snaps elsewhere, with `interpolate-size: numeric-only` on
+  `.nc-controls` so that property cannot wake a dormant `transition: width` inside the
+  protected Phase-1 composer. After the third assistant reply on a wide screen the panel
+  offers itself as the sheet once per session — and never again once the guest has pulled it
+  back in themselves.
+- **Three small behaviours.** The language row auto-collapses 4s after opening, and on the
+  next keystroke in the composer, since it holds the composer at two thirds width while it is
+  open. Esc now hides the teaser while the panel is closed — hide only, never the
+  dismiss-forever flag, which stays the teaser's own ✕. Expanding or shrinking re-runs every
+  rendered carousel's measurement, because its arrows and dots derive from the track's current
+  width and a resize fires no scroll event.
+- **`shrink` no longer collides with `close` in Italian and French.** Both keys carried
+  "Riduci la chat" and "Réduire le chat" respectively, so the two adjacent header buttons
+  announced one accessible name between them. The new key moved — `shrink` is now
+  "Rimpicciolisci la chat" / "Rétrécir le chat" — and `close` was left alone: it has shipped
+  since 2.3.0 and "minimise" is what it means. No two keys used as an accessible name share a
+  value in any of the five packs.
+
 ## 2.3.0 — 2026-07-28
 
 Phase 1 of the launcher redesign (option 2A in the design handoff under `plans/`): the closed
@@ -37,7 +143,7 @@ or contract change; `BUILT_AGAINST` stays 1.4.1.
   so its exit fade cannot swallow host clicks, and under `prefers-reduced-motion` the zeroed
   duration tokens make it appear and vanish instantly while the 8s/6s timing stays identical.
 
-
+## 2.2.0 — 2026-07-28
 
 Adds config surface (`data-offset-x` / `data-offset-y`), hence minor. No transport or contract
 change; `BUILT_AGAINST` stays 1.4.1. Both fixes below were measured on the live widget at

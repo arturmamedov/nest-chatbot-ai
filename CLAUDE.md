@@ -38,6 +38,9 @@ the change is wrong.
 
 Icons and flags are inline SVG constants in `nest-chatbot.js` — never FontAwesome, never
 flagsapi.com, never a webfont. A host should have to trust exactly one extra origin: ours.
+Text fonts follow the same rule the other way round: Poppins and Montserrat are self-hosted
+`nc-`-prefixed WOFF2 files in `fonts/`, declared by `@font-face` in `css/nest-chatbot.css` and
+resolved against `assetBase` — never `fonts.googleapis.com`, so the origin count stays at one.
 
 ### 2. Never `innerHTML`
 
@@ -220,6 +223,9 @@ are shaped exactly like the real envelope. Drive them from the composer:
 | `rooms` | `availability` with room options |
 | `link` | three `link_button`s (book / website / directions), one with `style: primary` |
 | `available` | `async_result` — interim reply, then the poll replaces it in place |
+| `hostel` | `quick_replies` — the three island chips (also matches suggested prompt 1) |
+| `tenerife` `canaria` `ibiza` | `property_cards` carousel + `promo_card` + the CTA trio |
+| `pass` `offer` | `promo_card` alone (`pass` is word-bounded: "compass" falls through) |
 | `!unknown` | an unrecognised element type (must be ignored, sibling still renders) |
 | `!xss` | a hostile reply and a `javascript:` url (both must be inert) |
 | `!410` `!403` `!429` `!500` | forces that status |
@@ -236,6 +242,20 @@ what a customer hits. Run a second static server on another port with a page tha
   or not at all.
 - **Rotate the leaked Voiceflow key** if it has not been done, and the Google Gemini key
   that shipped live from `b837cff` and was only commented out in `219a265` (see rule 3).
+- **The CDN must send `Access-Control-Allow-Origin` on `fonts/`.** Since 2.4.0 the widget
+  self-hosts its WOFF2 files, and a cross-origin `@font-face` fetch is CORS-gated even when
+  the stylesheet next to it is not. Serve the header (`*` is enough — the files are public
+  and the licences ship beside them) on `fonts/*.woff2`, or every host page drops to the
+  system stack. Nothing on screen says so and the widget keeps working — the only trace is
+  the browser's own CORS error in devtools — so verify from a page on a **different** origin,
+  never from the CDN's own domain.
+- **The 1.5.0 contract sync is pending.** `BUILT_AGAINST` is `'1.4.1'` while 2.4.0 already
+  renders `property_cards` / `promo_card` / `quick_replies` and reads the init `actions[]`, so
+  a server reporting 1.5.0 fires the one-time drift warn **by design**. Release **2.5.0** is
+  the sync: re-vendor `docs/wsuite/` from tag `chatbot-contract-v1.5.0`, reconcile the three
+  renderers against the shipped spec, then move `BUILT_AGAINST`.
+  `docs/proposals/response-contract-phase2-elements.md` records what 2.4.0 implements and the
+  open points to settle with the platform team.
 - **Origin allow-listing shipped platform-side (D-039)** — opt-in per site, default
   allow-all. Once a site configures a list, every embedding origin must be registered
   (guide §7, exact `scheme://host[:port]`) or requests are refused with

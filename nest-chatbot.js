@@ -29,7 +29,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.3.0';
+    var VERSION = '2.4.0';
 
     /* =========================================================== config ===== */
 
@@ -170,7 +170,9 @@
             openUnread: 'Apri Germán — 1 nuovo messaggio',
             teaser: 'Ti aiuto a scegliere il tuo Nest?', teaserDismiss: 'Chiudi',
             subline: 'Nests Hostels · risponde in pochi secondi', aiAssistant: 'Assistente IA',
-            expand: 'Espandi la chat', shrink: 'Riduci la chat',
+            // Not 'Riduci la chat': that is already `close` above, and the two
+            // controls sit side by side in the header — one accessible name each.
+            expand: 'Espandi la chat', shrink: 'Rimpicciolisci la chat',
             tryAsking: 'Prova a chiedere',
             prompt1: 'Quale hostel fa per me?', prompt2: 'Come funziona il Nest Pass?',
             disclaimer: 'Risposte IA — verifica ciò che è importante',
@@ -216,7 +218,9 @@
             openUnread: 'Ouvrir Germán — 1 nouveau message',
             teaser: 'Besoin d\'aide pour choisir ton Nest ?', teaserDismiss: 'Fermer',
             subline: 'Nests Hostels · répond en quelques secondes', aiAssistant: 'Assistant IA',
-            expand: 'Agrandir le chat', shrink: 'Réduire le chat',
+            // Not 'Réduire le chat': that is already `close` above, and the two
+            // controls sit side by side in the header — one accessible name each.
+            expand: 'Agrandir le chat', shrink: 'Rétrécir le chat',
             tryAsking: 'Essayez de demander',
             prompt1: 'Quel hostel me correspond le mieux ?', prompt2: 'Comment fonctionne le Nest Pass ?',
             disclaimer: 'Réponses IA — vérifiez l\'essentiel',
