@@ -1627,8 +1627,17 @@
         // nothing to clear. Feature-tested because the file supports browsers
         // that predate it — one un-resyncing carousel is the cost there, which is
         // today's behaviour everywhere.
+        //
+        // The `removed` re-check is the same one every deferred callback in this
+        // file carries. A detached track cannot throw today, but that rests on
+        // step() always finding a firstChild and CARD_GAP staying non-zero —
+        // guarantees the observer has no reason to depend on. teardown() still
+        // clears nothing; this is the contract it clears nothing *because of*.
         if (window.ResizeObserver) {
-            new window.ResizeObserver(sync).observe(track);
+            new window.ResizeObserver(function () {
+                if (removed) { return; }
+                sync();
+            }).observe(track);
         }
 
         // The arrows, fades and dots are recomputed from a scroll event, and
@@ -1934,7 +1943,16 @@
         markOpened();
         hideTeaser();
         playIntro();
-        setTimeout(function () { els.input.focus(); }, 320);
+        // Re-checked at fire time, like every other timer here: the panel can be
+        // closed again inside these 320ms (Escape, a second press of the
+        // launcher), and focusing the composer of a CLOSING panel is the fourth
+        // way into the same defect — the delayed visibility step lands a moment
+        // later, the browser blurs the now-invisible textarea, and focus falls to
+        // <body>, i.e. the top of the host page.
+        setTimeout(function () {
+            if (removed || !isOpen()) { return; }
+            els.input.focus();
+        }, 320);
     }
 
     // The first open of the session retires the unread affordance for good:
