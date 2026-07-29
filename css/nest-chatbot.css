@@ -107,6 +107,10 @@
 
     /* motion */
     --nc-dur: 300ms;
+    /* The panel changing size and dock edge is a far bigger move than a hover or
+       a fade, and at --nc-dur it reads as a jump rather than a transition. Sole
+       consumer: the expanded side sheet at >=1024px. */
+    --nc-dur-slow: 500ms;
     --nc-ease: cubic-bezier(0.4, 0, 0.2, 1);
 
     /* layout */
@@ -340,7 +344,32 @@
     transform-origin: bottom right;
     box-shadow: 0 0 128px 0 rgba(0, 0, 0, 0.1),
         0 32px 64px -48px rgba(0, 0, 0, 0.5);
-    transition: all 0.3s ease;
+    /* Enumerated rather than `all`, and living on the BASE rule rather than
+       inside the >=1024px block: a transition only runs where it is declared, so
+       putting the size properties in the .nc-expanded rule would animate the
+       expand and snap the shrink. opacity/transform stay in the list because
+       they are what .nc-open animates — dropping them kills the open/close
+       scale.
+
+       max-height is in the list for a reason that is easy to lose: a real
+       transcript makes the panel's `auto` height resolve well past the clamp, so
+       the height animation sits pinned at the maximum the whole way and it is
+       max-height that actually moves. Leave it out and the panel takes its full
+       new height in one frame while `bottom` is still travelling — measured at
+       1280x860, that put the top edge 44px above the viewport, header and all,
+       for the first ~200ms. */
+    transition: opacity 0.3s ease, transform 0.3s ease,
+        width var(--nc-dur-slow) var(--nc-ease),
+        height var(--nc-dur-slow) var(--nc-ease),
+        max-height var(--nc-dur-slow) var(--nc-ease),
+        right var(--nc-dur-slow) var(--nc-ease),
+        bottom var(--nc-dur-slow) var(--nc-ease),
+        border-radius var(--nc-dur-slow) var(--nc-ease);
+    /* Chromium-only progressive enhancement: the panel's height is `auto` until
+       the expanded rule gives it a length, and auto→length is not interpolable
+       without this. Every other engine snaps the height and animates the rest —
+       an accepted deviation, not a bug to work around. */
+    interpolate-size: allow-keywords;
 }
 
 #nest-chatbot[data-position="left"] .nc-panel {
@@ -448,15 +477,15 @@
     color: var(--nc-danger);
 }
 
-/* Enabled at >=1024px in Task 8, alongside the click handler and the
-   .nc-expanded rules. Built and styled now so that task is CSS + JS wiring
-   only, no markup change. */
+/* Off below the desktop breakpoint: the panel is already fullscreen there, so
+   there is nothing to expand into. Turned on by the >=1024px block at the foot
+   of this file. */
 #nest-chatbot .nc-expand {
     display: none;
 }
 
-/* Both glyphs ship in the button now (Task 8 toggles which one is visible);
-   until expand/collapse state exists, only the arrows-out mark ever shows. */
+/* Both glyphs ship in the button; this is the resting pair (arrows-out shows,
+   arrows-in hides) and .nc-expanded swaps them. */
 #nest-chatbot .nc-expand .nc-icon--shrink {
     display: none;
 }
@@ -1402,13 +1431,36 @@
     }
 }
 
-@media (max-width: 520px) {
-    #nest-chatbot .nc-panel {
+/* Fullscreen everywhere below the desktop breakpoint. This used to stop at
+   520px; a tablet-width window has no room for a 420px card floating over the
+   host page either, and the expanded sheet at >=1024px is what replaces it.
+   These rules deliberately consume neither --nc-edge-* var: a panel filling the
+   screen has no edge to offset from. data-offset-* writes those vars as an
+   inline style on the root, so it still outranks everything for the launcher and
+   for the floating panel — the widths where an offset means something. */
+@media (max-width: 1023px) {
+    /* The second selector is not decoration. #nest-chatbot[data-position="left"]
+       .nc-panel out-specifies a plain #nest-chatbot .nc-panel, so on a left-side
+       host its `left: var(--nc-edge-x)` survived into fullscreen and, with
+       width: 100%, pushed the panel's right edge — ✕ and all — off the screen.
+       Matching its specificity is the fix; a media query adds none of its own. */
+    #nest-chatbot .nc-panel,
+    #nest-chatbot[data-position="left"] .nc-panel {
         right: 0;
         left: 0;
+        /* Stated rather than assumed. The panel is anchored from the bottom at
+           every width; with `bottom: 0` and a dvh height, a `top` arriving from
+           anywhere would over-constrain the box and one of the three would be
+           silently dropped. */
+        top: auto;
         bottom: 0;
+        /* Paired fallbacks, percentage first: 100dvh tracks the mobile browser
+           chrome collapsing, and an engine that does not know the unit keeps the
+           100% line it already parsed. */
         height: 100%;
+        height: 100dvh;
         max-height: 100%;
+        max-height: 100dvh;
         max-width: 100%;
         border-radius: 0;
         width: 100%;
@@ -1425,6 +1477,61 @@
 
     #nest-chatbot .nc-footer {
         padding: 10px 15px 15px;
+        /* Edge-to-edge now, so the composer sits directly over the iOS home
+           indicator / Android gesture bar. Resolves to the plain 15px on every
+           browser without a safe area, desktop included. */
+        padding-bottom: calc(15px + env(safe-area-inset-bottom, 0px));
+    }
+}
+
+/* ------------------------------------------------------------- expanded sheet */
+
+/* All of it lives behind the media query on purpose. `.nc-expanded` is a class
+   on the root, and a bare `#nest-chatbot.nc-expanded .nc-panel` would out-specify
+   the fullscreen block above and win at every width — stranding a guest who
+   expanded on a wide window with a 640px sheet after they narrow it. Scoped this
+   way the class can simply stay on the root and stop applying: resizing back to
+   fullscreen and back out again costs zero JavaScript and re-renders nothing, so
+   the transcript and the scroll position survive. */
+@media (min-width: 1024px) {
+    #nest-chatbot .nc-expand {
+        display: flex;
+    }
+
+    #nest-chatbot.nc-expanded .nc-expand .nc-icon--expand {
+        display: none;
+    }
+
+    #nest-chatbot.nc-expanded .nc-expand .nc-icon--shrink {
+        display: block;
+    }
+
+    #nest-chatbot.nc-expanded .nc-panel {
+        width: 640px;
+        right: 0;
+        /* `left: auto` is what keeps a data-position="left" host's sheet on the
+           right: that host's rule sets left AND right, and left+right+width is
+           over-constrained, which drops `right` and leaves the sheet floating
+           mid-screen. The sheet docks to the screen edge by design; only the
+           launcher stays on the guest's chosen side. */
+        left: auto;
+        bottom: 24px;
+        height: calc(100vh - 48px);
+        /* The base panel clamps to calc(100vh - 120px) for the floating card;
+           without this override the sheet would sit 72px short of its own
+           height. */
+        max-height: calc(100vh - 48px);
+        border-radius: 15px 0 0 15px;
+    }
+
+    /* The base 460px is a floating-card height; in the sheet the body is
+       whatever is left between header and footer. */
+    #nest-chatbot.nc-expanded .nc-body {
+        height: auto;
+    }
+
+    #nest-chatbot.nc-expanded .nc-card {
+        width: 200px;
     }
 }
 
@@ -1436,6 +1543,7 @@
        and stays untouched. */
     #nest-chatbot {
         --nc-dur: 0ms;
+        --nc-dur-slow: 0ms;
     }
 
     #nest-chatbot .nc-panel,

@@ -280,6 +280,15 @@
     var FLAG_TEASER_SHOWN = 'nest-chatbot:teaser-shown';          // sessionStorage
     var FLAG_TEASER_DISMISSED = 'nest-chatbot:teaser-dismissed';  // localStorage
 
+    /* Panel-size flags, same unsuffixed convention and the same reasoning: they
+       describe how this visitor likes the panel, not a conversation.
+       - AUTO_EXPANDED is per session, so the widget offers the wider sheet once
+         per visit rather than on every reply.
+       - USER_SHRANK is per browser: a guest who has pulled the sheet back in
+         once has stated a preference, and it should outlive the tab. */
+    var FLAG_AUTO_EXPANDED = 'nest-chatbot:auto-expanded';        // sessionStorage
+    var FLAG_USER_SHRANK = 'nest-chatbot:user-shrank';            // localStorage
+
     function readFlag(storeName, key) {
         try { return window[storeName].getItem(key) === '1'; } catch (e) { return false; }
     }
@@ -825,9 +834,9 @@
         headerInfo.appendChild(headerLogo);
         headerInfo.appendChild(headerText);
 
-        // .nc-expand: built and styled now, but display:none until Task 8 wires
-        // the ≥1024px auto-expand behaviour and its click handler. Both glyphs
-        // ship so the later CSS swap needs no DOM change, just a class toggle.
+        // .nc-expand: display:none below 1024px — there is no room for a side
+        // sheet at those widths and the panel is already fullscreen. Both glyphs
+        // ship in the button so the toggle is a class swap, never a re-render.
         var headerControls = el('div', 'nc-header-controls');
         var expandBtn = el('button', 'nc-expand');
         attrs(expandBtn, { type: 'button', 'aria-label': t('expand') });
@@ -1886,6 +1895,79 @@
 
     function toggle() { isOpen() ? close() : open(); }
 
+    /* --------------------------------------------------------- expanded ----- */
+
+    /*
+     * The wide side sheet. All of the sizing is CSS, inside a
+     * @media (min-width: 1024px) block — this pair of functions only owns the
+     * class and the control's label. That is deliberate: a guest who expands on
+     * a desktop and then narrows the window falls back to fullscreen with no
+     * resize listener, no rebuild and no re-render, which is exactly why the
+     * transcript and the scroll position survive a resize. Narrowing does not
+     * clear the class; the class simply stops matching.
+     *
+     * Esc is unaffected — it still means close/minimise, never "shrink".
+     */
+    function isExpanded() { return els.root.classList.contains('nc-expanded'); }
+
+    function expandPanel() {
+        if (removed || isExpanded()) { return; }
+        els.root.classList.add('nc-expanded');
+        els.expand.setAttribute('aria-label', t('shrink'));
+        resyncCarousels();
+    }
+
+    // byUser distinguishes the guest pulling the sheet back in — a stated
+    // preference worth remembering — from any programmatic shrink.
+    function shrinkPanel(byUser) {
+        if (removed || !isExpanded()) { return; }
+        els.root.classList.remove('nc-expanded');
+        els.expand.setAttribute('aria-label', t('expand'));
+        if (byUser) { writeFlag('localStorage', FLAG_USER_SHRANK); }
+        resyncCarousels();
+    }
+
+    /*
+     * A carousel's arrows, fades and dots are derived from the track's CURRENT
+     * width, and only a scroll event recomputes them. Going 420px → 640px can
+     * stop the track overflowing altogether, and fires no scroll — so without
+     * this the forward arrow stays on screen, pointing at nothing, until the
+     * guest happens to swipe. renderPropertyCards() hangs each wrapper's own
+     * sync on the node as ncSync for exactly this call.
+     *
+     * Measured AFTER the panel has moved, never beside the class toggle: the
+     * width is transitioned, so a measurement taken there reads the width the
+     * sheet is LEAVING and is as wrong as no sync at all — and nothing else ever
+     * corrects it, because a resize fires no scroll event.
+     *
+     * Reduced motion needs a beat too, just not the whole transition: the panel's
+     * duration collapses to ~0 there, but the new width still only lands on the
+     * next frame, so a synchronous read after the toggle measures 420px either
+     * way. It gets its own short delay rather than the full 560ms — a guest who
+     * asked for less motion should not be looking at a dead arrow for half a
+     * second.
+     */
+    var CAR_RESYNC_MS = 560;        // just past the 500ms --nc-dur-slow transition
+    var CAR_RESYNC_FAST_MS = 60;    // reduced motion: a frame or two, no more
+
+    function resyncCarousels() {
+        // Read per toggle, not at build — the OS preference can flip mid-session,
+        // the same reason scrollByStep() re-reads it per click.
+        var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        setTimeout(function () {
+            // teardown() clears no timers, by contract — every callback re-checks.
+            if (removed) { return; }
+            syncCarousels();
+        }, reduced ? CAR_RESYNC_FAST_MS : CAR_RESYNC_MS);
+    }
+
+    function syncCarousels() {
+        var wraps = els.body.querySelectorAll('.nc-carousel');
+        for (var i = 0; i < wraps.length; i++) {
+            if (wraps[i].ncSync) { wraps[i].ncSync(); }
+        }
+    }
+
     /* ----------------------------------------------------------- teaser ----- */
 
     // One nudge per session: armed at boot, fires after 8s of the panel staying
@@ -2223,9 +2305,9 @@
             });
         }
         els.panel.setAttribute('aria-label', 'Germán — ' + t('assistantRole'));
-        // isExpanded() arrives in Task 8; until then the control only ever
-        // offers to expand, never to shrink.
-        els.expand.setAttribute('aria-label', t('expand'));
+        // The one control whose label depends on state, not just on locale: it
+        // reads "shrink" while the sheet is out.
+        els.expand.setAttribute('aria-label', isExpanded() ? t('shrink') : t('expand'));
 
         SUPPORTED.forEach(function (code2) {
             els.optionButtons[code2].classList.toggle('nc-hidden', code2 === locale);
@@ -2237,6 +2319,10 @@
     function wire() {
         els.toggler.addEventListener('click', toggle);
         els.close.addEventListener('click', close);
+        // Hidden by CSS below 1024px, so this can never fire there.
+        els.expand.addEventListener('click', function () {
+            isExpanded() ? shrinkPanel(true) : expandPanel();
+        });
         els.teaserBody.addEventListener('click', open);
         els.teaserClose.addEventListener('click', dismissTeaserForever);
         els.form.addEventListener('submit', submit);
