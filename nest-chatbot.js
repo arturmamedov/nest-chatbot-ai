@@ -1524,7 +1524,14 @@
             // track stops with the final cards sharing the viewport, so its
             // maximum scrollLeft is short of the last card's own offset — by the
             // division alone that dot would never light at any width.
-            var index = atEnd ? last : Math.round(track.scrollLeft / step());
+            //
+            // Unless there is nothing to scroll: a track that fits is at its start
+            // and its end at once, and the shortcut would light the last dot for a
+            // strip the guest can already see in full. Both arrows are still right
+            // to hide. Reachable since the expanded sheet grew wide enough to hold
+            // three cards outright — at 420px every carousel overflowed.
+            var scrollable = max > CAR_END_EPS;
+            var index = (atEnd && scrollable) ? last : Math.round(track.scrollLeft / step());
             if (index < 0) { index = 0; }
             if (index > last) { index = last; }
             for (var i = 0; i <= last; i++) {
@@ -1929,7 +1936,7 @@
 
     /*
      * A carousel's arrows, fades and dots are derived from the track's CURRENT
-     * width, and only a scroll event recomputes them. Going 420px → 640px can
+     * width, and only a scroll event recomputes them. Going 420px → 670px can
      * stop the track overflowing altogether, and fires no scroll — so without
      * this the forward arrow stays on screen, pointing at nothing, until the
      * guest happens to swipe. renderPropertyCards() hangs each wrapper's own

@@ -1228,6 +1228,19 @@
     gap: 10px;
     width: 100%;
     transition: all 0.3s ease;
+    /* Undoes the .nc-panel inheritance for this subtree. `interpolate-size:
+       allow-keywords` is on the panel so it can animate its own auto→length
+       height — but it inherits, and .nc-form below declares
+       `transition: width` while specifying no width. Its computed `auto` was
+       therefore not interpolable against the calc() the open language row sets,
+       and that transition had never once run; allow-keywords woke it up.
+       (Verified with getAnimations() on .nc-form: a `width` CSSTransition
+       appears when allow-keywords reaches it, and none without.) Flex layout
+       still governs the used width, so the visible difference was small — but a
+       transition that has been dormant since Phase 1 on protected composer
+       styling should stay dormant, not start running as a side effect of a
+       property set on an ancestor for something else. */
+    interpolate-size: numeric-only;
 }
 
 #nest-chatbot .nc-form {
@@ -1438,7 +1451,11 @@
    screen has no edge to offset from. data-offset-* writes those vars as an
    inline style on the root, so it still outranks everything for the launcher and
    for the floating panel — the widths where an offset means something. */
-@media (max-width: 1023px) {
+/* 1023.98, not 1023: a viewport can land on a fractional CSS pixel (a non-integer
+   device pixel ratio, or browser zoom), and `max-width: 1023px` paired with
+   `min-width: 1024px` leaves 1023.5 matching neither — the panel would drop back
+   to the 420px floating card in the one band this block exists to eliminate. */
+@media (max-width: 1023.98px) {
     /* The second selector is not decoration. #nest-chatbot[data-position="left"]
        .nc-panel out-specifies a plain #nest-chatbot .nc-panel, so on a left-side
        host its `left: var(--nc-edge-x)` survived into fullscreen and, with
@@ -1489,7 +1506,7 @@
 /* All of it lives behind the media query on purpose. `.nc-expanded` is a class
    on the root, and a bare `#nest-chatbot.nc-expanded .nc-panel` would out-specify
    the fullscreen block above and win at every width — stranding a guest who
-   expanded on a wide window with a 640px sheet after they narrow it. Scoped this
+   expanded on a wide window with a 670px sheet after they narrow it. Scoped this
    way the class can simply stay on the root and stop applying: resizing back to
    fullscreen and back out again costs zero JavaScript and re-renders nothing, so
    the transcript and the scroll position survive. */
@@ -1507,7 +1524,12 @@
     }
 
     #nest-chatbot.nc-expanded .nc-panel {
-        width: 640px;
+        /* 670 is a floor, not a round number — do not tidy it down. Three cards
+           need 3 x 200 + 2 x 10 gap = 620px of track, and the track is the panel
+           less the body's 2 x 15px padding and up to ~10px of scrollbar:
+           670 - 30 - 10 = 630. At 660 the scrollbar case fails and the third card
+           clips. */
+        width: 670px;
         right: 0;
         /* `left: auto` is what keeps a data-position="left" host's sheet on the
            right: that host's rule sets left AND right, and left+right+width is
@@ -1515,12 +1537,23 @@
            mid-screen. The sheet docks to the screen edge by design; only the
            launcher stays on the guest's chosen side. */
         left: auto;
+        /* Same reason as the base rule's `bottom left`: the open/close scale has
+           to grow out of the edge the panel is docked to. A left-side host keeps
+           its launcher on the left but gets the sheet on the right, so without
+           this it would scale out of a corner sitting mid-screen. */
+        transform-origin: bottom right;
         bottom: 24px;
+        /* vh first, dvh after — the same paired fallback the fullscreen block
+           uses, and needed here for the same reason: >=1024px is not desktop-only.
+           An iPad in landscape is exactly 1024px, gets this sheet, and runs the
+           engine where vh and the visible viewport disagree. */
         height: calc(100vh - 48px);
+        height: calc(100dvh - 48px);
         /* The base panel clamps to calc(100vh - 120px) for the floating card;
            without this override the sheet would sit 72px short of its own
            height. */
         max-height: calc(100vh - 48px);
+        max-height: calc(100dvh - 48px);
         border-radius: 15px 0 0 15px;
     }
 
