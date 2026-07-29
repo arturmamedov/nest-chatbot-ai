@@ -104,6 +104,7 @@
     var lastInitStatus = 0; // most recent init outcome — 429 turns "error" into "retry"
     var initWaiters = null; // callbacks queued behind an in-flight init
     var sendQueue = [];     // turns queued behind an in-flight turn — one at a time
+    var replyCount = 0;     // real assistant turn replies this session — see maybeAutoExpand
     var introPlayed = false;
     // The guest has sent at least one turn. Latched, never cleared: the welcome
     // block is a first-contact affordance, and a conversation that has started
@@ -1934,6 +1935,19 @@
         resyncCarousels();
     }
 
+    // A once-per-session courtesy, not a nag: after three real replies on a wide
+    // screen the panel offers itself as the side sheet. isOpen() must run before
+    // the flag is written — a panel closed mid-turn must not spend the one
+    // auto-expand invisibly, so a guest who reopens still gets offered it.
+    function maybeAutoExpand() {
+        if (removed || replyCount < 3 || !isOpen() || isExpanded()) { return; }
+        if (!window.matchMedia || !window.matchMedia('(min-width: 1024px)').matches) { return; }
+        if (readFlag('localStorage', FLAG_USER_SHRANK)) { return; }
+        if (readFlag('sessionStorage', FLAG_AUTO_EXPANDED)) { return; }
+        writeFlag('sessionStorage', FLAG_AUTO_EXPANDED);
+        expandPanel();
+    }
+
     /*
      * A carousel's arrows, fades and dots are derived from the track's CURRENT
      * width, and only a scroll event recomputes them. Going 420px → 670px can
@@ -2140,6 +2154,12 @@
                 if (bubble) { typeText(bubble, body.reply); }
                 renderActions(body.actions, bubble);
                 drainSend();
+                // Counts real turn replies only — never the greeting (intro path),
+                // an error/retry/timeout bubble (the non-200 branches below), or
+                // the poll's in-place replacement (its interim 200 already counted
+                // this turn once).
+                replyCount += 1;
+                maybeAutoExpand();
                 return;
             }
 
