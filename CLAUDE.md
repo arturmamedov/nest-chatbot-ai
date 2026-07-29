@@ -270,6 +270,12 @@ what a customer hits. Run a second static server on another port with a page tha
 - Comments and identifiers in English. The old codebase mixed Italian and Spanish comments.
 - Keep the section banners in `nest-chatbot.js` — they are the file's table of contents.
 - Anything user-visible goes through `t()` / `tf()`, never a hardcoded string.
+- **Anything that removes or hides a node checks `document.activeElement` first.** If the node
+  contains it, move focus somewhere still visible inside `#nest-chatbot` before the node goes.
+  A removed or `display: none` element drops focus to `<body>`, so the guest's next Tab
+  restarts at the top of the *customer's* page; a merely invisible one is worse, stranding them
+  on a control they cannot see. This repo has rediscovered that bug four times — the teaser,
+  the carousel arrows, the prompt pills, the language row. It is a rule, not a case.
 - Never touch `document.documentElement.lang`, the host's `<body>`, or anything outside
   `#nest-chatbot`. The host page is not ours.
 - Version bumps err small: little changes are a **patch**, even when they touch behaviour.

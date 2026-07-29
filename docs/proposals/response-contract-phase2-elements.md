@@ -180,7 +180,26 @@ implements.
 5. **`location` on the wire.** Optional today, and the widget handles its absence cleanly. If
    the platform intends it to become required once property records are backfilled, say so —
    the widget's handling would not change, but the mock fixtures would.
-6. **Not a contract question, recorded so it is not lost: the CDN must send
+6. **Book-button dedupe is known-missing, and it is ours to close.** The shipped 1.5.0 text
+   asks for it — *"A card-aware renderer SHOULD suppress a `link_button`/`booking_link` whose
+   `url` exactly equals a card item's `url` in the same `actions[]` list"* — and 2.4.0 does not
+   do it: `renderAction()` handles each element in isolation and has no memory of the urls a
+   carousel already put on screen. Against a real 1.5.0 server a guest can therefore see a
+   "Book now" pill repeating the CTA on the card directly above it. The mock cannot catch this
+   and never will by accident: its CTA trio deliberately uses three different urls, so the
+   fixture is not a regression test for it. Not a contract change — a widget gap, **owned by
+   the 2.5.0 contract sync**, alongside a fixture whose `link_button` url matches a card's.
+7. **`quick_replies` is not one-shot here, and the contract now says it should be.** The
+   shipped text calls a chip row *"one-shot by convention: remove (or disable) the row once a
+   chip is tapped or the guest types instead"*. 2.4.0 deliberately keeps chip rows standing:
+   they were treated as transcript content, on the same reasoning that keeps a rendered
+   `link_button` in place after it is followed. The contract contradicts that, and the contract
+   wins — **owned by the 2.5.0 contract sync**. One warning for whoever implements it: removing
+   a row the guest has just activated with the keyboard removes the node holding
+   `document.activeElement`, which resets focus to the host page's `<body>`. It needs the same
+   focus rescue `removePrompts()` carries, for exactly the same reason. Disabling the row
+   instead of removing it sidesteps the whole problem and is worth considering.
+8. **Not a contract question, recorded so it is not lost: the CDN must send
    `Access-Control-Allow-Origin` on `fonts/`.** Since 2.4.0 the widget self-hosts its WOFF2
    files next to `nest-chatbot.js`, and a cross-origin `@font-face` fetch is CORS-mode even
    though the stylesheet beside it is not. Without the header every host page falls back to

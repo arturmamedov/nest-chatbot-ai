@@ -1039,8 +1039,14 @@
         // Bot bubbles that never reach typeText — error, retry, timeout — would go
         // silent now that .nc-body is not live, so they announce from here. The
         // non-empty guard is what keeps a typed reply from announcing twice: it
-        // arrives as addBubble('bot', '') and typeText does the talking. A guest
-        // bubble is never announced; the guest just typed that text.
+        // arrives as addBubble('bot', '') and typeText does the talking.
+        //
+        // A guest bubble is never announced: every one of them is the direct
+        // result of the guest's own action a moment earlier — typing and sending,
+        // or activating a prompt pill or a tap-to-send chip whose label they had
+        // just read. Announcing it would read them their own input back. (Chips
+        // send `message`, which can differ from the label they pressed; that is
+        // still their own act, and the bubble they can see says so.)
         if (isBot && text) { announce(text); }
         return textNode;
     }
@@ -1230,7 +1236,12 @@
             // button would be a dead end. Skip it silently, like every other
             // malformed piece of a payload.
             if (typeof item.message !== 'string' || !item.message) { continue; }
-            var chip = el('button', 'nc-prompt', item.label || item.message);
+            // Typed, not truthy: `label || message` renders a non-string label as
+            // "[object Object]" — el() stringifies whatever it is given. Every
+            // other payload string on this branch is guarded the same way, and a
+            // malformed label costs the label only, never the chip.
+            var label = (typeof item.label === 'string' && item.label) ? item.label : item.message;
+            var chip = el('button', 'nc-prompt', label);
             attrs(chip, { type: 'button' });
             chip.addEventListener('click', makeChipHandler(item.message));
             row.appendChild(chip);
@@ -1317,15 +1328,25 @@
         // Position readout, not a control — the dots are unreachable and unspoken
         // on purpose; the arrows carry the labels and the book links carry the
         // keyboard path.
-        var dots = attrs(el('div', 'nc-car-dots'), { 'aria-hidden': 'true' });
-        for (var d = 0; d < count; d++) { dots.appendChild(el('span', 'nc-car-dot')); }
-        wrap.appendChild(dots);
+        //
+        // Only from two cards up. One card is not an edge case on this contract,
+        // it is the DEFAULT shape — the server sends one card for a resolved
+        // property — and a lone dot reads as "page 1 of 1" under a strip that
+        // does not scroll, beside two hidden arrows. A position readout with one
+        // position is furniture, so there is none.
+        var dots = null;
+        if (count > 1) {
+            dots = attrs(el('div', 'nc-car-dots'), { 'aria-hidden': 'true' });
+            for (var d = 0; d < count; d++) { dots.appendChild(el('span', 'nc-car-dot')); }
+            wrap.appendChild(dots);
+        }
 
         // Appended BEFORE wiring: the first sync measures scrollWidth against
         // clientWidth, and a node still outside the document measures 0 against 0
         // — which reads as "already at the end" and would hide the forward arrow
-        // for good. A closed panel is only scaled and faded, never display: none,
-        // so the measurement is real even for a reply that arrives unopened.
+        // for good. A closed panel is only scaled, faded and visibility: hidden,
+        // never display: none — all three leave the box in the layout — so the
+        // measurement is real even for a reply that arrives unopened.
         els.body.appendChild(wrap);
         wireCarousel(wrap, track, [prev, fadeL], [next, fadeR], dots);
         scrollDown();
@@ -1524,6 +1545,11 @@
             setEnd(back, next, track.scrollLeft <= CAR_END_EPS);
             setEnd(forward, prev, atEnd);
 
+            // A single-card strip ships no dots row at all, so everything below
+            // has nothing to light. The arrows above still run: one card can
+            // overflow a narrow panel, and the fades still have to answer for it.
+            if (!dots) { return; }
+
             var last = dots.childNodes.length - 1;
             // At the far end the LAST dot lights, whatever the division says. The
             // track stops with the final cards sharing the viewport, so its
@@ -1587,6 +1613,23 @@
             event.preventDefault();
             links[target].focus();
         });
+
+        // The VIEWPORT moves the track too, and it does it without passing
+        // through expandPanel()/shrinkPanel(): narrowing a desktop window, or
+        // rotating a phone, re-flows the panel and fires no scroll event. Widening
+        // usually self-heals because clamping scrollLeft happens to fire one;
+        // narrowing does not, and the forward arrow stays hidden over 146px of
+        // still-scrollable track.
+        //
+        // An observer rather than a window resize listener, and deliberately: it
+        // is owned by a node INSIDE #nest-chatbot, so it is collected with the
+        // subtree exactly like every listener above it and teardown() still has
+        // nothing to clear. Feature-tested because the file supports browsers
+        // that predate it — one un-resyncing carousel is the cost there, which is
+        // today's behaviour everywhere.
+        if (window.ResizeObserver) {
+            new window.ResizeObserver(sync).observe(track);
+        }
 
         // The arrows, fades and dots are recomputed from a scroll event, and
         // nothing else moves them — but the panel's own width does, and changing
@@ -1865,6 +1908,14 @@
     // one has anything to remove.
     function removePrompts() {
         if (els.prompts && els.prompts.parentNode) {
+            // Never strand keyboard focus on a node about to vanish — the same
+            // rule hideTeaser() and the carousel's rescueFocus() state. A guest
+            // who activates a pill with the keyboard is standing ON the node this
+            // line removes, and the browser answers a removed activeElement by
+            // resetting focus to <body>: the next Tab would restart from the top
+            // of the HOST page. The composer is where their next turn goes
+            // anyway, so it is the landing spot as well as the rescue.
+            if (els.prompts.contains(document.activeElement)) { els.input.focus(); }
             els.prompts.parentNode.removeChild(els.prompts);
         }
         els.prompts = null;
@@ -1900,6 +1951,13 @@
 
     function close() {
         if (removed || !isOpen()) { return; }
+        // Never strand keyboard focus on a node about to vanish. The closed panel
+        // is visibility: hidden, so anything focused inside it — the ✕ the guest
+        // just pressed, most obviously — is blurred by the browser and focus falls
+        // back to <body>, i.e. the top of the HOST page. The launcher is the
+        // widget's remaining control and the way back in, which is also why Esc
+        // has always landed there.
+        if (els.panel.contains(document.activeElement)) { els.toggler.focus(); }
         els.root.classList.remove('nc-open');
         els.toggler.setAttribute('aria-expanded', 'false');
         closeLanguageMenu();
@@ -2296,6 +2354,19 @@
             var tok = ++langOpenToken;
             setTimeout(function () {
                 if (removed || tok !== langOpenToken) { return; }
+                // Never collapse a row the guest is standing in. The options are
+                // clipped to max-width: 0 rather than display: none, so focus is
+                // not reset to <body> here — it is stranded on an INVISIBLE
+                // button instead, which is harder to recover from than losing it
+                // outright.
+                //
+                // langOptions, not controls: .nc-controls also holds the composer,
+                // and open() focuses that 320ms after every open — guarding on the
+                // whole row would mean the timer never fires for anyone. The
+                // options are the only nodes the collapse actually hides; the flag
+                // toggle stays visible and stays focusable throughout, so a guest
+                // who merely clicked it still gets the 4s timeout.
+                if (els.langOptions.contains(document.activeElement)) { return; }
                 closeLanguageMenu();
             }, LANG_AUTO_CLOSE_MS);
         }

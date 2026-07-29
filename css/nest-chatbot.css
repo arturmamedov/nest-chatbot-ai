@@ -6,6 +6,14 @@
  * no `html`, no bare element rules. This widget is dropped onto customer sites; a
  * single unscoped rule would repaint their page.
  *
+ * Two at-rules are the honest exceptions, because at-rules take no selector to
+ * scope: the @font-face blocks below (isolated by their nc- family names) and the
+ * `@property --progress` registration further down, which is document-global and
+ * therefore changes how a host page's own --progress parses and animates. It is
+ * pre-existing and the intro loader's animation depends on it; renaming it to
+ * --nc-progress is the fix and belongs to its own change, not to a claim in a
+ * comment.
+ *
  * Theming: override the custom properties on #nest-chatbot. The widget sets them
  * from its data-* attributes at boot.
  */
@@ -152,11 +160,21 @@
    Measured on nestshostels.com (Tailwind preflight + @tailwindcss/forms): a
    #2563eb ring painted through box-shadow inside the composer, and Poppins at a
    72px line-height on the header title, which made the header 37px taller than
-   designed. Add a tag here if build() ever creates one. */
+   designed. Add a tag here if build() ever creates one.
+
+   svg is in the list for exactly that reason — build() creates icons, flags and
+   the intro ring. Sizing is the part this block does not cover: .nc-icon and
+   .nc-flag state their own width/height, but .nc-progress carried only the
+   width="180"/height="180" ATTRIBUTES, and a presentation attribute loses to any
+   author rule — including a host theme's bare `svg { width: 100%; height: auto }`,
+   the common fluid-media reset. It is declared on .nc-progress itself rather than
+   here: a blanket `width: auto` would beat those attributes too, and `auto` on an
+   outermost svg means 100%, so the cure would be the disease. */
 #nest-chatbot h2,
 #nest-chatbot a,
 #nest-chatbot form,
 #nest-chatbot button,
+#nest-chatbot svg,
 #nest-chatbot textarea {
     font-family: inherit;
     line-height: normal;
@@ -340,6 +358,15 @@
     border-radius: 15px;
     opacity: 0;
     pointer-events: none;
+    /* pointer-events stops the mouse and NOTHING else: a closed panel with only
+       opacity: 0 keeps every control it holds in the tab order and in the
+       accessibility tree. On a customer page that means a keyboard guest tabbing
+       past our launcher walks into the whole panel — and after one conversation
+       that is every prompt pill, chip, carousel arrow, book link and promo CTA
+       the transcript holds. `visibility: hidden` is what actually takes them out;
+       it still leaves the box in the layout, so the carousel can measure itself
+       in a panel that has never been opened. */
+    visibility: hidden;
     transform: scale(0.2);
     transform-origin: bottom right;
     box-shadow: 0 0 128px 0 rgba(0, 0, 0, 0.1),
@@ -364,7 +391,13 @@
         max-height var(--nc-dur-slow) var(--nc-ease),
         right var(--nc-dur-slow) var(--nc-ease),
         bottom var(--nc-dur-slow) var(--nc-ease),
-        border-radius var(--nc-dur-slow) var(--nc-ease);
+        border-radius var(--nc-dur-slow) var(--nc-ease),
+        /* visibility animates as a step, so it needs a DELAYED one here: zero
+           duration, fired only once the 0.3s fade above has finished. Without the
+           delay the panel would blink out of existence on close and there would
+           be no close animation left to watch. Reduced motion zeroes --nc-dur, so
+           the step lands with the instant fade there. */
+        visibility 0s linear var(--nc-dur);
     /* Chromium-only progressive enhancement: the panel's height is `auto` until
        the expanded rule gives it a length, and auto→length is not interpolable
        without this. Every other engine snaps the height and animates the rest —
@@ -381,7 +414,16 @@
 #nest-chatbot.nc-open .nc-panel {
     opacity: 1;
     pointer-events: auto;
+    visibility: visible;
     transform: scale(1);
+    /* A transition reads its timing from the AFTER-change style, so this is the
+       rule that governs the open. Zeroing the delay for the whole list is the
+       cheap way to say "visibility flips at once on the way in": every other
+       property in the base list already has a 0s delay, so this changes nothing
+       else — and re-stating the list here to reach one delay would leave two
+       copies of it to keep in sync. Without it the panel would fade in from
+       nowhere for 300ms and only then become visible, i.e. not fade in at all. */
+    transition-delay: 0s;
 }
 
 /* --------------------------------------------------------------------- header */
@@ -860,12 +902,17 @@
     padding: 9px 10px 10px;
 }
 
+/* Both of these carry tenant-authored text into a 190px card that clips its own
+   overflow, so an unbroken token (a hyphen-free property name, a URL-shaped
+   location) would be cut off mid-word with nothing to show it was. The same
+   reason .nc-action and .nc-prompt declare it. */
 #nest-chatbot .nc-card-title {
     font-family: var(--nc-font-heading);
     font-weight: 600;
     font-size: 13.5px;
     line-height: 1.25;
     color: var(--nc-text);
+    overflow-wrap: break-word;
 }
 
 #nest-chatbot .nc-card-nest {
@@ -875,6 +922,7 @@
 #nest-chatbot .nc-card-loc {
     font-size: 11px;
     color: var(--nc-text-subtle);
+    overflow-wrap: break-word;
 }
 
 /* The auto margin belongs to whichever of the two comes first: the price line
@@ -1052,6 +1100,10 @@
     line-height: 1.5;
     color: var(--nc-text-subtle);
     text-wrap: pretty;
+    /* The same argument .nc-text makes: this is tenant-authored prose arriving as
+       one textContent string, and the never-innerHTML rule means a line break can
+       only ever be a \n. Without this the tenant's paragraphs collapse into one. */
+    white-space: pre-wrap;
 }
 
 #nest-chatbot .nc-promo-cta {
@@ -1116,6 +1168,11 @@
 }
 
 #nest-chatbot .nc-progress {
+    /* Stated, not left to the width="180"/height="180" attributes — see the
+       reset block: an attribute loses to a host's bare `svg` rule, ours does not.
+       The same 180 the attributes and --size carry. */
+    width: 180px;
+    height: 180px;
     --size: 180px;
     --half-size: calc(var(--size) / 2);
     --stroke-width: 6px;
@@ -1434,14 +1491,6 @@
     #nest-chatbot .nc-teaser {
         max-width: calc(100vw - 88px);
     }
-
-    /* A bigger touch target below the desktop breakpoint — the mock's chip
-       size (30px) is a mouse-precision target, not a thumb one. */
-    #nest-chatbot .nc-close {
-        height: 44px;
-        width: 44px;
-        border-radius: 12px;
-    }
 }
 
 /* Fullscreen everywhere below the desktop breakpoint. This used to stop at
@@ -1485,6 +1534,17 @@
 
     #nest-chatbot .nc-header {
         padding: 12px 15px;
+    }
+
+    /* A thumb target, not a mouse one — the mock's 30px chip is mouse precision.
+       It belongs to THIS breakpoint, not to the 639px one it started in: the
+       panel goes edge-to-edge everywhere below 1024px, and an iPad in portrait
+       (768px) is a touch device holding a fullscreen panel. Under the old scoping
+       it got the fullscreen sheet with a 30px ✕ in the corner. */
+    #nest-chatbot .nc-close {
+        height: 44px;
+        width: 44px;
+        border-radius: 12px;
     }
 
     #nest-chatbot .nc-body {

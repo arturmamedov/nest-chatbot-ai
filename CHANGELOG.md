@@ -68,7 +68,7 @@ shapes 2.4.0 implements and the open points left for the platform team.
 - **Three new element renderers**, the contract 1.5.0 shapes. `quick_replies` — tap-to-send
   chips reusing the prompt pill; chips carry **no urls**, an item `url` is ignored rather than
   honoured, so the link surface stays `link_button` / `contact_channels`. `property_cards` — a
-  horizontally snapping strip of 200px cards over a photo band, with an optional badge, an
+  horizontally snapping strip of 190px cards over a photo band, with an optional badge, an
   optional location line, a locale-formatted "from €25" price and a mandatory book CTA; the
   arrows, edge fades and position dots ride one rAF-throttled scroll listener, the end
   comparisons carry a 2px epsilon because `scrollLeft` is fractional while `scrollWidth` and
