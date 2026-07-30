@@ -419,7 +419,9 @@
      *   "available" → async_result: interim reply now, final reply after polling
      *   "rooms"     → availability with room options
      *   "tenerife" / "canaria" / "ibiza" → property_cards + promo_card + the CTA trio
-     *   "hostel"    → quick_replies: the three island chips
+     *   "hostel"    → quick_replies: the three island chips — the SAME payload the
+     *                 init response carries, so this keyword also regression-tests
+     *                 the welcome block's chip row
      *   "pass" / "offer" → promo_card on its own ("pass" is word-bounded, so
      *                 "passport" and "compass" fall through to the plain reply)
      *   "!unknown"  → an unrecognised element type (must be ignored silently)
@@ -449,15 +451,33 @@
             };
         }
 
+        // Same reasoning as promoCard(), and the same shape serves two callers: the
+        // welcome elements on the init response and the "hostel" answer. Sharing the
+        // factory is what makes the `hostel` regression keyword a real test of the
+        // welcome path — both see a byte-identical payload, so a chip that renders
+        // one way in the transcript cannot quietly render another way at init.
+        function islandChips() {
+            return {
+                type: 'quick_replies',
+                items: [
+                    { label: 'Tenerife', message: 'Tenerife' },
+                    { label: 'Gran Canaria', message: 'Gran Canaria' },
+                    { label: 'Ibiza', message: 'Ibiza' }
+                ]
+            };
+        }
+
         return {
             init: function (done) {
                 reply(done, 201, {
                     conversation: { uuid: 'mock-' + Math.random().toString(36).slice(2, 10) },
                     greeting: t('greeting'),
-                    // The server always emits the key; [] means "this site has not
-                    // configured welcome elements", which is what makes the widget's
-                    // own TRY ASKING block the visible fallback on the demo page.
-                    actions: [],
+                    // A site that HAS configured welcome elements — the interesting
+                    // case, and the one [] could not reach. Since 2.4.1 these render
+                    // alongside the widget's own TRY ASKING block rather than instead
+                    // of it, so shipping a non-empty array is what exercises both
+                    // halves of showWelcome() on the demo page.
+                    actions: [islandChips()],
                     contract_version: '1.4.1'
                 }, 700);
             },
@@ -615,14 +635,7 @@
                 if (q.indexOf('hostel') !== -1) {
                     return reply(done, 200, {
                         reply: 'Which island are you going to?',
-                        actions: [{
-                            type: 'quick_replies',
-                            items: [
-                                { label: 'Tenerife', message: 'Tenerife' },
-                                { label: 'Gran Canaria', message: 'Gran Canaria' },
-                                { label: 'Ibiza', message: 'Ibiza' }
-                            ]
-                        }],
+                        actions: [islandChips()],
                         turn: turn
                     });
                 }
@@ -949,10 +962,12 @@
             optionButtons: optionButtons, badge: badge, subline: subline, expand: expandBtn,
             unread: unread, teaser: teaser, teaserBody: teaserBody, teaserClose: teaserClose,
             announcer: announcer, disclaimer: disclaimer,
-            // The welcome block is built later, by the intro, and removed for good
+            // The welcome wrapper is built later, by the intro, and removed whole
             // on the first guest turn — declared here so every reader of els sees
-            // the whole surface in one place.
-            prompts: null, promptsLabel: null, promptButtons: null
+            // the surface in one place. The two prompt handles are the pack block
+            // inside it, which setLocale() repaints; the server chips sharing the
+            // wrapper deliberately get no handle, because nothing may repaint them.
+            welcome: null, promptsLabel: null, promptButtons: null
         };
     }
 
@@ -1225,8 +1240,17 @@
      *
      * Labels are payload strings — server-authored and already server-localized —
      * so they go through el()/textContent and never through t().
+     *
+     * `parent` is passed by ONE caller, showWelcome(), which needs its row inside
+     * the single wrapper removeWelcome() takes away on the first guest turn.
+     * Everything else arrives through renderAction() with no parent and lands in
+     * .nc-body — where the welcome sweep structurally cannot reach it, which is
+     * what keeps a mid-conversation chip row standing as transcript content. The
+     * argument deliberately stops here rather than being threaded through
+     * renderActions()/renderAction(): that switch is the file's documented
+     * extension seam and the whole regression gate runs through it.
      */
-    function renderQuickReplies(action) {
+    function renderQuickReplies(action, parent) {
         if (!action.items || !action.items.length) { return; }
 
         var row = el('div', 'nc-chip-row');
@@ -1250,7 +1274,7 @@
         // Every item skipped ⇒ no row: an empty flex box would still eat its gap
         // and leave a phantom indent under the bubble.
         if (!row.childNodes.length) { return; }
-        els.body.appendChild(row);
+        (parent || els.body).appendChild(row);
         scrollDown();
     }
 
@@ -1735,7 +1759,7 @@
      * The poll re-typing a bubble announces the final text again, superseding the
      * interim announcement — wanted, and free, since the announcer holds one node.
      */
-    function typeText(node, text, done) {
+    function typeText(node, text) {
         var token = (node.ncTypeToken || 0) + 1;
         node.ncTypeToken = token;
 
@@ -1751,14 +1775,12 @@
         // rule stops that animation — the class on a node that never streams
         // would park a rectangle after the text forever. Removing it as well
         // covers the poll re-typing a bubble whose first pass was mid-stream when
-        // the preference flipped. `done` still fires: the welcome block hangs off
-        // it, and a reduced-motion guest must not lose it.
+        // the preference flipped.
         var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (reduced) {
             node.classList.remove('nc-typing');
             node.textContent = full;
             scrollDown();
-            if (done) { done(); }
             return;
         }
 
@@ -1775,7 +1797,6 @@
             if (i >= chars.length) {
                 node.classList.remove('nc-typing');
                 scrollDown();
-                if (done) { done(); }
                 return;
             }
             textNode.appendData(chars[i]);
@@ -1848,42 +1869,90 @@
 
             requestAnimationFrame(function () {
                 wrap.classList.add('nc-visible');
-                // The welcome block hangs off the typer's completion so it lands
-                // under a finished greeting, never beside a half-typed one.
-                // typeText fires `done` on both of its paths — a reduced-motion
-                // guest gets this callback synchronously, from inside the call
-                // below, which is why it reads only `wrap` and module state and
-                // nothing assigned after this line.
-                typeText(text, intro.greeting, function () {
-                    if (removed || guestTurned) { return; }
-                    if (intro.actions) {
-                        // The server owns the welcome when it configured one, so its
-                        // elements REPLACE the pack-string block rather than joining it.
-                        // They are also transcript content — elements on the greeting
-                        // behave like elements on any other reply — so removePrompts()
-                        // must never reach them: els.prompts stays null here.
-                        renderActions(intro.actions, text);
-                    } else {
-                        showPrompts(wrap);
-                    }
-                });
+                // The welcome renders as the greeting STARTS typing, not when it
+                // finishes. Hanging it off the typer's completion cost the guest
+                // ~1.7s of dead wait on top of an already ~4.2s branded intro, and
+                // put the whole block behind a callback that had to fire identically
+                // down two motion paths — streaming and reduced-motion — to exist at
+                // all. Showing the options while the greeting is still being read is
+                // the precedent sendMessage() has always set: a reply's actions[]
+                // render under a bubble that is still typing.
+                //
+                // Guarded because both states can already be true at this point: the
+                // composer is live all through the intro, so an impatient guest may
+                // have sent a turn, and a 403 may have torn the widget down.
+                if (!removed && !guestTurned) { showWelcome(wrap); }
+                typeText(text, intro.greeting);
             });
         }, 900);
     }
 
     /* ------------------------------------------------------ the welcome block */
     /*
-     * Two suggested openers under the greeting. They are PACK STRINGS, cached in
-     * the widget rather than fetched: the welcome state is the one moment the
-     * guest is watching a spinner, and it must not cost a second round trip.
+     * What sits under the greeting before the guest has said anything: whatever
+     * welcome elements the site configured on the init response, and two
+     * suggested openers of the widget's own. BOTH, never one or the other — a
+     * server chip row answers a question the server asked, the pack block offers
+     * somewhere to start, and the server has no way to send the second. (What it
+     * cannot send is a line of text above its own chips; see the open point in
+     * docs/proposals/response-contract-phase2-elements.md.)
+     *
+     * The pack strings are cached in the widget rather than fetched: the welcome
+     * state is the one moment the guest is watching a spinner, and it must not
+     * cost a second round trip.
      */
 
     var PROMPT_KEYS = ['prompt1', 'prompt2'];
 
     /**
-     * Inserted after the greeting, never appended to .nc-body: the composer is
-     * live all through the intro, so appending would file the block behind an
-     * impatient guest's own bubble.
+     * One wrapper holding both blocks, inserted after the greeting as a sibling
+     * inside .nc-body — never nested in the greeting bubble. followsBotMessage()
+     * reads els.body.lastElementChild, and a welcome tucked inside the greeting
+     * would leave that bubble last, costing the next reply its avatar.
+     *
+     * Inserted after the greeting rather than appended: the composer is live all
+     * through the intro, so appending would file the block behind an impatient
+     * guest's own bubble.
+     *
+     * The server's elements are PARTITIONED by type, not rendered wholesale. A
+     * quick_replies row is a first-contact affordance and belongs in the wrapper,
+     * which goes on the first guest turn — the contract calls a chip row
+     * one-shot. Everything else a site configures (a promo, a link) is transcript
+     * content and goes into .nc-body through the ordinary seam, where the sweep
+     * cannot reach it: a tenant's init promo must not vanish the moment the guest
+     * types.
+     *
+     * `null` as renderActions' bubble argument, never the greeting's own .nc-text:
+     * an init async_result handed that node would retype the poll's answer OVER
+     * the greeting. With null, pollResult opens a bubble of its own.
+     */
+    function showWelcome(after) {
+        var welcome = el('div', 'nc-welcome');
+
+        var actions = intro.actions || [];
+        var rest = [];
+        for (var i = 0; i < actions.length; i++) {
+            if (actions[i] && actions[i].type === 'quick_replies') {
+                renderQuickReplies(actions[i], welcome);
+            } else {
+                rest.push(actions[i]);
+            }
+        }
+
+        // Server chips first, the pack block second. A "TRY ASKING" label above
+        // "Tenerife" would assert that an island name is a thing to try asking,
+        // when it is an answer to a question the server asked. A judgement call,
+        // and one line to swap if a real site's chips ever read the other way.
+        showPrompts(welcome);
+
+        after.parentNode.insertBefore(welcome, after.nextSibling);
+        renderActions(rest, null);
+        els.welcome = welcome;
+        scrollDown();
+    }
+
+    /**
+     * The widget's own two openers, appended into the welcome wrapper.
      *
      * Labels are resolved at CLICK time, not here. A guest who switches language
      * between reading the pill and tapping it must send the sentence they can
@@ -1892,7 +1961,7 @@
      * Nothing here announces: this is interactive chrome reached by Tab, and the
      * announcer exists for replies the eye may miss, not for buttons.
      */
-    function showPrompts(after) {
+    function showPrompts(welcome) {
         var prompts = el('div', 'nc-prompts');
         var label = el('span', 'nc-prompts-label', t('tryAsking'));
         prompts.appendChild(label);
@@ -1906,28 +1975,30 @@
             buttons.push(button);
         });
 
-        after.parentNode.insertBefore(prompts, after.nextSibling);
-        els.prompts = prompts;
+        welcome.appendChild(prompts);
         els.promptsLabel = label;
         els.promptButtons = buttons;
-        scrollDown();
     }
 
     // Null-safe and idempotent: it runs on every guest turn, and only the first
-    // one has anything to remove.
-    function removePrompts() {
-        if (els.prompts && els.prompts.parentNode) {
+    // one has anything to remove. ONE wrapper, so the server's chip row leaves
+    // with the pack block and a single focus rescue covers both. Before 2.4.1 a
+    // welcome chip row had no handle at all: it stood above the transcript for the
+    // rest of the conversation, against the contract's one-shot rule for chips.
+    function removeWelcome() {
+        if (els.welcome && els.welcome.parentNode) {
             // Never strand keyboard focus on a node about to vanish — the same
             // rule hideTeaser() and the carousel's rescueFocus() state. A guest
-            // who activates a pill with the keyboard is standing ON the node this
-            // line removes, and the browser answers a removed activeElement by
-            // resetting focus to <body>: the next Tab would restart from the top
-            // of the HOST page. The composer is where their next turn goes
-            // anyway, so it is the landing spot as well as the rescue.
-            if (els.prompts.contains(document.activeElement)) { els.input.focus(); }
-            els.prompts.parentNode.removeChild(els.prompts);
+            // who activates a pill or a chip with the keyboard is standing ON the
+            // node this line removes, and the browser answers a removed
+            // activeElement by resetting focus to <body>: the next Tab would
+            // restart from the top of the HOST page. The composer is where their
+            // next turn goes anyway, so it is the landing spot as well as the
+            // rescue.
+            if (els.welcome.contains(document.activeElement)) { els.input.focus(); }
+            els.welcome.parentNode.removeChild(els.welcome);
         }
-        els.prompts = null;
+        els.welcome = null;
         els.promptsLabel = null;
         els.promptButtons = null;
     }
@@ -2156,9 +2227,11 @@
                 checkContractVersion(body.contract_version);
                 intro.greeting = body.greeting || t('greeting');
                 // A site can attach welcome elements to the greeting — same request,
-                // zero extra network. Absent on older servers and [] when the site has
-                // not configured any, and both mean the same thing here: fall back to
-                // the widget's own prompt block.
+                // zero extra network. Absent on older servers, [] when the site has
+                // configured none, and neither is a fallback for anything: since
+                // 2.4.1 showWelcome() renders whatever lands here ALONGSIDE the
+                // widget's own prompt block rather than instead of it, so the empty
+                // cases simply contribute nothing.
                 intro.actions = (body.actions && body.actions.length) ? body.actions : null;
             } else {
                 // Never strand the guest behind a failed init — greet them anyway
@@ -2187,7 +2260,7 @@
     function sendGuestText(text) {
         if (busy || removed) { return; }
         guestTurned = true;
-        removePrompts();
+        removeWelcome();
         addBubble('guest', text);                     // textContent — a typed <img> stays text
         ensureConversation(function () { sendMessage(text, false); });
     }
@@ -2413,11 +2486,14 @@
         els.badge.textContent = t('aiAssistant');
         els.subline.textContent = t('subline');
         els.disclaimer.textContent = t('disclaimer');
-        // Only while the widget's OWN welcome block is on screen — after the first
+        // Only while the widget's OWN pack block is on screen — after the first
         // turn there is nothing to repaint, and the click handlers read their label
-        // fresh anyway. Guarded on promptsLabel, not prompts: those are the fields
-        // this branch actually dereferences, and server-rendered welcome chips are
-        // payload strings that must never be repainted from a pack.
+        // fresh anyway. Guarded on promptsLabel, not els.welcome: those are the
+        // fields this branch actually dereferences, and the server chips sharing
+        // that wrapper are payload strings that must never be repainted from a
+        // pack. A language switch therefore relabels the pills and leaves the chips
+        // in the language the server sent them — correct, and newly visible now
+        // that both blocks show at once.
         if (els.promptsLabel) {
             els.promptsLabel.textContent = t('tryAsking');
             PROMPT_KEYS.forEach(function (key, i) {

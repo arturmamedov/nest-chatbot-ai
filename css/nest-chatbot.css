@@ -661,6 +661,26 @@
 
 /* ------------------------------------------------------------- welcome prompts */
 
+/* One wrapper for the whole welcome state — the site's own chip row above the
+   widget's TRY ASKING block — so removeWelcome() takes both away together on the
+   first guest turn and one focus rescue covers both.
+
+   It carries NO padding-left of its own: .nc-prompts and .nc-chip-row each state
+   the 41px indent themselves, so a chip row renders identically here and in the
+   transcript. Adding it here would double the indent for both. */
+#nest-chatbot .nc-welcome {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    /* An animation and not a transition, because the wrapper is inserted and
+       animated in the same frame: an animation starts from its own `from`
+       keyframe with no style flush, where a transition would need the node to
+       have been painted in its start state first. It reuses the message enter
+       effect with a short delay and `both`, so the block settles just behind the
+       greeting it belongs to rather than reading as having arrived before it. */
+    animation: nc-msg-in 240ms var(--nc-ease) 120ms both;
+}
+
 /* The suggested openers sit under the greeting on the same left edge its bubble
    has — the 41px is the avatar + gap indent .nc-message--follow uses, so the
    block reads as a continuation of the greeting rather than a new speaker.
@@ -1690,6 +1710,7 @@
     #nest-chatbot .nc-progress.nc-pulse,
     #nest-chatbot .nc-dot,
     #nest-chatbot .nc-message:not(.nc-greeting),
+    #nest-chatbot .nc-welcome,
     #nest-chatbot .nc-text.nc-typing::after {
         animation: none;
     }
