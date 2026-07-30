@@ -565,6 +565,24 @@
     scrollbar-color: #a4fafc transparent;
 }
 
+/* Nothing in the transcript is shrink-protected by design, and it needs to be.
+   This box has a definite height smaller than its content — that is what makes
+   it scroll — so negative free space is its NORMAL state and every child
+   arrives at the default flex-shrink: 1. The text rows survive only by
+   accident of their automatic minimum size being content-based; any child that
+   is a scroll container (`overflow` anything but visible) has an automatic
+   minimum of 0 instead and gets crushed to its padding. That is what flattened
+   .nc-promo, and .nc-carousel is one `overflow: hidden` away from the same
+   bug. The `clip` on the promo cures that instance; this closes the class, and
+   covers engines that do not know the keyword.
+
+   flex-shrink alone — NEVER `flex: none` or `flex: 0 0 auto`. The shorthand
+   resets flex-grow too, and .nc-loader's flex-grow: 1 is the only thing
+   centring the intro progress ring. */
+#nest-chatbot .nc-body > * {
+    flex-shrink: 0;
+}
+
 #nest-chatbot .nc-message {
     display: flex;
     gap: 9px;
@@ -1066,8 +1084,22 @@
     gap: 8px;
     border-radius: 14px;
     /* The image band bleeds to the top corners under this — without it the
-       photo paints square over the radius, same reason .nc-card sets it. */
+       photo paints square over the radius, same reason .nc-card sets it.
+
+       PAIRED on purpose — do not tidy the two lines into one. `overflow:
+       hidden` makes this card a SCROLL container, and per the flexbox spec a
+       scroll container's automatic minimum size is 0 rather than its content.
+       As a flex item in the column .nc-body — definite height, content larger
+       than it by design, every child at the default flex-shrink: 1 — the promo
+       was therefore the one item that could absorb ALL of the negative free
+       space, and it did: 26px of its own padding around a 0px content box.
+       `clip` clips at the same padding edge and honours border-radius
+       identically, but a clip container is not a scroll container, so the
+       zero-minimum rule never reaches it. An engine that does not know the
+       keyword keeps the `hidden` line it already parsed — the same paired
+       shape the 100dvh fallbacks below use. */
     overflow: hidden;
+    overflow: clip;
     padding: 13px 14px;
     background: var(--nc-surface-alt);
     /* A ring, not a layout border: it paints outside the box the way
@@ -1078,6 +1110,12 @@
 
 #nest-chatbot .nc-promo-image {
     display: block;
+    /* Consistency with .nc-card-photo, which states the same thing — not a fix
+       for anything visible today. The promo sizes to its own content, so there
+       is no negative free space inside it to squeeze this band; stating it
+       means a future height on the card cannot silently shave the image
+       instead of the text. */
+    flex-shrink: 0;
     /* Full-bleed top band: cancels the card's own padding on three sides so
        the photo runs edge to edge, then the column gap resumes normal
        spacing under it. Negative margins have to match the padding above
