@@ -5,6 +5,82 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.4.1 — 2026-07-30
+
+A patch: one rendering defect and one restructure of the welcome state. No new config
+attribute, no new i18n key, no new element type, no transport change — per the repo's own rule
+little changes stay a patch even when they touch behaviour. `BUILT_AGAINST` stays **1.4.1**.
+**No expand/shrink behaviour changed**: `expandPanel`, `shrinkPanel`, `maybeAutoExpand`,
+`resyncCarousels`, both size flags, the ⤢ wiring and every rule inside
+`@media (min-width: 1024px)` are untouched.
+
+- **The promo card stopped collapsing to a 26px sliver.** `overflow: hidden` made `.nc-promo` a
+  **scroll container**, and per the flexbox spec a scroll container's automatic minimum size is
+  **0** rather than its content. `.nc-body` is a column flex box with a definite height smaller
+  than its content — that is what makes it scroll — so negative free space is its *normal*
+  state and every child sits at the default `flex-shrink: 1`. The text rows survive only
+  because their automatic minimum is content-based; the promo was the one item that could
+  absorb the whole shortfall, and it did, down to 26px of its own padding around a **0px
+  content box**. That is why a sliver of the title showed and the body and CTA did not. Two
+  parts, both required. `overflow: clip` clips at the same padding edge and honours
+  `border-radius` identically but is **not** a scroll container, so the zero-minimum rule never
+  applies; it is paired with the `hidden` line it replaces, the same shape the `100dvh`
+  fallbacks use, and the comment says so because the pair reads like something to tidy. A
+  `#nest-chatbot .nc-body > * { flex-shrink: 0 }` guard closes the *class* rather than the
+  instance — `.nc-carousel` is one `overflow: hidden` away from the identical bug — and covers
+  engines without `clip`. **It is `flex-shrink` alone and never the `flex` shorthand**:
+  `flex: none` would reset `.nc-loader`'s `flex-grow: 1`, the only thing centring the intro
+  progress ring. Measured after: 132px at the 420px floating panel, 114px at the 670px sheet,
+  132px at 390×844, `offsetHeight === scrollHeight` and the CTA inside the card at all three,
+  with the loader still at `flex-grow: 1` and its ring 0px off the body's centre.
+  `.nc-promo-image` also gained the `flex-shrink: 0` its `.nc-card-photo` counterpart already
+  states — consistency, not a defect fix; it is inert today.
+- **The welcome state renders both blocks, sooner, and leaves as one.** It used to hang off
+  `typeText`'s `done` callback, which arrived ~1.7s after the greeting finished typing on top
+  of an already ~4.2s branded intro, and which made the whole block depend on one callback
+  firing identically down two motion paths. It now renders as the greeting *starts* typing —
+  the precedent `sendMessage()` has always set, where a reply's `actions[]` appear under a
+  bubble still being typed. Measured: **4243ms from the launcher click against a 5809ms
+  baseline, with the greeting 1 character long** at that moment; the character count is the
+  real proof, since a lower time alone could just mean a faster typer. Server init `actions[]`
+  no longer **replace** the widget's prompts — both render, into one `.nc-welcome` wrapper
+  inserted after the greeting as a sibling inside `.nc-body`, never nested in the greeting
+  bubble (`followsBotMessage()` reads `els.body.lastElementChild`, and nesting would cost the
+  next reply its avatar). `showWelcome()` partitions the server's elements by type: a
+  `quick_replies` row joins the wrapper, everything else goes into `.nc-body` through the
+  ordinary `renderActions()` seam, where the first-turn sweep structurally cannot reach it —
+  a tenant's init promo must not vanish the moment the guest types, and the contract makes only
+  the chip row one-shot. `renderQuickReplies()` takes an optional `parent` passed by that one
+  caller and deliberately **not** threaded through `renderActions()`/`renderAction()`, which is
+  the file's documented extension seam. `removePrompts()` became `removeWelcome()` and removes
+  the single wrapper, so both blocks go together under the existing focus rescue — which now
+  covers the chips, where before a welcome chip row had no handle at all and would have stood
+  above the transcript for the rest of the conversation. `typeText`'s `done` parameter had zero
+  callers left and is gone.
+- **The mock carries the island chips at init.** `Mock.init` returns `actions: [islandChips()]`
+  — the configured-site case an empty array could never reach — from a factory the `hostel`
+  fixture now shares, so that keyword regression-tests a byte-identical payload. Order in the
+  wrapper is server chips first, pack block second: a "TRY ASKING" label above "Tenerife" would
+  assert an island name is a thing to try asking, when it is an answer to a question the server
+  asked. A judgement call, and one line to swap.
+- **Known gap: a `quick_replies` row cannot say what it is asking.** The element carries only
+  `items[]`, the init envelope carries only `greeting`, and there is no text element type — so
+  the demo now reads greeting → bare `Tenerife` / `Gran Canaria` / `Ibiza` → `TRY ASKING` + two
+  pills, with nothing on screen saying what the chips answer. That is the direct, intended cost
+  of server-driven chips with no text element; an optional element-level `heading` is requested
+  in `docs/proposals/response-contract-phase2-elements.md`. Two related consequences worth
+  knowing: on a real 1.5.0 server a site that configures `chatbot.quick_prompts` gets its
+  prompts **plus** the widget's two hardcoded pills (harmless today, no site is configured, and
+  the demo cannot reveal it because its chips are island names rather than prompts); and a
+  language switch now visibly relabels the pack pills while leaving the server chip labels in
+  the init language — correct, since the widget must never translate payload, but newly visible
+  with both blocks on screen at once.
+- **`CLAUDE.md` documents the two panel-size flags.** No behaviour changed — `⤢` then `⤡` still
+  writes `nest-chatbot:user-shrank` to `localStorage` and nothing ever clears it, so expanding
+  the sheet once to look at it and collapsing it again disables auto-expand in that browser for
+  good. That is working as specified and surprising rather than wrong, so the local-development
+  section now names both keys, what sets and clears each, and the one-liner that resets them.
+
 ## 2.4.0 — 2026-07-29
 
 Phase 2 of the redesign (options 2B/2C/2D in the design handoff under `plans/`): the panel

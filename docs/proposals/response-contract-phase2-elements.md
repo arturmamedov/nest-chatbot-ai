@@ -129,11 +129,24 @@ extra network cost — the widget already makes this request and has nowhere els
 The server always emits the key (`[]` when the site has configured nothing); the contract
 documents it as optional, because older servers omit it entirely.
 
-**Precedence, as implemented:** a non-empty `actions[]` is rendered after the greeting and the
-widget **skips** its own cached suggestion block — the server owns the welcome when it has
-one. The widget's built-in prompts are the fallback only (unconfigured sites, older servers,
-mock mode, and any `actions: []`). Server-supplied welcome elements are transcript content:
-they behave exactly like elements on any other reply and survive the first guest turn.
+**Precedence, as implemented in 2.4.0:** a non-empty `actions[]` is rendered after the greeting
+and the widget **skips** its own cached suggestion block — the server owns the welcome when it
+has one. The widget's built-in prompts are the fallback only (unconfigured sites, older
+servers, mock mode, and any `actions: []`). Server-supplied welcome elements are transcript
+content: they behave exactly like elements on any other reply and survive the first guest turn.
+
+**Changed in 2.4.1 — there is no precedence any more.** Both render: the server's elements *and*
+the widget's own prompt block, in that order. Two reasons. The blocks are not substitutes — a
+chip row answers a question the server asked, the prompt block offers somewhere to start — and
+the server has no way to send the second. And a `quick_replies` element cannot carry a line of
+text saying what it is asking (open point 9), so treating it as a complete welcome left the
+guest with unlabelled chips and nothing else. The widget also now **partitions** the array by
+type rather than rendering it wholesale: a `quick_replies` row joins the one-shot welcome
+wrapper and goes on the first guest turn, while every other element stays transcript content
+and survives it, exactly as this section originally described. The consequence worth flagging
+back: a site that has configured `chatbot.quick_prompts` now gets its own prompts *plus* the
+widget's two built-in pills. Open point 9's `heading` field is what would let the widget drop
+its own block when the server has sent a labelled one.
 
 ## Widget-side degradation rules (2.4.0, all three types)
 
@@ -189,15 +202,19 @@ implements.
    and never will by accident: its CTA trio deliberately uses three different urls, so the
    fixture is not a regression test for it. Not a contract change — a widget gap, **owned by
    the 2.5.0 contract sync**, alongside a fixture whose `link_button` url matches a card's.
-7. **`quick_replies` is not one-shot here, and the contract now says it should be.** The
-   shipped text calls a chip row *"one-shot by convention: remove (or disable) the row once a
-   chip is tapped or the guest types instead"*. 2.4.0 deliberately keeps chip rows standing:
-   they were treated as transcript content, on the same reasoning that keeps a rendered
-   `link_button` in place after it is followed. The contract contradicts that, and the contract
-   wins — **owned by the 2.5.0 contract sync**. One warning for whoever implements it: removing
-   a row the guest has just activated with the keyboard removes the node holding
+7. **`quick_replies` is one-shot in the welcome as of 2.4.1; mid-transcript rows still are
+   not.** The shipped text calls a chip row *"one-shot by convention: remove (or disable) the
+   row once a chip is tapped or the guest types instead"*. 2.4.0 kept every chip row standing,
+   treating them as transcript content on the same reasoning that keeps a rendered
+   `link_button` in place after it is followed. 2.4.1 closes half of that: a row rendered into
+   the **welcome block** now lives inside the single `.nc-welcome` wrapper that
+   `removeWelcome()` takes away on the first guest turn, so an init chip row is one-shot and
+   leaves under the same focus rescue as the widget's own prompt pills. A row a **reply**
+   carries mid-conversation is still not one-shot — it is appended to `.nc-body` and stays.
+   Closing that half is **owned by the 2.5.0 contract sync**. The warning stands for whoever
+   does: removing a row the guest has just activated with the keyboard removes the node holding
    `document.activeElement`, which resets focus to the host page's `<body>`. It needs the same
-   focus rescue `removePrompts()` carries, for exactly the same reason. Disabling the row
+   focus rescue `removeWelcome()` carries, for exactly the same reason. Disabling the row
    instead of removing it sidesteps the whole problem and is worth considering.
 8. **Not a contract question, recorded so it is not lost: the CDN must send
    `Access-Control-Allow-Origin` on `fonts/`.** Since 2.4.0 the widget self-hosts its WOFF2
@@ -205,3 +222,18 @@ implements.
    though the stylesheet beside it is not. Without the header every host page falls back to
    the system font stack; the widget keeps working and nothing on screen flags it, so the only
    trace is the browser's own CORS error in devtools.
+9. **A `quick_replies` row cannot say what it is asking, and at init that is a real gap.** The
+   element carries only `items[]`. The init envelope carries only `greeting` and `actions[]`,
+   and there is no text element type in the contract — so a server that sends island chips as
+   welcome elements has **no way to send "Which island are you going to?" with them**. On a
+   turn the reply string supplies that line for free; at init the greeting is already spent
+   introducing the assistant. What 2.4.1 puts on screen is three unlabelled chips under a
+   greeting that does not mention them. Requested: an optional element-level `heading` on
+   `quick_replies` — server-localized, tenant-authored, reaching the DOM via `textContent` like
+   every other payload string, rendered above the row and simply absent when omitted.
+   `promo_card` already carries exactly that kind of string in its `title`, so this asks for
+   nothing new in kind. It would settle a second thing too: with a `heading` the widget could
+   stop pairing a server row with its own hardcoded "Try asking" block, which on a real 1.5.0
+   server currently means a site configuring `chatbot.quick_prompts` gets its prompts *plus*
+   the widget's two pills. A generic `text` element type would solve this and more, but it is a
+   much larger ask and the widget does not need it.

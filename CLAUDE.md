@@ -230,6 +230,27 @@ are shaped exactly like the real envelope. Drive them from the composer:
 | `!xss` | a hostile reply and a `javascript:` url (both must be inert) |
 | `!410` `!403` `!429` `!500` | forces that status |
 
+### The panel-size flags will confuse you before they confuse a guest
+
+Two flags decide whether the panel offers itself as the wide sheet. Neither is ever cleared by
+the widget, and one of them outlives the tab — so a machine that has been used to *test* the
+expanded sheet has auto-expand switched off, permanently, and nothing on screen says so.
+
+| Key | Store | Written by | Cleared by |
+|---|---|---|---|
+| `nest-chatbot:auto-expanded` | `sessionStorage` | `maybeAutoExpand()`, the once-per-session auto-expand | closing the tab — nothing else |
+| `nest-chatbot:user-shrank` | `localStorage` | `shrinkPanel(true)`, i.e. the guest pressing ⤡ | **nothing, ever** |
+
+⤢/⤡ is a single toggle, so expanding the sheet to look at it and collapsing it again *is*
+`shrinkPanel(true)` and writes the permanent flag. `maybeAutoExpand()` then reads it as a
+stated preference and never auto-expands in that browser again. This is working as specified —
+a guest who has pulled the sheet back in once has said something — it is just far easier to
+trip during development than in a guest's session. Reset both from the console:
+
+```js
+localStorage.removeItem('nest-chatbot:user-shrank'); sessionStorage.removeItem('nest-chatbot:auto-expanded');
+```
+
 The realistic test is serving the widget and the host page from **different origins** — that is
 what a customer hits. Run a second static server on another port with a page that points its
 `src` at 5501.
