@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Poppins:wght@500;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; }
+  body { margin:0; background:#eef2f3; font-family:"Montserrat",sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#0D6F82; text-decoration:none; }
+  a:hover { color:#53CED1; }
+  @keyframes dotPulse { 0%,44%{transform:translateY(0)} 28%{opacity:.4;transform:translateY(-4px)} 44%{opacity:.2} }
+</style>
+</helmet>
+
+<section style="padding:56px 56px 40px;display:flex;flex-direction:column;gap:36px;color:#0f2b33;background:#fff;border-bottom:1px solid #dfe8ea">
+  <div style="display:flex;flex-direction:column;gap:10px;max-width:900px">
+    <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:34px;line-height:1.15;letter-spacing:-.01em">The merged build — what Claude Code implements</div>
+    <div style="font-size:15px;line-height:1.6;color:#3c5b64;text-wrap:pretty">Your picks, assembled: <a href="#2a">2a</a> launcher (1D puck + 1B teaser), <a href="#2b">2b</a> welcome prompts with today's footer language row untouched, <a href="#2c">2c</a> hostel carousel + Nest Pass + 1A contact buttons, <a href="#2d">2d</a> the compact → side-panel expansion. Phase 3 is <a href="#1d">1d</a> unchanged.</div>
+  </div>
+
+  <div style="display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap">
+
+    <div id="2a" style="width:470px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.08em;background:#0D6F82;color:#fff;padding:5px 10px;border-radius:999px">2A</span>
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:17px">Phase 1 — launcher &amp; teaser</span>
+      </div>
+      <div style="font-size:13.5px;line-height:1.6;color:#3c5b64;text-wrap:pretty">1D's white avatar puck with a teal ring and a plain orange dot, plus 1B's self-dismissing teaser. Nothing else changes in this phase — same panel, same footer.</div>
+      <div style="background:#F1F6F7;border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">STATE 1 — IDLE, UNREAD DOT</div>
+        <div style="height:110px;background:#fff;border-radius:12px;position:relative;overflow:hidden;box-shadow:0 0 0 1px #E6EDEE">
+          <div style="position:absolute;right:24px;bottom:22px;height:60px;width:60px;border-radius:50%;background:#fff;box-shadow:0 10px 26px -8px rgba(13,111,130,.45);display:flex;align-items:center;justify-content:center;border:2px solid #53CED1">
+            <img src="img/logotipo-nests-tenerife.png" alt="" style="width:34px;height:34px">
+            <div style="position:absolute;top:0;right:0;width:14px;height:14px;border-radius:50%;background:#EA580C;border:2px solid #fff"></div>
+          </div>
+        </div>
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">STATE 2 — TEASER (8s IDLE → AUTO-HIDES AFTER 6s)</div>
+        <div style="height:160px;background:#fff;border-radius:12px;position:relative;overflow:hidden;box-shadow:0 0 0 1px #E6EDEE">
+          <div style="position:absolute;right:24px;bottom:94px;display:flex;align-items:center;gap:8px;background:#fff;padding:10px 12px;border-radius:14px 14px 4px 14px;box-shadow:0 10px 24px -12px rgba(13,111,130,.5),0 0 0 1px #E6EDEE;max-width:250px">
+            <div style="font-size:12.5px;line-height:1.45;color:#12333c">Need a hand picking your Nest?</div>
+            <div style="width:18px;height:18px;border-radius:50%;background:#F1F6F7;color:#7b939a;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</div>
+          </div>
+          <div style="position:absolute;right:24px;bottom:22px;height:60px;width:60px;border-radius:50%;background:#fff;box-shadow:0 10px 26px -8px rgba(13,111,130,.45);display:flex;align-items:center;justify-content:center;border:2px solid #53CED1">
+            <img src="img/logotipo-nests-tenerife.png" alt="" style="width:34px;height:34px">
+            <div style="position:absolute;top:0;right:0;width:14px;height:14px;border-radius:50%;background:#EA580C;border:2px solid #fff"></div>
+          </div>
+        </div>
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">STATE 3 — OPENED ONCE: DOT CLEARED, NO TEASER AGAIN</div>
+        <div style="height:110px;background:#fff;border-radius:12px;position:relative;overflow:hidden;box-shadow:0 0 0 1px #E6EDEE">
+          <div style="position:absolute;right:24px;bottom:22px;height:60px;width:60px;border-radius:50%;background:#fff;box-shadow:0 10px 26px -8px rgba(13,111,130,.45);display:flex;align-items:center;justify-content:center;border:2px solid #53CED1">
+            <img src="img/logotipo-nests-tenerife.png" alt="" style="width:34px;height:34px">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="2b" style="width:470px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.08em;background:#0D6F82;color:#fff;padding:5px 10px;border-radius:999px">2B</span>
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:17px">Phase 2 — welcome &amp; prompts</span>
+      </div>
+      <div style="font-size:13.5px;line-height:1.6;color:#3c5b64;text-wrap:pretty">1B's prompt pills and Nests type, on top of the header and footer you have today — the flag circle stays exactly where it is, in the footer, left of the input.</div>
+      <div style="background:#F1F6F7;border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:14px">
+        <div style="width:420px;border-radius:15px;overflow:hidden;background:#ececec;box-shadow:0 24px 60px -30px rgba(13,111,130,.55)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px 15px;background:#53CED1">
+            <div style="display:flex;gap:10px;align-items:center">
+              <img src="img/Ibiza-a21caf.png" alt="Nest" style="width:44px;height:44px;border-radius:50%;flex-shrink:0">
+              <div style="display:flex;flex-direction:column;gap:2px;margin-left:6px">
+                <div style="display:flex;align-items:center;gap:7px"><span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:19px;color:#fff;letter-spacing:.02rem;line-height:1.2">Germán</span><span style="font-size:9.5px;font-weight:600;letter-spacing:.06em;color:#fff;background:#0D6F82;padding:2px 6px;border-radius:4px">AI ASSISTANT</span></div>
+                <div style="font-size:12px;color:#0a5766;line-height:1.3">Nests Hostels · replies in seconds</div>
+              </div>
+            </div>
+            <div style="height:30px;padding:0 9px;border-radius:8px;display:flex;align-items:center;gap:5px;color:#fff;font-size:12px;font-weight:500;background:rgba(255,255,255,.22)">Hide ⌄</div>
+          </div>
+          <div style="background:#fff;padding:16px;min-height:400px;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;gap:9px;align-items:flex-end;flex-shrink:0">
+              <div style="width:32px;height:32px;border-radius:50%;background:#e3f4f5;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:21px;height:21px"></div>
+              <div style="padding:12px 15px;max-width:82%;font-size:14px;line-height:1.5;background:#F1F6F7;border-radius:16px 16px 16px 4px;color:#12333c;text-wrap:pretty">Hi! I'm Germán, the Nests AI assistant. Your travel community in the Canaries &amp; Ibiza — 14 hostels · 3 islands · 1 Nest Pass.</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;padding-left:41px;flex-shrink:0">
+              <div style="font-size:10.5px;font-weight:600;letter-spacing:.08em;color:#7b939a">TRY ASKING</div>
+              <div style="display:flex;flex-direction:column;gap:7px;align-items:flex-start">
+                <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:9px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);background:#fff">Which hostel fits me best?</div>
+                <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:9px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);background:#fff">How does the Nest Pass work?</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:9px;align-items:flex-end;flex-shrink:0;margin-top:2px">
+              <div style="width:32px;height:32px;border-radius:50%;background:#e3f4f5;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:21px;height:21px"></div>
+              <div style="padding:12px 15px;max-width:82%;font-size:14px;line-height:1.5;background:#F1F6F7;border-radius:16px 16px 16px 4px;color:#12333c">Which island are you going to?</div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;padding-left:41px;flex-shrink:0">
+              <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:9px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);background:#fff">Tenerife</div>
+              <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:9px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);background:#fff">Gran Canaria</div>
+              <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:9px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);background:#fff">Ibiza</div>
+            </div>
+          </div>
+          <div style="background:#ececec;padding:15px;display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="height:35px;width:35px;border-radius:50%;background:#fff;box-shadow:0 0 8px rgba(0,0,0,.06);outline:1px solid #CCCCE5;overflow:hidden;flex-shrink:0;position:relative"><img src="https://flagsapi.com/GB/flat/64.png" alt="English" style="width:40px;height:57px;position:absolute;top:-11px;left:-2px;max-width:unset"></div>
+              <div style="flex-grow:1;display:flex;align-items:center;background:#fff;border-radius:32px;outline:1px solid #CCCCE5;box-shadow:0 0 8px rgba(0,0,0,.06)">
+                <div style="flex:1;height:49px;padding:14px 0 12px 18px;font-size:.95rem;color:#8b8b9c">Ask Germán anything…</div>
+                <div style="display:flex;align-items:center;height:49px;padding-right:6px"><div style="height:35px;width:35px;border-radius:50%;background:#0D6F82;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.05rem">➤</div></div>
+              </div>
+            </div>
+            <div style="font-size:10.5px;color:#7b939a;text-align:center">AI answers — double-check important</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="2c" style="width:470px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.08em;background:#0D6F82;color:#fff;padding:5px 10px;border-radius:999px">2C</span>
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:17px">Phase 2 — carousel, Nest Pass, contacts</span>
+      </div>
+      <div style="font-size:13.5px;line-height:1.6;color:#3c5b64;text-wrap:pretty">14 hostels don't fit in a stack, so results scroll horizontally: 190px cards, one peeking, arrows + dots. Contact buttons stay in today's 1A style. Demo-only until the API returns structured results.</div>
+      <div style="background:#F1F6F7;border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:14px">
+        <div style="width:420px;border-radius:15px;overflow:hidden;background:#ececec;box-shadow:0 24px 60px -30px rgba(13,111,130,.55)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px 15px;background:#53CED1">
+            <div style="display:flex;gap:10px;align-items:center">
+              <img src="img/Ibiza-a21caf.png" alt="Nest" style="width:44px;height:44px;border-radius:50%;flex-shrink:0">
+              <div style="display:flex;flex-direction:column;gap:2px;margin-left:6px">
+                <div style="display:flex;align-items:center;gap:7px"><span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:19px;color:#fff;letter-spacing:.02rem;line-height:1.2">Germán</span><span style="font-size:9.5px;font-weight:600;letter-spacing:.06em;color:#fff;background:#0D6F82;padding:2px 6px;border-radius:4px">AI ASSISTANT</span></div>
+                <div style="font-size:12px;color:#0a5766;line-height:1.3">Nests Hostels · replies in seconds</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:5px">
+              <div style="height:30px;width:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(255,255,255,.22);font-size:12px">⤢</div>
+              <div style="height:30px;padding:0 9px;border-radius:8px;display:flex;align-items:center;color:#fff;font-size:12px;font-weight:500;background:rgba(255,255,255,.22)">Hide ⌄</div>
+            </div>
+          </div>
+          <div style="background:#fff;padding:16px;min-height:470px;display:flex;flex-direction:column;gap:13px">
+            <div style="display:flex;justify-content:flex-end;flex-shrink:0">
+              <div style="padding:11px 15px;max-width:82%;font-size:14px;line-height:1.5;color:#fff;background:#0D6F82;border-radius:16px 16px 4px 16px">Surf hostel in Tenerife, 5 nights?</div>
+            </div>
+            <div style="display:flex;gap:9px;align-items:flex-end;flex-shrink:0">
+              <div style="width:32px;height:32px;border-radius:50%;background:#e3f4f5;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:21px;height:21px"></div>
+              <div style="padding:12px 15px;max-width:82%;font-size:14px;line-height:1.5;background:#F1F6F7;border-radius:16px 16px 16px 4px;color:#12333c;text-wrap:pretty">Three Nests match — El Médano is the surf one.</div>
+            </div>
+            <div style="flex-shrink:0;display:flex;flex-direction:column;gap:8px">
+              <div style="position:relative;display:flex;gap:10px;overflow:hidden;padding:2px 0">
+                <div style="width:190px;flex-shrink:0;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 6px 18px -8px rgba(13,111,130,.35),0 0 0 1px #E6EDEE">
+                  <div style="height:88px;background:#53CED1;background-image:url('https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/3.jpg');background-size:cover;background-position:center;position:relative"><span style="position:absolute;top:8px;left:8px;font-size:9.5px;font-weight:600;color:#0D6F82;background:rgba(255,255,255,.92);padding:3px 7px;border-radius:5px">Nest Pass</span></div>
+                  <div style="padding:11px;display:flex;flex-direction:column;gap:5px">
+                    <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13.5px;color:#12333c">Medano <span style="color:#53CED1">Nest</span></div>
+                    <div style="font-size:11px;color:#7b939a">Tenerife — El Médano</div>
+                    <div style="font-size:11.5px;color:#12333c">from <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:14px">€22</span>/night</div>
+                    <div style="height:34px;border-radius:10px;background:#EA580C;color:#fff;font-family:'Poppins',sans-serif;font-weight:600;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;justify-content:center">Book now</div>
+                  </div>
+                </div>
+                <div style="width:190px;flex-shrink:0;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 6px 18px -8px rgba(13,111,130,.35),0 0 0 1px #E6EDEE">
+                  <div style="height:88px;background:#53CED1;background-image:url('https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/6.jpg');background-size:cover;background-position:center"></div>
+                  <div style="padding:11px;display:flex;flex-direction:column;gap:5px">
+                    <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13.5px;color:#12333c">Ashavana <span style="color:#53CED1">Nest</span></div>
+                    <div style="font-size:11px;color:#7b939a">Tenerife — El Médano</div>
+                    <div style="font-size:11.5px;color:#12333c">from <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:14px">€24</span>/night</div>
+                    <div style="height:34px;border-radius:10px;background:#EA580C;color:#fff;font-family:'Poppins',sans-serif;font-weight:600;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;justify-content:center">Book now</div>
+                  </div>
+                </div>
+                <div style="position:absolute;right:0;top:0;bottom:0;width:44px;background:linear-gradient(90deg,rgba(255,255,255,0),#fff 70%)"></div>
+                <div style="position:absolute;right:6px;top:34px;height:30px;width:30px;border-radius:50%;background:#fff;box-shadow:0 4px 12px -4px rgba(13,111,130,.5),0 0 0 1px #E6EDEE;color:#0D6F82;font-size:13px;display:flex;align-items:center;justify-content:center">›</div>
+              </div>
+              <div style="display:flex;gap:5px;justify-content:center">
+                <div style="width:16px;height:5px;border-radius:3px;background:#0D6F82"></div>
+                <div style="width:5px;height:5px;border-radius:3px;background:#CBD9DC"></div>
+                <div style="width:5px;height:5px;border-radius:3px;background:#CBD9DC"></div>
+              </div>
+            </div>
+            <div style="flex-shrink:0;border-radius:14px;padding:13px 14px;background:linear-gradient(135deg,#53CED1 0%,#0D6F82 55%,#083344 100%);display:flex;flex-direction:column;gap:8px">
+              <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13.5px;color:#fff">Staying 7+ nights?</div>
+              <div style="font-size:12.5px;line-height:1.5;color:rgba(255,255,255,.82);text-wrap:pretty">The Nest Pass moves with you between Tenerife and Gran Canaria — up to 30% off.</div>
+              <div style="align-self:flex-start;height:32px;padding:0 13px;border-radius:10px;background:#fff;color:#0D6F82;font-size:12px;font-weight:600;display:flex;align-items:center">See Nest Pass →</div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;flex-shrink:0">
+              <div style="font-size:12.5px;padding:7px 12px;border-radius:999px;background:#e3f4f5;color:#0D6F82;font-weight:500">Getting here</div>
+              <div style="font-size:12.5px;padding:7px 12px;border-radius:999px;background:#e3f4f5;color:#0D6F82;font-weight:500">WhatsApp us</div>
+              <div style="font-size:12.5px;padding:7px 12px;border-radius:999px;background:#e3f4f5;color:#0D6F82;font-weight:500">Open map</div>
+            </div>
+          </div>
+          <div style="background:#ececec;padding:15px;display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="height:35px;width:35px;border-radius:50%;background:#fff;box-shadow:0 0 8px rgba(0,0,0,.06);outline:1px solid #CCCCE5;overflow:hidden;flex-shrink:0;position:relative"><img src="https://flagsapi.com/GB/flat/64.png" alt="English" style="width:40px;height:57px;position:absolute;top:-11px;left:-2px;max-width:unset"></div>
+              <div style="flex-grow:1;display:flex;align-items:center;background:#fff;border-radius:32px;outline:1px solid #CCCCE5;box-shadow:0 0 8px rgba(0,0,0,.06)">
+                <div style="flex:1;height:49px;padding:14px 0 12px 18px;font-size:.95rem;color:#8b8b9c">Ask Germán anything…</div>
+                <div style="display:flex;align-items:center;height:49px;padding-right:6px"><div style="height:35px;width:35px;border-radius:50%;background:#0D6F82;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.05rem">➤</div></div>
+              </div>
+            </div>
+            <div style="font-size:10.5px;color:#7b939a;text-align:center">AI answers — double-check important</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="2d" style="width:700px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.08em;background:#0D6F82;color:#fff;padding:5px 10px;border-radius:999px">2D</span>
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:17px">Phase 2 — sizes &amp; the side panel</span>
+      </div>
+      <div style="font-size:13.5px;line-height:1.6;color:#3c5b64;text-wrap:pretty">Opens compact like a normal widget, then grows into a right-side sheet — on the expand button, or automatically once the third assistant message lands. Always reversible: shrink back, or hide.</div>
+      <div style="background:#F1F6F7;border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:18px">
+        <div style="display:flex;gap:22px;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:11.5px;letter-spacing:.06em;color:#7b939a">MOBILE &lt; 640 — FULL SCREEN</div>
+            <div style="width:120px;height:210px;border-radius:10px;background:#fff;box-shadow:0 0 0 1px #E6EDEE;display:flex;flex-direction:column;overflow:hidden">
+              <div style="height:34px;background:#53CED1"></div><div style="flex:1"></div><div style="height:30px;background:#ececec"></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:11.5px;letter-spacing:.06em;color:#7b939a">TABLET 640–1023 — FULL SCREEN</div>
+            <div style="width:210px;height:210px;border-radius:10px;background:#fff;box-shadow:0 0 0 1px #E6EDEE;display:flex;flex-direction:column;overflow:hidden">
+              <div style="height:34px;background:#53CED1"></div><div style="flex:1"></div><div style="height:30px;background:#ececec"></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:11.5px;letter-spacing:.06em;color:#7b939a">DESKTOP — COMPACT 420 → SIDE PANEL 640</div>
+            <div style="width:300px;height:210px;border-radius:10px;background:#DDE7E9;position:relative;overflow:hidden;box-shadow:0 0 0 1px #E6EDEE">
+              <div style="position:absolute;right:96px;bottom:12px;width:74px;height:120px;border-radius:8px;background:#fff;box-shadow:0 8px 20px -10px rgba(13,111,130,.6);display:flex;flex-direction:column;overflow:hidden"><div style="height:20px;background:#53CED1"></div><div style="flex:1"></div><div style="height:16px;background:#ececec"></div></div>
+              <div style="position:absolute;right:0;top:0;bottom:0;width:88px;background:#fff;box-shadow:-12px 0 28px -14px rgba(13,111,130,.5);display:flex;flex-direction:column;overflow:hidden"><div style="height:26px;background:#53CED1"></div><div style="flex:1"></div><div style="height:20px;background:#ececec"></div></div>
+              <div style="position:absolute;left:12px;top:12px;font-size:10.5px;font-weight:600;color:#4a6c75">compact → expanded</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <div style="flex:1;min-width:200px;background:#fff;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:5px;box-shadow:0 0 0 1px #E6EDEE">
+            <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;color:#12333c">Auto-expand rule</div>
+            <div style="font-size:12.5px;line-height:1.5;color:#5d7c85">After the 3rd assistant message, once per session. If the visitor has shrunk it manually, never auto-expand again.</div>
+          </div>
+          <div style="flex:1;min-width:200px;background:#fff;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:5px;box-shadow:0 0 0 1px #E6EDEE">
+            <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;color:#12333c">Controls</div>
+            <div style="font-size:12.5px;line-height:1.5;color:#5d7c85">⤢ expand / ⤡ shrink, then <span style="font-weight:600">Hide ⌄</span>. Mobile shows ✕ Close at 44px. Esc always hides.</div>
+          </div>
+          <div style="flex:1;min-width:200px;background:#fff;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:5px;box-shadow:0 0 0 1px #E6EDEE">
+            <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;color:#12333c">What the width buys</div>
+            <div style="font-size:12.5px;line-height:1.5;color:#5d7c85">At 640 the carousel shows 3 cards and the Nest Pass block sits beside the map row instead of under it.</div>
+          </div>
+        </div>
+      </div>
+      <div style="background:#fff;border-radius:16px;padding:20px;box-shadow:0 0 0 1px #E6EDEE;display:flex;flex-direction:column;gap:6px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:14px;color:#12333c">Phase 3 — the refactor</div>
+        <div style="font-size:13px;line-height:1.6;color:#3c5b64">Once phases 1 and 2 are signed off, rebuild the shell as <a href="#1d">1d</a> Nest Concierge: photo hero on welcome, collapsing to a 54px photo strip in conversation. Copy: “Your travel community in the Canaries &amp; Ibiza” · “14 hostels · 3 islands · 1 Nest Pass”.</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section style="padding:56px 56px 80px;display:flex;flex-direction:column;gap:36px;color:#0f2b33">
+  <div style="display:flex;flex-direction:column;gap:10px;max-width:900px">
+    <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:34px;line-height:1.15;letter-spacing:-.01em">Germán chat widget — current UI, then three directions</div>
+    <div style="font-size:15px;line-height:1.6;color:#3c5b64;text-wrap:pretty"><a href="#1a">1a</a> is the widget as it is today, rebuilt from <span style="font-family:ui-monospace,monospace;font-size:13px;background:#dfe8ea;padding:2px 6px;border-radius:5px">nest-chatbot-ai</span> CSS + your screenshots. <a href="#1b">1b</a>, <a href="#1c">1c</a>, <a href="#1d">1d</a> are three redesign directions — all on Nests type (Poppins / Montserrat) and the teal-and-orange palette, all with a compact header, a clear minimise affordance, suggested prompts, rich hostel answers and a mobile full-screen state.</div>
+  </div>
+
+  <div style="display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap">
+
+    <div id="1a" style="width:470px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.08em;background:#0f2b33;color:#fff;padding:5px 10px;border-radius:999px">1A</span>
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:17px">Today — recreated from the repo</span>
+      </div>
+      <div style="font-size:13.5px;line-height:1.6;color:#3c5b64;text-wrap:pretty">Exact values from <span style="font-family:ui-monospace,monospace;font-size:12px">css/nest-chatbot.css</span>: 420px panel, 15px radius, #53CED1 header, 460px body, #ececec footer, 32px pill input. Launcher is #0D6F82 per the stylesheet (it reads lighter on the live site).</div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">OPEN — FIRST MESSAGE</div>
+        <div style="width:420px;border-radius:15px;overflow:hidden;background:#ececec;box-shadow:0 0 128px 0 rgba(0,0,0,.1),0 32px 64px -48px rgba(0,0,0,.5)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px 15px;background:#53CED1">
+            <div style="display:flex;gap:10px;align-items:center">
+              <img src="img/Ibiza-a21caf.png" alt="Nest" width="50" height="50" style="width:50px;height:50px;border-radius:50%;flex-shrink:0">
+              <div style="display:flex;flex-direction:column;margin-left:8px">
+                <div style="color:#fff;font-weight:600;font-size:1.31rem;letter-spacing:.02rem;line-height:1.3">Germán</div>
+                <div style="color:#0D6F82;font-size:13px;line-height:1.4">Nests Hostels AI assistan</div>
+              </div>
+            </div>
+            <div style="width:35px;height:35px;margin-right:-10px;border-radius:50%;color:#fff;font-size:1.5rem;display:flex;align-items:center;justify-content:center;line-height:0">−</div>
+          </div>
+          <div style="background:#fff;padding:15px;min-height:460px;display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;gap:11px;align-items:center">
+              <div style="width:45px;height:45px;border-radius:50%;background:#fff;flex-shrink:0;align-self:flex-end;margin-bottom:2px;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:38px;height:38px"></div>
+              <div style="padding:12px 16px;max-width:75%;font-size:.95rem;line-height:1.45;background:#ececec;border-radius:15px 15px 15px 2px;color:#111">Hi! How can I help you plan your stay?</div>
+            </div>
+          </div>
+          <div style="background:#ececec;padding:15px;display:flex;align-items:center;gap:10px">
+            <div style="height:35px;width:35px;border-radius:50%;background:#fff;box-shadow:0 0 8px rgba(0,0,0,.06);outline:1px solid #CCCCE5;overflow:hidden;flex-shrink:0;position:relative"><img src="https://flagsapi.com/IT/flat/64.png" alt="Italiano" style="width:40px;height:57px;position:absolute;top:-11px;left:-2px;max-width:unset"></div>
+            <div style="flex-grow:1;display:flex;align-items:center;background:#fff;border-radius:32px;outline:1px solid #CCCCE5;box-shadow:0 0 8px rgba(0,0,0,.06)">
+              <div style="flex:1;height:49px;padding:14px 0 12px 18px;font-size:.95rem;color:#8b8b9c">Messaggio...</div>
+              <div style="display:flex;align-items:center;gap:3px;height:49px;padding-right:6px">
+                <div style="height:35px;width:35px;border-radius:50%;background:#ececec;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.05rem">➤</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">CONTACT HANDOFF + LANGUAGE ROW</div>
+        <div style="width:420px;border-radius:15px;overflow:hidden;background:#ececec;box-shadow:0 0 128px 0 rgba(0,0,0,.1),0 32px 64px -48px rgba(0,0,0,.5)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px 15px;background:#53CED1">
+            <div style="display:flex;gap:10px;align-items:center">
+              <img src="img/Ibiza-a21caf.png" alt="Nest" width="50" height="50" style="width:50px;height:50px;border-radius:50%;flex-shrink:0">
+              <div style="display:flex;flex-direction:column;margin-left:8px">
+                <div style="color:#fff;font-weight:600;font-size:1.31rem;letter-spacing:.02rem;line-height:1.3">Germán</div>
+                <div style="color:#0D6F82;font-size:13px;line-height:1.4">Nests Hostels AI assistan</div>
+              </div>
+            </div>
+            <div style="width:35px;height:35px;margin-right:-10px;border-radius:50%;color:#fff;font-size:1.5rem;display:flex;align-items:center;justify-content:center;line-height:0">−</div>
+          </div>
+          <div style="background:#fff;padding:15px;min-height:460px;display:flex;flex-direction:column;gap:20px;overflow:hidden">
+            <div style="display:flex;flex-direction:column;align-items:flex-end">
+              <div style="padding:12px 16px;max-width:75%;font-size:.95rem;line-height:1.45;color:#fff;background:#0D6F82;border-radius:15px 15px 2px 15px">Arena Nest contact?</div>
+            </div>
+            <div style="display:flex;gap:11px;align-items:center">
+              <div style="width:45px;height:45px;border-radius:50%;background:#fff;flex-shrink:0;align-self:flex-end;margin-bottom:2px;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:38px;height:38px"></div>
+              <div style="padding:12px 16px;max-width:75%;font-size:.95rem;line-height:1.45;background:#ececec;border-radius:15px 15px 15px 2px;color:#111">Our team has been notified and will reply shortly. In the meantime, here are Arena Nest's contacts:<br><br>Phone: +34 822 090 344<br>WhatsApp: +34 822 090 344<br>Email: arena@nestshostels.com<br><br>Anything else I can help with?</div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <div style="font-size:12.5px;padding:7px 12px;border-radius:999px;background:#e3f4f5;color:#0D6F82;font-weight:500">Call +34 822 090 344</div>
+              <div style="font-size:12.5px;padding:7px 12px;border-radius:999px;background:#e3f4f5;color:#0D6F82;font-weight:500">WhatsApp</div>
+              <div style="font-size:12.5px;padding:7px 12px;border-radius:999px;background:#e3f4f5;color:#0D6F82;font-weight:500">Email arena@nestshostels.com</div>
+            </div>
+          </div>
+          <div style="background:#ececec;padding:15px;display:flex;align-items:center;gap:10px">
+            <div style="display:flex;gap:8px">
+              <div style="height:35px;width:35px;border-radius:50%;background:#fff;outline:1px solid #CCCCE5;overflow:hidden;position:relative;flex-shrink:0"><img src="https://flagsapi.com/IT/flat/64.png" alt="Italiano" style="width:40px;height:57px;position:absolute;top:-11px;left:-2px;max-width:unset"></div>
+              <div style="height:35px;width:35px;border-radius:50%;background:#fff;outline:1px solid #CCCCE5;overflow:hidden;position:relative;flex-shrink:0"><img src="https://flagsapi.com/GB/flat/64.png" alt="English" style="width:40px;height:57px;position:absolute;top:-11px;left:-2px;max-width:unset"></div>
+              <div style="height:35px;width:35px;border-radius:50%;background:#fff;outline:1px solid #CCCCE5;overflow:hidden;position:relative;flex-shrink:0"><img src="https://flagsapi.com/ES/flat/64.png" alt="Español" style="width:40px;height:57px;position:absolute;top:-11px;left:-2px;max-width:unset"></div>
+              <div style="height:35px;width:35px;border-radius:50%;background:#fff;outline:1px solid #CCCCE5;overflow:hidden;position:relative;flex-shrink:0"><img src="https://flagsapi.com/DE/flat/64.png" alt="Deutsch" style="width:40px;height:57px;position:absolute;top:-11px;left:-2px;max-width:unset"></div>
+              <div style="height:35px;width:35px;border-radius:50%;background:#fff;outline:1px solid #CCCCE5;overflow:hidden;position:relative;flex-shrink:0"><img src="https://flagsapi.com/FR/flat/64.png" alt="Français" style="width:40px;height:57px;position:absolute;top:-11px;left:-2px;max-width:unset"></div>
+            </div>
+            <div style="flex:1;display:flex;align-items:center;background:#fff;border-radius:32px;outline:1px solid #CCCCE5;min-width:0">
+              <div style="flex:1;height:49px;padding:14px 0 12px 18px;font-size:.95rem;color:#8b8b9c;white-space:nowrap;overflow:hidden">Messaggio...</div>
+              <div style="display:flex;align-items:center;height:49px;padding-right:6px"><div style="height:35px;width:35px;border-radius:50%;background:#ececec;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.05rem">➤</div></div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:12.5px;line-height:1.5;color:#8a6a3a;background:#fdf6e7;padding:10px 12px;border-radius:10px">The five-flag row squeezes the input to ~150px. Quick-action pills come from the backend and have no styling in the repo — approximated here from your screenshot.</div>
+      </div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">LAUNCHER (CLOSED)</div>
+        <div style="height:110px;background:linear-gradient(#0D6F82,#53CED1);border-radius:12px;position:relative">
+          <div style="position:absolute;right:35px;bottom:30px;height:50px;width:50px;border-radius:50%;background:#0D6F82;box-shadow:0 0 20px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center"><img src="img/nest-chatbot_white.png" alt="" width="33" height="33" style="width:33px;height:33px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1b" style="width:470px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.08em;background:#0D6F82;color:#fff;padding:5px 10px;border-radius:999px">1B</span>
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:17px">Nest Light — brand-true evolution</span>
+      </div>
+      <div style="font-size:13.5px;line-height:1.6;color:#3c5b64;text-wrap:pretty">Same architecture, Nests skin. Header down to 62px with an explicit “AI assistant” label and a labelled minimise. Poppins names, Montserrat body, teal bubbles, orange only on Book now. Language moves into the header menu so the input keeps full width.</div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">WELCOME + SUGGESTED PROMPTS</div>
+        <div style="width:420px;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 24px 60px -30px rgba(13,111,130,.55),0 0 0 1px rgba(13,111,130,.08)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:#0D6F82">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0">
+              <div style="width:38px;height:38px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:26px;height:26px"></div>
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                <div style="display:flex;align-items:center;gap:7px"><span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:16px;color:#fff;line-height:1.2">Germán</span><span style="font-size:9.5px;font-weight:600;letter-spacing:.06em;color:#0D6F82;background:#53CED1;padding:2px 6px;border-radius:4px">AI ASSISTANT</span></div>
+                <div style="font-size:11.5px;color:rgba(255,255,255,.72);line-height:1.3">Nests Hostels · replies in seconds</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+              <div style="height:30px;padding:0 9px;border-radius:8px;display:flex;align-items:center;gap:5px;color:#fff;font-size:12px;font-weight:500;background:rgba(255,255,255,.12)"><img src="https://flagsapi.com/GB/flat/64.png" alt="English" style="width:17px;height:17px;object-fit:cover;border-radius:3px">EN</div>
+              <div style="height:30px;width:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(255,255,255,.12);font-size:12px">⤢</div>
+              <div style="height:30px;padding:0 9px;border-radius:8px;display:flex;align-items:center;gap:5px;color:#fff;font-size:12px;font-weight:500;background:rgba(255,255,255,.12)">Hide ⌄</div>
+            </div>
+          </div>
+          <div style="background:#fff;padding:16px;min-height:430px;display:flex;flex-direction:column;gap:14px;overflow:hidden">
+            <div style="display:flex;gap:9px;align-items:flex-end">
+              <div style="width:30px;height:30px;border-radius:50%;background:#e3f4f5;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:20px;height:20px"></div>
+              <div style="padding:12px 15px;max-width:82%;font-size:14px;line-height:1.5;background:#F1F6F7;border-radius:16px 16px 16px 4px;color:#12333c;text-wrap:pretty">Hi! I'm Germán, the Nests AI assistant. Ask me anything about our 13 hostels, the Nest Pass, or moving around the islands.</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;padding-left:39px">
+              <div style="font-size:10.5px;font-weight:600;letter-spacing:.08em;color:#7b939a">TRY ASKING</div>
+              <div style="display:flex;flex-direction:column;gap:7px;align-items:flex-start">
+                <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:9px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);background:#fff">Which hostel fits me best?</div>
+                <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:9px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);background:#fff">How does the Nest Pass work?</div>
+                <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:9px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);background:#fff">Any beds free next weekend?</div>
+                <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:9px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);background:#fff">How do I get there from the airport?</div>
+              </div>
+            </div>
+          </div>
+          <div style="background:#fff;border-top:1px solid #E6EDEE;padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;background:#F1F6F7;border-radius:26px;padding:0 6px 0 16px">
+              <div style="flex:1;height:46px;display:flex;align-items:center;font-size:14px;color:#7b939a">Ask Germán anything…</div>
+              <div style="height:34px;width:34px;border-radius:50%;background:#0D6F82;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px">➤</div>
+            </div>
+            <div style="font-size:10.5px;color:#93a9af;text-align:center">AI answers — double-check dates &amp; prices before booking</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">RICH ANSWER — HOSTEL CARD, NEST PASS, CONTACT</div>
+        <div style="width:420px;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 24px 60px -30px rgba(13,111,130,.55),0 0 0 1px rgba(13,111,130,.08)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:#0D6F82">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0">
+              <div style="width:38px;height:38px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:26px;height:26px"></div>
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <div style="display:flex;align-items:center;gap:7px"><span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:16px;color:#fff;line-height:1.2">Germán</span><span style="font-size:9.5px;font-weight:600;letter-spacing:.06em;color:#0D6F82;background:#53CED1;padding:2px 6px;border-radius:4px">AI ASSISTANT</span></div>
+                <div style="font-size:11.5px;color:rgba(255,255,255,.72);line-height:1.3">Nests Hostels · replies in seconds</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+              <div style="height:30px;padding:0 9px;border-radius:8px;display:flex;align-items:center;gap:5px;color:#fff;font-size:12px;font-weight:500;background:rgba(255,255,255,.12)"><img src="https://flagsapi.com/GB/flat/64.png" alt="English" style="width:17px;height:17px;object-fit:cover;border-radius:3px">EN</div>
+              <div style="height:30px;width:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(255,255,255,.12);font-size:12px">⤢</div>
+              <div style="height:30px;padding:0 9px;border-radius:8px;display:flex;align-items:center;gap:5px;color:#fff;font-size:12px;font-weight:500;background:rgba(255,255,255,.12)">Hide ⌄</div>
+            </div>
+          </div>
+          <div style="background:#fff;padding:16px;min-height:520px;display:flex;flex-direction:column;gap:14px;overflow:hidden">
+            <div style="display:flex;justify-content:flex-end">
+              <div style="padding:11px 15px;max-width:82%;font-size:14px;line-height:1.5;color:#fff;background:#0D6F82;border-radius:16px 16px 4px 16px">Surf hostel in Tenerife, 5 nights in October?</div>
+            </div>
+            <div style="display:flex;gap:9px;align-items:flex-end">
+              <div style="width:30px;height:30px;border-radius:50%;background:#e3f4f5;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:20px;height:20px"></div>
+              <div style="padding:12px 15px;max-width:82%;font-size:14px;line-height:1.5;background:#F1F6F7;border-radius:16px 16px 16px 4px;color:#12333c;text-wrap:pretty">El Médano is your spot — wind, waves and a 3-minute walk to the beach.</div>
+            </div>
+            <div style="margin-left:39px;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 6px 18px -8px rgba(13,111,130,.35),0 0 0 1px #E6EDEE">
+              <div style="height:120px;background:#53CED1;background-image:url('https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/3.jpg');background-size:cover;background-position:center;position:relative">
+                <div style="position:absolute;top:10px;left:10px;display:flex;gap:6px">
+                  <span style="font-size:10px;font-weight:600;color:#0D6F82;background:rgba(255,255,255,.92);padding:4px 8px;border-radius:6px">Nest Pass ✂</span>
+                  <span style="font-size:10px;font-weight:600;color:#0D6F82;background:rgba(255,255,255,.92);padding:4px 8px;border-radius:6px">Loooong Stay</span>
+                </div>
+              </div>
+              <div style="padding:13px 14px;display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                  <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:15.5px;color:#12333c">Medano <span style="color:#53CED1">Nest</span></div>
+                  <div style="font-size:12px;color:#7b939a">from <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:15px;color:#12333c">€22</span>/night</div>
+                </div>
+                <div style="font-size:12.5px;color:#5d7c85">Tenerife — El Médano · 3 min to the beach · surf &amp; kite</div>
+                <div style="display:flex;gap:8px;margin-top:2px">
+                  <div style="flex:1;height:38px;border-radius:12px;background:#EA580C;color:#fff;font-family:'Poppins',sans-serif;font-weight:600;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;justify-content:center">Book now</div>
+                  <div style="height:38px;padding:0 14px;border-radius:12px;border:1.5px solid rgba(83,206,209,.6);color:#0D6F82;font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:center">Details</div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-left:39px;border-radius:14px;padding:13px 14px;background:linear-gradient(135deg,#53CED1 0%,#0D6F82 55%,#083344 100%);display:flex;flex-direction:column;gap:8px">
+              <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13.5px;color:#fff">Staying 7+ nights?</div>
+              <div style="font-size:12.5px;line-height:1.5;color:rgba(255,255,255,.82);text-wrap:pretty">The Nest Pass moves with you between Tenerife and Gran Canaria — up to 30% off.</div>
+              <div style="align-self:flex-start;height:32px;padding:0 13px;border-radius:10px;background:#fff;color:#0D6F82;font-size:12px;font-weight:600;display:flex;align-items:center">See Nest Pass →</div>
+            </div>
+            <div style="display:flex;gap:7px;margin-left:39px;flex-wrap:wrap">
+              <div style="font-size:12px;font-weight:500;color:#0D6F82;padding:8px 12px;border-radius:999px;background:#F1F6F7;border:1px solid #E6EDEE">Getting here</div>
+              <div style="font-size:12px;font-weight:500;color:#0D6F82;padding:8px 12px;border-radius:999px;background:#F1F6F7;border:1px solid #E6EDEE">WhatsApp us</div>
+              <div style="font-size:12px;font-weight:500;color:#0D6F82;padding:8px 12px;border-radius:999px;background:#F1F6F7;border:1px solid #E6EDEE">Talk to a human</div>
+            </div>
+          </div>
+          <div style="background:#fff;border-top:1px solid #E6EDEE;padding:12px 14px">
+            <div style="display:flex;align-items:center;gap:8px;background:#F1F6F7;border-radius:26px;padding:0 6px 0 16px">
+              <div style="flex:1;height:46px;display:flex;align-items:center;font-size:14px;color:#7b939a">Ask Germán anything…</div>
+              <div style="height:34px;width:34px;border-radius:50%;background:#0D6F82;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px">➤</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">LAUNCHER — UNREAD DOT + SELF-DISMISSING TEASER</div>
+        <div style="height:150px;background:#F1F6F7;border-radius:12px;position:relative;overflow:hidden">
+          <div style="position:absolute;right:24px;bottom:86px;display:flex;align-items:center;gap:8px;background:#fff;padding:10px 12px;border-radius:14px 14px 4px 14px;box-shadow:0 10px 24px -12px rgba(13,111,130,.5),0 0 0 1px #E6EDEE;max-width:250px">
+            <div style="font-size:12.5px;line-height:1.45;color:#12333c">Need a hand picking your Nest?</div>
+            <div style="width:18px;height:18px;border-radius:50%;background:#F1F6F7;color:#7b939a;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</div>
+          </div>
+          <div style="position:absolute;right:24px;bottom:22px;height:56px;width:56px;border-radius:50%;background:#0D6F82;box-shadow:0 10px 26px -8px rgba(13,111,130,.6);display:flex;align-items:center;justify-content:center">
+            <img src="img/nest-chatbot_white.png" alt="" style="width:32px;height:32px">
+            <div style="position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;border-radius:999px;background:#EA580C;color:#fff;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #F1F6F7;padding:0 4px">1</div>
+          </div>
+        </div>
+        <div style="font-size:12.5px;line-height:1.5;color:#3c5b64">Teaser fades in once per session after ~8s of idle, auto-dismisses after 6s, and never returns after a dismiss. The unread dot stays until the panel is opened.</div>
+      </div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">MOBILE FULL-SCREEN — 375 × 640</div>
+        <div style="width:375px;height:640px;border-radius:20px;overflow:hidden;background:#fff;box-shadow:0 0 0 1px #E6EDEE;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:#0D6F82">
+            <div style="display:flex;align-items:center;gap:9px">
+              <div style="width:34px;height:34px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:23px;height:23px"></div>
+              <div style="display:flex;flex-direction:column;gap:1px">
+                <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:15px;color:#fff">Germán</div>
+                <div style="font-size:11px;color:rgba(255,255,255,.72)">AI assistant · Nests Hostels</div>
+              </div>
+            </div>
+            <div style="height:44px;width:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(255,255,255,.12);font-size:16px">✕</div>
+          </div>
+          <div style="flex:1;padding:16px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+            <div style="display:flex;gap:9px;align-items:flex-end">
+              <div style="width:28px;height:28px;border-radius:50%;background:#e3f4f5;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:19px;height:19px"></div>
+              <div style="padding:11px 14px;max-width:84%;font-size:14px;line-height:1.5;background:#F1F6F7;border-radius:16px 16px 16px 4px;color:#12333c;text-wrap:pretty">Hi! I'm Germán. Where are you heading — Tenerife, Gran Canaria or Ibiza?</div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;padding-left:37px">
+              <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:10px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);min-height:44px;display:flex;align-items:center">Tenerife</div>
+              <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:10px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);min-height:44px;display:flex;align-items:center">Gran Canaria</div>
+              <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:10px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);min-height:44px;display:flex;align-items:center">Ibiza</div>
+              <div style="font-size:13px;font-weight:500;color:#0D6F82;padding:10px 14px;border-radius:999px;border:1.5px solid rgba(83,206,209,.55);min-height:44px;display:flex;align-items:center">Still deciding</div>
+            </div>
+            <div style="display:flex;gap:9px;align-items:flex-end;margin-top:4px">
+              <div style="width:28px;height:28px;border-radius:50%;background:#e3f4f5;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:19px;height:19px"></div>
+              <div style="padding:14px 16px;background:#F1F6F7;border-radius:16px 16px 16px 4px;display:flex;gap:4px;align-items:center">
+                <div style="height:7px;width:7px;border-radius:50%;background:#0D6F82;opacity:.7;animation:dotPulse 1.8s ease-in-out .2s infinite"></div>
+                <div style="height:7px;width:7px;border-radius:50%;background:#0D6F82;opacity:.7;animation:dotPulse 1.8s ease-in-out .3s infinite"></div>
+                <div style="height:7px;width:7px;border-radius:50%;background:#0D6F82;opacity:.7;animation:dotPulse 1.8s ease-in-out .4s infinite"></div>
+              </div>
+            </div>
+          </div>
+          <div style="border-top:1px solid #E6EDEE;padding:10px 14px 16px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;background:#F1F6F7;border-radius:26px;padding:0 6px 0 16px">
+              <div style="flex:1;height:48px;display:flex;align-items:center;font-size:14px;color:#7b939a">Ask Germán anything…</div>
+              <div style="height:38px;width:38px;border-radius:50%;background:#0D6F82;color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px">➤</div>
+            </div>
+            <div style="display:flex;justify-content:center;gap:10px;font-size:11px;color:#93a9af"><span style="display:inline-flex;align-items:center;gap:5px"><img src="https://flagsapi.com/GB/flat/64.png" alt="" style="width:14px;height:14px;object-fit:cover;border-radius:2px">English</span><span>·</span><span>AI answers, double-check prices</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1c" style="width:470px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.08em;background:#083344;color:#fff;padding:5px 10px;border-radius:999px">1C</span>
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:17px">Nest Focus — dark brand surface</span>
+      </div>
+      <div style="font-size:13.5px;line-height:1.6;color:#3c5b64;text-wrap:pretty">The whole panel sits on the brand's focus-surface gradient, so it reads premium and unmistakably Nests even over busy pages. Cards punch out in white. Header is a single 54px strip; the expand control opens a 560px panel.</div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">COMPACT 420 — WELCOME</div>
+        <div style="width:420px;border-radius:20px;overflow:hidden;background:linear-gradient(150deg,#53CED1 -10%,#0D6F82 45%,#083344 100%);box-shadow:0 26px 70px -30px rgba(8,51,68,.75)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.1)">
+            <div style="display:flex;align-items:center;gap:9px">
+              <div style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:21px;height:21px"></div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:15.5px;color:#fff">Germán</span>
+                <span style="font-size:9.5px;font-weight:600;letter-spacing:.06em;color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.3);padding:2px 6px;border-radius:4px">AI</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:5px">
+              <div style="height:28px;padding:0 8px;border-radius:8px;background:rgba(255,255,255,.12);color:#fff;font-size:11.5px;font-weight:500;display:flex;align-items:center;gap:5px"><img src="https://flagsapi.com/GB/flat/64.png" alt="English" style="width:16px;height:16px;object-fit:cover;border-radius:3px">EN</div>
+              <div style="height:28px;width:28px;border-radius:8px;background:rgba(255,255,255,.12);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">⤢</div>
+              <div style="height:28px;padding:0 8px;border-radius:8px;background:rgba(255,255,255,.12);color:#fff;font-size:11.5px;font-weight:500;display:flex;align-items:center">Hide ⌄</div>
+            </div>
+          </div>
+          <div style="padding:18px 16px;min-height:420px;display:flex;flex-direction:column;gap:16px;overflow:hidden">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="font-family:'Archivo Black',sans-serif;font-size:21px;line-height:1.2;color:#fff;letter-spacing:.01em">Flow as you go.</div>
+              <div style="font-size:13.5px;line-height:1.55;color:rgba(255,255,255,.78);text-wrap:pretty">I'm Germán, the Nests AI assistant. 13 hostels across three islands — tell me what you're after and I'll point you at the right one.</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:12px 14px">
+                <span style="color:rgba(255,255,255,.5);font-size:14px">•</span>
+                <span style="font-size:13.5px;color:#fff;font-weight:500">Which hostel fits me best?</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:12px 14px">
+                <span style="color:rgba(255,255,255,.5);font-size:14px">•</span>
+                <span style="font-size:13.5px;color:#fff;font-weight:500">How does the Nest Pass work?</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:12px 14px">
+                <span style="color:rgba(255,255,255,.5);font-size:14px">•</span>
+                <span style="font-size:13.5px;color:#fff;font-weight:500">Beds free next weekend?</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:12px 14px">
+                <span style="color:rgba(255,255,255,.5);font-size:14px">•</span>
+                <span style="font-size:13.5px;color:#fff;font-weight:500">Getting here from the airport</span>
+              </div>
+            </div>
+          </div>
+          <div style="padding:12px 14px 14px;border-top:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18);border-radius:26px;padding:0 6px 0 16px">
+              <div style="flex:1;height:46px;display:flex;align-items:center;font-size:14px;color:rgba(255,255,255,.6)">Ask Germán anything…</div>
+              <div style="height:34px;width:34px;border-radius:50%;background:#53CED1;color:#083344;display:flex;align-items:center;justify-content:center;font-size:14px">➤</div>
+            </div>
+            <div style="font-size:10.5px;color:rgba(255,255,255,.5);text-align:center">AI answers — double-check dates &amp; prices before booking</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">EXPANDED 560 — RICH ANSWER</div>
+        <div style="width:420px;border-radius:20px;overflow:hidden;background:linear-gradient(150deg,#53CED1 -10%,#0D6F82 45%,#083344 100%);box-shadow:0 26px 70px -30px rgba(8,51,68,.75)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.1)">
+            <div style="display:flex;align-items:center;gap:9px">
+              <div style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:21px;height:21px"></div>
+              <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:15.5px;color:#fff">Germán</span>
+              <span style="font-size:9.5px;font-weight:600;letter-spacing:.06em;color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.3);padding:2px 6px;border-radius:4px">AI</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:5px">
+              <div style="height:28px;width:28px;border-radius:8px;background:rgba(255,255,255,.22);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">⤡</div>
+              <div style="height:28px;padding:0 8px;border-radius:8px;background:rgba(255,255,255,.12);color:#fff;font-size:11.5px;font-weight:500;display:flex;align-items:center">Hide ⌄</div>
+            </div>
+          </div>
+          <div style="padding:16px;min-height:500px;display:flex;flex-direction:column;gap:13px;overflow:hidden">
+            <div style="display:flex;justify-content:flex-end">
+              <div style="padding:11px 15px;max-width:80%;font-size:13.5px;line-height:1.5;color:#083344;background:#53CED1;border-radius:16px 16px 4px 16px;font-weight:500">Surf hostel in Tenerife, 5 nights in October?</div>
+            </div>
+            <div style="display:flex;gap:9px;align-items:flex-end">
+              <div style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.16);flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:18px;height:18px"></div>
+              <div style="padding:12px 15px;max-width:82%;font-size:13.5px;line-height:1.5;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);border-radius:16px 16px 16px 4px;color:#fff;text-wrap:pretty">El Médano is your spot — wind, waves and a 3-minute walk to the beach.</div>
+            </div>
+            <div style="margin-left:37px;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 12px 30px -14px rgba(0,0,0,.5)">
+              <div style="height:118px;background:#53CED1;background-image:url('https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/5.jpg');background-size:cover;background-position:center"></div>
+              <div style="padding:13px 14px;display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                  <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:15.5px;color:#12333c">Medano <span style="color:#53CED1">Nest</span></div>
+                  <div style="font-size:12px;color:#7b939a">from <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:15px;color:#12333c">€22</span>/night</div>
+                </div>
+                <div style="font-size:12.5px;color:#5d7c85">Tenerife — El Médano · surf &amp; kite · rooftop</div>
+                <div style="display:flex;gap:8px">
+                  <div style="flex:1;height:38px;border-radius:12px;background:#EA580C;color:#fff;font-family:'Poppins',sans-serif;font-weight:600;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;justify-content:center">Book now</div>
+                  <div style="height:38px;padding:0 14px;border-radius:12px;border:1.5px solid rgba(13,111,130,.35);color:#0D6F82;font-size:12.5px;font-weight:600;display:flex;align-items:center">Details</div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-left:37px;display:flex;flex-direction:column;gap:9px;border-radius:14px;padding:13px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16)">
+              <div style="display:flex;align-items:center;gap:8px"><img src="img/nest-chatbot_white.png" alt="" style="width:18px;height:18px;opacity:.9"><span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13.5px;color:#fff">Nest Pass — 7+ nights</span></div>
+              <div style="font-size:12.5px;line-height:1.5;color:rgba(255,255,255,.78);text-wrap:pretty">One booking, hop between Tenerife and Gran Canaria. Up to 30% off.</div>
+              <div style="align-self:flex-start;height:32px;padding:0 13px;border-radius:10px;background:#53CED1;color:#083344;font-size:12px;font-weight:600;display:flex;align-items:center">See Nest Pass →</div>
+            </div>
+            <div style="display:flex;gap:7px;margin-left:37px;flex-wrap:wrap">
+              <div style="font-size:12px;font-weight:500;color:#fff;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18)">Getting here</div>
+              <div style="font-size:12px;font-weight:500;color:#fff;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18)">WhatsApp us</div>
+              <div style="font-size:12px;font-weight:500;color:#fff;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18)">Talk to a human</div>
+            </div>
+          </div>
+          <div style="padding:12px 14px 14px;border-top:1px solid rgba(255,255,255,.1)">
+            <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18);border-radius:26px;padding:0 6px 0 16px">
+              <div style="flex:1;height:46px;display:flex;align-items:center;font-size:14px;color:rgba(255,255,255,.6)">Ask Germán anything…</div>
+              <div style="height:34px;width:34px;border-radius:50%;background:#53CED1;color:#083344;display:flex;align-items:center;justify-content:center;font-size:14px">➤</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:12.5px;line-height:1.5;color:#3c5b64">At 560px the same panel keeps one column but hostel results become a two-up grid — same components, more room.</div>
+      </div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">LAUNCHER + MOBILE HEADER</div>
+        <div style="height:150px;background:linear-gradient(150deg,#0D6F82,#083344);border-radius:12px;position:relative;overflow:hidden">
+          <div style="position:absolute;right:24px;bottom:22px;height:56px;width:56px;border-radius:50%;background:#53CED1;box-shadow:0 10px 26px -8px rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center">
+            <img src="img/nest-chatbot_white.png" alt="" style="width:32px;height:32px">
+            <div style="position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;border-radius:999px;background:#EA580C;color:#fff;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #0D6F82;padding:0 4px">1</div>
+          </div>
+        </div>
+        <div style="width:375px;border-radius:20px 20px 0 0;overflow:hidden;background:linear-gradient(150deg,#53CED1 -20%,#0D6F82 40%,#083344 100%);padding-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px">
+            <div style="display:flex;align-items:center;gap:9px">
+              <div style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:21px;height:21px"></div>
+              <div style="display:flex;flex-direction:column;gap:1px">
+                <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:15px;color:#fff">Germán</div>
+                <div style="font-size:11px;color:rgba(255,255,255,.7)">AI assistant · Nests Hostels</div>
+              </div>
+            </div>
+            <div style="height:44px;width:44px;border-radius:12px;background:rgba(255,255,255,.14);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center">✕</div>
+          </div>
+          <div style="padding:8px 14px 0;display:flex;flex-direction:column;gap:10px">
+            <div style="font-family:'Archivo Black',sans-serif;font-size:19px;color:#fff">Flow as you go.</div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px">
+              <div style="font-size:13px;font-weight:500;color:#fff;padding:11px 14px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);min-height:44px;display:flex;align-items:center">Tenerife</div>
+              <div style="font-size:13px;font-weight:500;color:#fff;padding:11px 14px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);min-height:44px;display:flex;align-items:center">Gran Canaria</div>
+              <div style="font-size:13px;font-weight:500;color:#fff;padding:11px 14px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);min-height:44px;display:flex;align-items:center">Ibiza</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1d" style="width:470px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.08em;background:#EA580C;color:#fff;padding:5px 10px;border-radius:999px">1D</span>
+        <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:17px">Nest Concierge — photography-led</span>
+      </div>
+      <div style="font-size:13.5px;line-height:1.6;color:#3c5b64;text-wrap:pretty">Photography does the brand work: the welcome opens on a hostel photo with a dark overlay and the greeting set over it, exactly like the site's heroes. Once the conversation starts the photo collapses to a 54px strip, so no space is wasted.</div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">WELCOME — PHOTO HERO</div>
+        <div style="width:420px;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 24px 60px -30px rgba(13,111,130,.55),0 0 0 1px rgba(13,111,130,.08)">
+          <div style="position:relative;height:190px;background:#0D6F82;background-image:url('https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/1.jpg');background-size:cover;background-position:center">
+            <div style="position:absolute;inset:0;background:rgba(0,0,0,.5)"></div>
+            <div style="position:absolute;inset:0;padding:14px;display:flex;flex-direction:column;justify-content:space-between">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between">
+                <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.22);padding:5px 10px 5px 6px;border-radius:999px">
+                  <div style="width:24px;height:24px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:16px;height:16px"></div>
+                  <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;color:#fff">Germán</span>
+                  <span style="font-size:9.5px;font-weight:600;letter-spacing:.06em;color:#fff;background:rgba(255,255,255,.22);padding:2px 6px;border-radius:4px">AI</span>
+                </div>
+                <div style="display:flex;gap:5px">
+                  <div style="height:28px;padding:0 8px;border-radius:8px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:11.5px;font-weight:500;display:flex;align-items:center;gap:5px"><img src="https://flagsapi.com/GB/flat/64.png" alt="English" style="width:16px;height:16px;object-fit:cover;border-radius:3px">EN</div>
+                  <div style="height:28px;padding:0 8px;border-radius:8px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:11.5px;font-weight:500;display:flex;align-items:center">Hide ⌄</div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:21px;line-height:1.2;color:#fff;text-shadow:3px 3px 0 rgba(0,0,0,.35)">Your travel community<br>in the Canaries</div>
+                <div style="font-size:12.5px;line-height:1.5;color:rgba(255,255,255,.85)">13 hostels · 3 islands · 1 Nest Pass</div>
+              </div>
+            </div>
+          </div>
+          <div style="padding:16px;min-height:300px;display:flex;flex-direction:column;gap:13px;background:#fff;overflow:hidden">
+            <div style="display:flex;gap:9px;align-items:flex-end">
+              <div style="width:30px;height:30px;border-radius:50%;background:#e3f4f5;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:20px;height:20px"></div>
+              <div style="padding:12px 15px;max-width:82%;font-size:14px;line-height:1.5;background:#F1F6F7;border-radius:16px 16px 16px 4px;color:#12333c;text-wrap:pretty">Hi! I'm Germán, the Nests AI assistant. What can I sort out for you?</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-left:39px">
+              <div style="border:1px solid #E6EDEE;border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:3px;background:#fff">
+                <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12.5px;color:#12333c">Find my Nest</div>
+                <div style="font-size:11px;line-height:1.4;color:#7b939a">Surf, city or party</div>
+              </div>
+              <div style="border:1px solid #E6EDEE;border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:3px;background:#fff">
+                <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12.5px;color:#12333c">Nest Pass</div>
+                <div style="font-size:11px;line-height:1.4;color:#7b939a">How it works</div>
+              </div>
+              <div style="border:1px solid #E6EDEE;border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:3px;background:#fff">
+                <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12.5px;color:#12333c">Check dates</div>
+                <div style="font-size:11px;line-height:1.4;color:#7b939a">Beds &amp; prices</div>
+              </div>
+              <div style="border:1px solid #E6EDEE;border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:3px;background:#fff">
+                <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12.5px;color:#12333c">Getting here</div>
+                <div style="font-size:11px;line-height:1.4;color:#7b939a">Airport &amp; shuttle</div>
+              </div>
+            </div>
+          </div>
+          <div style="background:#fff;border-top:1px solid #E6EDEE;padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;background:#F1F6F7;border-radius:26px;padding:0 6px 0 16px">
+              <div style="flex:1;height:46px;display:flex;align-items:center;font-size:14px;color:#7b939a">Ask Germán anything…</div>
+              <div style="height:34px;width:34px;border-radius:50%;background:#EA580C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px">➤</div>
+            </div>
+            <div style="font-size:10.5px;color:#93a9af;text-align:center">AI answers — double-check dates &amp; prices before booking</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">IN CONVERSATION — HERO COLLAPSED, RICH ANSWER</div>
+        <div style="width:420px;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 24px 60px -30px rgba(13,111,130,.55),0 0 0 1px rgba(13,111,130,.08)">
+          <div style="position:relative;height:54px;background:#0D6F82;background-image:url('https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/1.jpg');background-size:cover;background-position:center 40%">
+            <div style="position:absolute;inset:0;background:rgba(0,0,0,.5)"></div>
+            <div style="position:absolute;inset:0;padding:0 12px;display:flex;align-items:center;justify-content:space-between">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:28px;height:28px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:19px;height:19px"></div>
+                <span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:14.5px;color:#fff">Germán</span>
+                <span style="font-size:9.5px;font-weight:600;letter-spacing:.06em;color:#fff;background:rgba(255,255,255,.22);padding:2px 6px;border-radius:4px">AI</span>
+              </div>
+              <div style="display:flex;gap:5px">
+                <div style="height:28px;width:28px;border-radius:8px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">⤢</div>
+                <div style="height:28px;padding:0 8px;border-radius:8px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:11.5px;font-weight:500;display:flex;align-items:center">Hide ⌄</div>
+              </div>
+            </div>
+          </div>
+          <div style="padding:16px;min-height:470px;display:flex;flex-direction:column;gap:13px;overflow:hidden">
+            <div style="display:flex;justify-content:flex-end">
+              <div style="padding:11px 15px;max-width:82%;font-size:14px;line-height:1.5;color:#fff;background:#0D6F82;border-radius:16px 16px 4px 16px">Cheap bed in Las Palmas, 3 nights?</div>
+            </div>
+            <div style="display:flex;gap:9px;align-items:flex-end">
+              <div style="width:30px;height:30px;border-radius:50%;background:#e3f4f5;flex-shrink:0;display:flex;align-items:center;justify-content:center"><img src="img/logotipo-nests-tenerife.png" alt="" style="width:20px;height:20px"></div>
+              <div style="padding:12px 15px;max-width:82%;font-size:14px;line-height:1.5;background:#F1F6F7;border-radius:16px 16px 16px 4px;color:#12333c;text-wrap:pretty">Two good options in Las Palmas — both walkable to Las Canteras.</div>
+            </div>
+            <div style="display:flex;gap:10px;margin-left:39px">
+              <div style="flex:1;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 6px 18px -8px rgba(13,111,130,.35),0 0 0 1px #E6EDEE">
+                <div style="height:78px;background:#53CED1;background-image:url('https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/2.jpg');background-size:cover;background-position:center"></div>
+                <div style="padding:10px;display:flex;flex-direction:column;gap:5px">
+                  <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;color:#12333c">La Isleta <span style="color:#53CED1">Nest</span></div>
+                  <div style="font-size:11px;color:#7b939a">10 min · Las Canteras</div>
+                  <div style="font-size:11.5px;color:#12333c"><span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:14px">€19</span>/night</div>
+                  <div style="height:34px;border-radius:10px;background:#EA580C;color:#fff;font-family:'Poppins',sans-serif;font-weight:600;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;justify-content:center">Book now</div>
+                </div>
+              </div>
+              <div style="flex:1;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 6px 18px -8px rgba(13,111,130,.35),0 0 0 1px #E6EDEE">
+                <div style="height:78px;background:#53CED1;background-image:url('https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/4.jpg');background-size:cover;background-position:center"></div>
+                <div style="padding:10px;display:flex;flex-direction:column;gap:5px">
+                  <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;color:#12333c">Las Palmas <span style="color:#53CED1">Nest</span></div>
+                  <div style="font-size:11px;color:#7b939a">Vegueta · old town</div>
+                  <div style="font-size:11.5px;color:#12333c"><span style="font-family:'Poppins',sans-serif;font-weight:600;font-size:14px">€21</span>/night</div>
+                  <div style="height:34px;border-radius:10px;background:#EA580C;color:#fff;font-family:'Poppins',sans-serif;font-weight:600;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;justify-content:center">Book now</div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-left:39px;border-radius:14px;border:1px solid #E6EDEE;padding:12px 13px;display:flex;align-items:center;gap:12px">
+              <div style="width:54px;height:54px;border-radius:10px;background:#e3f4f5;background-image:url('https://nestshostels.com/wp-content/themes/w_neststw/assets/img/maps/gran_canaria.png');background-size:cover;background-position:center;flex-shrink:0"></div>
+              <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;color:#12333c">Getting here</div>
+                <div style="font-size:11.5px;line-height:1.4;color:#7b939a">LPA airport → Las Palmas, bus 60, ~30 min</div>
+              </div>
+              <div style="margin-left:auto;font-size:11.5px;font-weight:600;color:#0D6F82;white-space:nowrap">Open map →</div>
+            </div>
+            <div style="display:flex;gap:7px;margin-left:39px;flex-wrap:wrap">
+              <div style="font-size:12px;font-weight:500;color:#0D6F82;padding:8px 12px;border-radius:999px;background:#F1F6F7;border:1px solid #E6EDEE">Call the hostel</div>
+              <div style="font-size:12px;font-weight:500;color:#0D6F82;padding:8px 12px;border-radius:999px;background:#F1F6F7;border:1px solid #E6EDEE">WhatsApp</div>
+              <div style="font-size:12px;font-weight:500;color:#0D6F82;padding:8px 12px;border-radius:999px;background:#F1F6F7;border:1px solid #E6EDEE">Email us</div>
+            </div>
+          </div>
+          <div style="background:#fff;border-top:1px solid #E6EDEE;padding:12px 14px">
+            <div style="display:flex;align-items:center;gap:8px;background:#F1F6F7;border-radius:26px;padding:0 6px 0 16px">
+              <div style="flex:1;height:46px;display:flex;align-items:center;font-size:14px;color:#7b939a">Ask Germán anything…</div>
+              <div style="height:34px;width:34px;border-radius:50%;background:#EA580C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px">➤</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:14px">
+        <div style="font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;color:#7b939a">LAUNCHER — AVATAR + QUIET DOT</div>
+        <div style="height:150px;background:#F1F6F7;border-radius:12px;position:relative;overflow:hidden">
+          <div style="position:absolute;right:24px;bottom:22px;height:60px;width:60px;border-radius:50%;background:#fff;box-shadow:0 10px 26px -8px rgba(13,111,130,.45);display:flex;align-items:center;justify-content:center;border:2px solid #53CED1">
+            <img src="img/logotipo-nests-tenerife.png" alt="" style="width:34px;height:34px">
+            <div style="position:absolute;top:0;right:0;width:14px;height:14px;border-radius:50%;background:#EA580C;border:2px solid #fff"></div>
+          </div>
+        </div>
+        <div style="font-size:12.5px;line-height:1.5;color:#3c5b64">Quietest launcher of the three: white avatar puck, teal ring, a plain orange dot instead of a count. No teaser bubble unless the visitor idles on a hostel page.</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</x-dc>
+</body>
+</html>
