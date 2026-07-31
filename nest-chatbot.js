@@ -318,9 +318,15 @@
        - AUTO_EXPANDED is per session, so the widget offers the wider sheet once
          per visit rather than on every reply.
        - USER_SHRANK is per browser: a guest who has pulled the sheet back in
-         once has stated a preference, and it should outlive the tab. */
+         once has stated a preference, and it should outlive the tab.
+       - EXPANDED is per browser and records the panel's CURRENT size, so a
+         reload does not drop a guest reading the wide sheet back into the 420px
+         card. It answers a different question from USER_SHRANK and both are
+         needed: a guest who shrank once (auto-expand suppressed forever) and
+         later expanded by hand still gets their expanded panel back. */
     var FLAG_AUTO_EXPANDED = 'nest-chatbot:auto-expanded';        // sessionStorage
     var FLAG_USER_SHRANK = 'nest-chatbot:user-shrank';            // localStorage
+    var FLAG_EXPANDED = 'nest-chatbot:expanded';                  // localStorage
 
     function readFlag(storeName, key) {
         try { return window[storeName].getItem(key) === '1'; } catch (e) { return false; }
@@ -328,6 +334,13 @@
 
     function writeFlag(storeName, key) {
         try { window[storeName].setItem(key, '1'); } catch (e) { /* private mode — degrade to per-load */ }
+    }
+
+    // Removing the key rather than writing '0': readFlag's semantics are
+    // '1'-or-absent everywhere, and a second falsy value would be a second thing
+    // every reader has to know about.
+    function clearFlag(storeName, key) {
+        try { window[storeName].removeItem(key); } catch (e) { /* private mode — nothing to clear */ }
     }
 
     /* ============================================================== api ===== */
@@ -2097,10 +2110,15 @@
      */
     function isExpanded() { return els.root.classList.contains('nc-expanded'); }
 
+    /* FLAG_EXPANDED is written and cleared on EVERY expand and shrink, whoever
+       caused it — it records the panel's last state, not an intent, which is what
+       makes boot() able to restore it. USER_SHRANK stays a separate, narrower
+       claim: only the guest writes it, and only shrinking. */
     function expandPanel() {
         if (removed || isExpanded()) { return; }
         els.root.classList.add('nc-expanded');
         els.expand.setAttribute('aria-label', t('shrink'));
+        writeFlag('localStorage', FLAG_EXPANDED);
         resyncCarousels();
     }
 
@@ -2110,6 +2128,7 @@
         if (removed || !isExpanded()) { return; }
         els.root.classList.remove('nc-expanded');
         els.expand.setAttribute('aria-label', t('expand'));
+        clearFlag('localStorage', FLAG_EXPANDED);
         if (byUser) { writeFlag('localStorage', FLAG_USER_SHRANK); }
         resyncCarousels();
     }
@@ -2620,6 +2639,17 @@
             setLocale: setLocale,
             get locale() { return locale; }
         };
+
+        // Before the auto-open check, so an auto-opened panel is already the right
+        // size when it appears rather than snapping wider a frame later.
+        //
+        // Deliberately NOT gated on matchMedia('(min-width: 1024px)'): every
+        // expanded rule lives inside that media query, so below 1024px the class
+        // simply stops matching and the panel is the fullscreen one either way.
+        // That is the same mechanism the shrink-on-narrow comment in
+        // css/nest-chatbot.css relies on; a gate here would be a second source of
+        // truth, free to disagree with the stylesheet.
+        if (readFlag('localStorage', FLAG_EXPANDED)) { expandPanel(); }
 
         if (cfg.autoOpen) { open(); }
         // After the auto-open check: an auto-opened session has already written
