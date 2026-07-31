@@ -2,7 +2,7 @@
 
 |                  |                                                                                                                                                                                                                        |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Version**      | matches `response-contract.md` 1.4.1 (the server reports the live version as `contract_version` — see §3.1)                                                                                                            |
+| **Version**      | matches `response-contract.md` 1.5.0 (the server reports the live version as `contract_version` — see §3.1)                                                                                                            |
 | **Audience**     | Any external website embedding a **custom** chat UI on top of the wSuite chatbot API — e.g. the branded `nest-chatbot-ai` microsite.                                                                                   |
 | **Scope**        | The **transport + auth** layer: base URL, the three endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS.                                                                            |
 | **Not in scope** | The **response envelope** (`reply` / typed `actions[]` / element types). That is fully specified in [`response-contract.md`](response-contract.md) — read it alongside this document; do not duplicate its rules here. |
@@ -71,11 +71,12 @@ Content-Type: application/json
 {
   "conversation": { "uuid": "9b2c…" },
   "greeting": "Hi! How can I help?",
-  "contract_version": "1.4.1"
+  "actions": [],
+  "contract_version": "1.5.0"
 }
 ```
 
-Persist `uuid` (the reference widget keys it to `localStorage` per API key). Render `greeting` as the first bot bubble.
+Persist `uuid` (the reference widget keys it to `localStorage` per API key). Render `greeting` as the first bot bubble. **Since 1.5.0** the init response also carries an `actions` array of the same element vocabulary as a turn (greeting-time quick prompts / promo — see [`response-contract.md`](response-contract.md)); render it after the greeting like any turn's `actions[]`, and tolerate its absence on older servers.
 
 #### `contract_version` — detecting you're behind
 
@@ -147,7 +148,7 @@ Recommended cadence: **~2s → 5s backoff, give up ≈120s**. On `ready`/`failed
 
 ## 4. Rendering elements
 
-The element types (`link_button`, `contact_channels`, `booking_link`, `availability`, `async_result`) and their fields are the authority of [`response-contract.md`](response-contract.md) — implement against that. Three **MUST** rules a consumer cannot skip (all demonstrated in `chatbot.js` `renderAction` / `safeHttpUrl`):
+The element types (`link_button`, `contact_channels`, `booking_link`, `availability`, `async_result`, `property_cards`, `promo_card`, `quick_replies`) and their fields are the authority of [`response-contract.md`](response-contract.md) — implement against that. Three **MUST** rules a consumer cannot skip (all demonstrated in `chatbot.js` `renderAction` / `safeHttpUrl`):
 
 1. **Ignore unknown `type`s.** New element types ship server-side ahead of any given UI. Skip a type you don't render; never break on it.
 2. **`async_result.url` must be treated as relative.** It always begins with `/`. Resolve it against `{API_BASE}` (§1) and **reject any non-relative value.** This structurally keeps the Bearer key on your own origin.

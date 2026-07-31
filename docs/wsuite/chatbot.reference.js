@@ -51,7 +51,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.4.1';
+    var BUILT_AGAINST = '1.5.0';
 
     // ---- state ---------------------------------------------------------------
     var conversationUuid = null;
@@ -176,7 +176,25 @@
             '.wsc-typing span{display:inline-block;width:6px;height:6px;margin:0 1px;border-radius:50%;',
             'background:#b3b8c2;animation:wsc-blink 1.2s infinite}',
             '.wsc-typing span:nth-child(2){animation-delay:.2s}.wsc-typing span:nth-child(3){animation-delay:.4s}',
-            '@keyframes wsc-blink{0%,60%,100%{opacity:.3}30%{opacity:1}}'
+            '@keyframes wsc-blink{0%,60%,100%{opacity:.3}30%{opacity:1}}',
+            '.wsc-cards{display:flex;gap:8px;overflow-x:auto;margin:6px 0;padding-bottom:4px}',
+            '.wsc-card{flex:0 0 220px;background:#fff;border:1px solid #e6e8ec;border-radius:12px;overflow:hidden}',
+            '.wsc-card img{display:block;width:100%;height:110px;object-fit:cover}',
+            '.wsc-card-body{padding:10px 12px}',
+            '.wsc-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;',
+            'color:#fff;background:' + color + ';margin-bottom:6px}',
+            '.wsc-card-name{font-size:14px;font-weight:600;color:#1f2430}',
+            '.wsc-card-loc{font-size:12px;color:#6b7280;margin-top:2px}',
+            '.wsc-card-price{font-size:13px;font-weight:600;color:#1f2430;margin-top:4px}',
+            '.wsc-card-cta{display:block;text-align:center;margin-top:8px}',
+            '.wsc-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}',
+            '.wsc-chip{padding:7px 12px;border-radius:999px;border:1px solid ' + color + ';background:none;',
+            'color:' + color + ';font-size:13px;cursor:pointer;font-family:inherit}',
+            '.wsc-promo{background:#fff;border:1px solid #e6e8ec;border-radius:12px;overflow:hidden;margin:6px 0;max-width:88%}',
+            '.wsc-promo img{display:block;width:100%;height:100px;object-fit:cover}',
+            '.wsc-promo-title{font-size:14px;font-weight:700;color:#1f2430;padding:10px 12px 0}',
+            '.wsc-promo-body{font-size:13px;color:#3b4252;padding:4px 12px 0;line-height:1.4}',
+            '.wsc-promo .wsc-act{margin:10px 12px 12px}'
         ].join('');
         var style = document.createElement('style');
         style.appendChild(document.createTextNode(css));
@@ -265,12 +283,23 @@
     // iterate the typed actions[] list, one renderer branch per element `type`.
     // A new rich type = one new branch here + one Element class server-side + a
     // server-side contract version bump and Changelog row (see response-contract.md).
+    // The pre-scan collects every property_cards item url so the Book-button
+    // branches can dedupe against a card CTA in the same list (D-043(c)).
     function renderActions(actions, botBubble) {
         if (!actions || !actions.length) { return; }
-        for (var i = 0; i < actions.length; i++) { renderAction(actions[i], botBubble); }
+        var cardUrls = Object.create(null);
+        for (var i = 0; i < actions.length; i++) {
+            var a = actions[i];
+            if (a && a.type === 'property_cards' && a.items && a.items.length) {
+                for (var j = 0; j < a.items.length; j++) {
+                    if (a.items[j] && typeof a.items[j].url === 'string') { cardUrls[a.items[j].url] = true; }
+                }
+            }
+        }
+        for (var k = 0; k < actions.length; k++) { renderAction(actions[k], botBubble, cardUrls); }
     }
 
-    function renderAction(action, botBubble) {
+    function renderAction(action, botBubble, cardUrls) {
         if (!action || !action.type) { return; }
 
         // Async tool turn (D-037(f)): the final reply is generated off-request;
@@ -281,11 +310,13 @@
         }
 
         if (action.type === 'link_button') {
+            if (cardUrls && cardUrls[action.url]) { return; } // a card in this list carries the same CTA (D-043(c))
             linkButton(action.label, action.url);
             return;
         }
 
         if (action.type === 'booking_link') {
+            if (cardUrls && cardUrls[action.url]) { return; } // same dedupe rule
             linkButton('Book now →', action.url);
             return;
         }
@@ -295,11 +326,123 @@
             return;
         }
 
+        if (action.type === 'property_cards') {
+            propertyCards(action);
+            return;
+        }
+
+        if (action.type === 'promo_card') {
+            promoCard(action);
+            return;
+        }
+
+        if (action.type === 'quick_replies') {
+            quickReplies(action);
+            return;
+        }
+
         if (action.type === 'contact_channels') {
             if (action.phone) { channelLink('Call ' + action.phone, 'tel:' + digits(action.phone)); }
             if (action.whatsapp) { channelLink('WhatsApp', 'https://wa.me/' + digits(action.whatsapp)); }
             if (action.email) { channelLink('Email ' + action.email, 'mailto:' + action.email); }
         }
+    }
+
+    // property_cards (contract 1.5.0): a horizontally scrollable rail of catalog
+    // cards. Every string lands via textContent; image/CTA urls pass safeHttpUrl
+    // or the card part is dropped (no url → no card at all: the CTA is mandatory).
+    function propertyCards(action) {
+        if (!action.items || !action.items.length) { return; }
+        var rail = el('div', 'wsc-cards');
+        for (var i = 0; i < action.items.length; i++) {
+            var item = action.items[i];
+            if (!item || typeof item.name !== 'string' || !item.name) { continue; }
+            var href = safeHttpUrl(item.url);
+            if (!href) { continue; }
+            var card = el('div', 'wsc-card');
+            var img = safeHttpUrl(item.image);
+            if (img) {
+                var image = el('img');
+                image.setAttribute('src', img);
+                image.setAttribute('alt', item.name);
+                image.setAttribute('loading', 'lazy');
+                image.setAttribute('referrerpolicy', 'no-referrer');
+                card.appendChild(image);
+            }
+            var body = el('div', 'wsc-card-body');
+            if (typeof item.badge === 'string' && item.badge) { body.appendChild(el('span', 'wsc-badge', item.badge)); }
+            body.appendChild(el('div', 'wsc-card-name', item.name));
+            if (typeof item.location === 'string' && item.location) { body.appendChild(el('div', 'wsc-card-loc', item.location)); }
+            if (item.price_from && item.price_from.amount) {
+                body.appendChild(el('div', 'wsc-card-price',
+                    'From ' + item.price_from.amount + (item.price_from.currency ? ' ' + item.price_from.currency : '')));
+            }
+            var cta = el('a', 'wsc-act wsc-card-cta', 'Book now →');
+            cta.setAttribute('href', href);
+            cta.setAttribute('target', '_blank');
+            cta.setAttribute('rel', 'noopener noreferrer');
+            body.appendChild(cta);
+            card.appendChild(body);
+            rail.appendChild(card);
+        }
+        if (rail.firstChild) { els.body.appendChild(rail); scrollDown(); }
+    }
+
+    // promo_card (contract 1.5.0): a tenant-authored promotional block. The
+    // `style` hint is honoured only as a whitelisted class suffix — never raw.
+    function promoCard(action) {
+        if (typeof action.title !== 'string' || !action.title) { return; }
+        var box = el('div', 'wsc-promo');
+        if (typeof action.style === 'string' && /^[a-z-]+$/.test(action.style)) {
+            box.className += ' wsc-promo-' + action.style;
+        }
+        var img = safeHttpUrl(action.image);
+        if (img) {
+            var image = el('img');
+            image.setAttribute('src', img);
+            image.setAttribute('alt', action.title);
+            image.setAttribute('loading', 'lazy');
+            image.setAttribute('referrerpolicy', 'no-referrer');
+            box.appendChild(image);
+        }
+        box.appendChild(el('div', 'wsc-promo-title', action.title));
+        if (typeof action.body === 'string' && action.body) { box.appendChild(el('div', 'wsc-promo-body', action.body)); }
+        if (action.cta && typeof action.cta.label === 'string' && action.cta.label) {
+            var href = safeHttpUrl(action.cta.url);
+            if (href) {
+                var cta = el('a', 'wsc-act', action.cta.label);
+                cta.setAttribute('href', href);
+                cta.setAttribute('target', '_blank');
+                cta.setAttribute('rel', 'noopener noreferrer');
+                box.appendChild(cta);
+            }
+        }
+        els.body.appendChild(box);
+        scrollDown();
+    }
+
+    // quick_replies (contract 1.5.0): tap-to-send chips. A chip carries NO url —
+    // tapping sends its `message` down the exact normal-turn path (the sent text
+    // shows as a guest bubble: honest transcript). The row is one-shot.
+    function quickReplies(action) {
+        if (!action.items || !action.items.length) { return; }
+        var row = el('div', 'wsc-chips');
+        for (var i = 0; i < action.items.length; i++) {
+            (function (item) {
+                if (!item || typeof item.label !== 'string' || !item.label
+                    || typeof item.message !== 'string' || !item.message) { return; }
+                var chip = el('button', 'wsc-chip', item.label);
+                chip.setAttribute('type', 'button');
+                chip.addEventListener('click', function () {
+                    if (busy || removed) { return; }
+                    if (row.parentNode) { row.parentNode.removeChild(row); }
+                    addBubble('guest', item.message);
+                    ensureConversation(function () { sendMessage(item.message, false); });
+                });
+                row.appendChild(chip);
+            })(action.items[i]);
+        }
+        if (row.firstChild) { els.body.appendChild(row); scrollDown(); }
     }
 
     function linkButton(label, url) {
@@ -352,6 +495,7 @@
             writeStore(conversationUuid);
             checkContractVersion(data.contract_version);
             if (data.greeting) { addBubble('bot', data.greeting); }
+            renderActions(data.actions); // init actions since 1.5.0 (quick prompts / promo); absent on older servers
             cb();
         });
     }
