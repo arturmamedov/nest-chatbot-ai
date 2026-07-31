@@ -255,6 +255,26 @@
     var STORE_KEY = 'nest-chatbot:' + (cfg.key || cfg.apiBase || 'default');
     var IDLE_MS = 24 * 60 * 60 * 1000;   // mirrors the API's conversation idle window
 
+    /*
+     * The record is {uuid, ts, actions} and readStore() hands back the OBJECT,
+     * never a bare uuid: a returning guest inside the idle window resumes without
+     * ever calling API.init, so the site's welcome elements — its configured
+     * quick_prompts, its show_at_init promo — have nowhere else to come from. Up
+     * to 2.4.1 a repeat visitor silently lost every one of them and saw only the
+     * widget's fallback pills, for the whole 24h. Every browser check cleared
+     * localStorage first, which is exactly the condition that hides it.
+     *
+     * Replaying a payload out of localStorage is safe for the same reason
+     * replaying it off the wire is: it goes back through the same renderers, and
+     * those treat every payload string as untrusted already (textContent,
+     * safeHttpUrl, never innerHTML). A tampered store can only produce what a
+     * hostile server could already produce — which is the threat model the
+     * renderers are written against, not an additional one.
+     *
+     * Accepted cost: welcome elements can be up to IDLE_MS stale. They are site
+     * settings rather than conversation state, so the worst case is a returning
+     * guest reading yesterday's promo copy until the conversation expires.
+     */
     function readStore() {
         try {
             var raw = window.localStorage.getItem(STORE_KEY);
@@ -262,13 +282,21 @@
             var parsed = JSON.parse(raw);
             if (!parsed || !parsed.uuid || !parsed.ts) { return null; }
             if ((Date.now() - parsed.ts) > IDLE_MS) { return null; }
-            return parsed.uuid;
+            // Anything but a non-empty array is dropped rather than handed on: a
+            // malformed store must degrade to "no welcome elements", never throw,
+            // and above all never cost the guest the conversation it also holds.
+            return {
+                uuid: parsed.uuid,
+                actions: (Array.isArray(parsed.actions) && parsed.actions.length) ? parsed.actions : null
+            };
         } catch (e) { return null; }
     }
 
-    function writeStore(uuid) {
+    function writeStore(uuid, actions) {
         try {
-            window.localStorage.setItem(STORE_KEY, JSON.stringify({ uuid: uuid, ts: Date.now() }));
+            window.localStorage.setItem(STORE_KEY, JSON.stringify({
+                uuid: uuid, ts: Date.now(), actions: actions || null
+            }));
         } catch (e) { /* private mode — the widget still works, just not across reloads */ }
     }
 
@@ -2199,9 +2227,15 @@
     function startConversation(cb) {
         var stored = readStore();
         if (stored) {
-            conversationUuid = stored;
+            conversationUuid = stored.uuid;
             started = true;
             if (intro.greeting === null) { intro.greeting = t('greeting'); }
+            // Replayed from the store for the same reason the greeting is
+            // defaulted here: this branch never reaches the server, and the
+            // welcome elements are the site's, not the conversation's. Without
+            // it a returning guest gets the fallback pills and nothing the site
+            // configured — see readStore().
+            if (intro.actions === null) { intro.actions = stored.actions; }
             cb();
             return;
         }
@@ -2223,16 +2257,18 @@
             if (status === 201 && body && body.conversation && body.conversation.uuid) {
                 conversationUuid = body.conversation.uuid;
                 started = true;
-                writeStore(conversationUuid);
                 checkContractVersion(body.contract_version);
                 intro.greeting = body.greeting || t('greeting');
                 // A site can attach welcome elements to the greeting — same request,
                 // zero extra network. Absent on older servers, [] when the site has
-                // configured none, and neither is a fallback for anything: since
-                // 2.4.1 showWelcome() renders whatever lands here ALONGSIDE the
-                // widget's own prompt block rather than instead of it, so the empty
-                // cases simply contribute nothing.
+                // configured none, and neither is a fallback for anything: the empty
+                // cases simply contribute nothing and the widget's own prompt block
+                // stands in.
                 intro.actions = (body.actions && body.actions.length) ? body.actions : null;
+                // Stored WITH the uuid, after intro.actions is settled: the resume
+                // branch above is the only other reader and it needs the same value
+                // this load is about to render.
+                writeStore(conversationUuid, intro.actions);
             } else {
                 // Never strand the guest behind a failed init — greet them anyway
                 // and let the first real turn retry.
