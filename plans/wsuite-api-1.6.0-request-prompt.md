@@ -1,3 +1,20 @@
+> **STATUS: EXECUTED — do not re-run.** This prompt was sent and acted on. It produced
+> contract **1.6.0** (upstream decision **D-044**), and the follow-up **1.6.1** which made
+> `price_from.period`/`basis` per-item. Most of what it asks for shipped: `period`/`basis`,
+> `cta_label`, `total`, `more`, element `id` and `locale` on `promo_card`/`quick_replies`,
+> `image_alt` (reserved), `conversation_ended`, the precise one-shot chip rule, the
+> missing-required-field policy, the poll-`410` carve-out, and the §4 `image` fix. Kept for the
+> record of what was asked and why — it is the input side of D-044, not pending work.
+>
+> Two consequences for this repo, neither closed by that upstream work:
+> the vendored packet here is still `1.5.0` while the server is at `1.6.1`, and the 1.5.0 → 1.6.1
+> sync is this widget's own `2.5.0`. The platform has already written the prompt for it —
+> see [`wsuite-sync-1.6.1-prompt.md`](wsuite-sync-1.6.1-prompt.md).
+>
+> Still open from this document and carried into
+> [`wsuite-chatbot-config-and-cost-prompt.md`](wsuite-chatbot-config-and-cost-prompt.md): a way
+> for a `quick_replies` row to say what it is asking (its open point 9 / the `heading` request).
+
 # Task — wSuite chatbot contract 1.6.0: fields the shipped rich elements still need
 
 You are working in the **wSuite backend** repo, which owns the guest chatbot API and the
