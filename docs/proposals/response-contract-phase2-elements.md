@@ -10,23 +10,27 @@ it collects the questions the shapes left open.
 
 ## Status
 
-Upstream has since tagged `chatbot-contract-v1.5.0`. **This widget has not yet been reconciled
-against the shipped spec.** The vendored packet in `docs/wsuite/` is untouched by this release
-and still pins 1.4.1 (upstream tag `chatbot-contract-v1.4.1`, 2026-07-28), and `BUILT_AGAINST`
-in the api section is still `'1.4.1'`.
+Upstream tagged `chatbot-contract-v1.5.0`, and as of 2026-07-31 the packet in `docs/wsuite/` is
+vendored from it. **The widget has not yet been reconciled field-by-field against the shipped
+spec**, so `BUILT_AGAINST` in the api section is deliberately still `'1.4.1'` — it records what
+the *code* implements, not what the docs say.
 
-That is deliberate, and it has one visible consequence: because `BUILT_AGAINST` records what
-the *code* implements rather than what the docs say, a server reporting
-`contract_version: "1.5.0"` at init trips the widget's one-time contract-drift `console.warn`
-**by design** until the sync lands. Per integration guide §3.1 that warn never gates and never
-hard-fails — the ignore-unknown rule keeps the widget fully functional against a newer server,
-and the warn is the sole exception to the `data-debug` logging gate.
+That has one visible consequence: a server reporting `contract_version: "1.5.0"` at init trips
+the widget's one-time contract-drift `console.warn` **by design** until the sync lands. Per
+integration guide §3.1 that warn never gates and never hard-fails — the ignore-unknown rule
+keeps the widget fully functional against a newer server, and the warn is the sole exception to
+the `data-debug` logging gate.
 
-**Release 2.5.0 is the sync.** It re-vendors `docs/wsuite/` wholesale from
-`chatbot-contract-v1.5.0`, reconciles the three renderers below field-by-field against the
-shipped spec, resolves whatever the open points at the foot of this document turn into, and
-moves `BUILT_AGAINST`. Anything in this document that the shipped 1.5.0 text contradicts is
-this widget's bug, not the contract's.
+**Release 2.5.0 closes the sync.** It reconciles the three renderers below field-by-field
+against the shipped spec, resolves whatever the open points at the foot of this document turn
+into, and moves `BUILT_AGAINST`. Two gaps are already known and named there: Book-button dedupe
+against a card CTA (open point 6) and one-shot mid-transcript chip rows (open point 7). Anything
+in this document that the shipped 1.5.0 text contradicts is this widget's bug, not the
+contract's.
+
+Since this document was written, **release 2.4.2** reverted the init-`quick_replies` precedence
+to what 1.5.0 specifies — server chips replace the widget's own prompt block rather than joining
+it. The Precedence section below and open point 9 carry the current state.
 
 ## Envelope
 
@@ -135,18 +139,27 @@ has one. The widget's built-in prompts are the fallback only (unconfigured sites
 servers, mock mode, and any `actions: []`). Server-supplied welcome elements are transcript
 content: they behave exactly like elements on any other reply and survive the first guest turn.
 
-**Changed in 2.4.1 — there is no precedence any more.** Both render: the server's elements *and*
-the widget's own prompt block, in that order. Two reasons. The blocks are not substitutes — a
-chip row answers a question the server asked, the prompt block offers somewhere to start — and
-the server has no way to send the second. And a `quick_replies` element cannot carry a line of
-text saying what it is asking (open point 9), so treating it as a complete welcome left the
-guest with unlabelled chips and nothing else. The widget also now **partitions** the array by
-type rather than rendering it wholesale: a `quick_replies` row joins the one-shot welcome
-wrapper and goes on the first guest turn, while every other element stays transcript content
-and survives it, exactly as this section originally described. The consequence worth flagging
-back: a site that has configured `chatbot.quick_prompts` now gets its own prompts *plus* the
-widget's two built-in pills. Open point 9's `heading` field is what would let the widget drop
-its own block when the server has sent a labelled one.
+**Changed in 2.4.1, reverted in 2.4.2 — server chips replace the widget's block.** 2.4.1 briefly
+rendered both, on the reasoning that the blocks are not substitutes and that an unlabelled chip
+row is not a complete welcome. That decision was taken against the 1.4.1 packet, before the
+shipped 1.5.0 text was on disk. 1.5.0 says what an init chip row *is* — *"Emitted on the init
+response from the site's `chatbot.quick_prompts` setting (the "try asking" chips)"* — so
+rendering both puts the same affordance on screen twice, the site's version and the widget's.
+2.4.2 restores server-replaces-ours: the widget's pills are the fallback only (unconfigured
+sites, older servers, mock mode, `actions: []`). The branch is on what actually **rendered**, not
+on what the payload contained, so a `quick_replies` element whose every item is malformed still
+falls back to the pills rather than leaving an empty welcome.
+
+The **partition** introduced in 2.4.1 is unchanged: a `quick_replies` row joins the one-shot
+`.nc-welcome` wrapper and goes on the first guest turn, while every other element (a
+`show_at_init` promo) stays transcript content in `.nc-body` and survives it — exactly as this
+section originally described.
+
+Reusing `quick_replies` more than once in one init `actions[]` is correct and the widget handles
+each row independently — the intended payload is **two** rows, the site's "try asking" prompts
+and (when the turn calls for one) a clarification row. What 1.5.0 still cannot do is let a row
+say what it is asking; see open point 9, which is now the live request rather than a
+nice-to-have.
 
 ## Widget-side degradation rules (2.4.0, all three types)
 
@@ -222,18 +235,29 @@ implements.
    though the stylesheet beside it is not. Without the header every host page falls back to
    the system font stack; the widget keeps working and nothing on screen flags it, so the only
    trace is the browser's own CORS error in devtools.
-9. **A `quick_replies` row cannot say what it is asking, and at init that is a real gap.** The
-   element carries only `items[]`. The init envelope carries only `greeting` and `actions[]`,
-   and there is no text element type in the contract — so a server that sends island chips as
-   welcome elements has **no way to send "Which island are you going to?" with them**. On a
-   turn the reply string supplies that line for free; at init the greeting is already spent
-   introducing the assistant. What 2.4.1 puts on screen is three unlabelled chips under a
-   greeting that does not mention them. Requested: an optional element-level `heading` on
-   `quick_replies` — server-localized, tenant-authored, reaching the DOM via `textContent` like
-   every other payload string, rendered above the row and simply absent when omitted.
-   `promo_card` already carries exactly that kind of string in its `title`, so this asks for
-   nothing new in kind. It would settle a second thing too: with a `heading` the widget could
-   stop pairing a server row with its own hardcoded "Try asking" block, which on a real 1.5.0
-   server currently means a site configuring `chatbot.quick_prompts` gets its prompts *plus*
-   the widget's two pills. A generic `text` element type would solve this and more, but it is a
-   much larger ask and the widget does not need it.
+9. **A `quick_replies` row cannot say what it is asking, and at init that is a real gap — this
+   is now the live request.** The element carries only `items[]`. The init envelope carries only
+   `greeting` and `actions[]`, and there is no text element type in the contract — so a server
+   that sends island chips as welcome elements has **no way to send "Which island are you going
+   to?" with them**. On a turn the `reply` string supplies that line for free (which is exactly
+   why the `hostel` fixture reads correctly); at init the greeting is already spent introducing
+   the assistant.
+
+   Per the owner's decision, 2.4.2 renders server rows **bare** rather than borrowing the
+   widget's own "Try asking" label for them: a label reading "try asking" over "Tenerife" would
+   assert an island name is a thing to try asking, when it is the answer to a question. So a
+   welcome built from a site's `chatbot.quick_prompts` is currently unlabelled chips under a
+   greeting that does not mention them, and that is the accepted state until this is settled.
+
+   Requested: an optional element-level `heading` on `quick_replies` — server-localized,
+   tenant-authored, reaching the DOM via `textContent` like every other payload string, rendered
+   above the row and simply absent when omitted. `promo_card` already carries exactly that kind
+   of string in its `title`, so this asks for nothing new in kind. A generic `text` element type
+   would solve this and more, but it is a much larger ask and the widget does not need it.
+
+   Two related things are already settled and need nothing from the platform. Reusing
+   `quick_replies` more than once in one init `actions[]` is correct — the intended payload is
+   **two** rows, the site's "try asking" prompts and a clarification row, and the widget handles
+   each independently. And since 2.4.2 the widget no longer pairs a server row with its own pill
+   block, so the "a site's prompts *plus* the widget's two pills" duplication this point used to
+   flag is gone: a `heading` is now about making the row readable, not about suppressing ours.

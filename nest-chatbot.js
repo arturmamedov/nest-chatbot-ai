@@ -20,16 +20,18 @@
  *   Element-supplied urls are honoured for http(s) only; tel:/mailto:/wa.me hrefs
  *   are constructed here from channel values, never taken verbatim.
  *
- * Built against response contract 1.4.1 (BUILT_AGAINST, api section) in
- * docs/wsuite/. The server reports its live contract_version at init; the widget
- * warns once — never fails — when the server is ahead. The reference
+ * Built against response contract 1.4.1 (BUILT_AGAINST, api section). The packet
+ * vendored in docs/wsuite/ is already at 1.5.0 — BUILT_AGAINST records what this
+ * code implements, not what the docs say, and 2.5.0 is the release that
+ * reconciles the two. The server reports its live contract_version at init; the
+ * widget warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
  * the transport or the element contract is unclear.
  */
 (function () {
     'use strict';
 
-    var VERSION = '2.4.1';
+    var VERSION = '2.4.2';
 
     /* =========================================================== config ===== */
 
@@ -469,6 +471,10 @@
      *   "!xss"      → a hostile reply and a javascript: url (must both be inert)
      *   "!410" "!403" "!429" "!500" → force that status
      *   anything else → a plain reply
+     *
+     * The init response carries two chip rows (promptChips + islandChips), and
+     * both of promptChips' messages land on a branch above rather than in the
+     * catch-all — tapping a welcome chip is meant to demo a real answer.
      */
     var Mock = (function () {
         var pollCounts = {};
@@ -508,17 +514,45 @@
             };
         }
 
+        // The tenant-authored "try asking" row — a site's chatbot.quick_prompts
+        // setting, which is the other thing contract 1.5.0 says an init
+        // quick_replies row carries. English literals on purpose: payload is
+        // server-localized and the widget never translates it, so a chip that
+        // followed the UI language would be lying about where it came from.
+        //
+        // Both messages are chosen to CHAIN into existing fixtures rather than
+        // dead-end in the catch-all reply: "hostel" reaches the island-chips
+        // branch and "Pass" the word-bounded promo branch. Deliberately worded
+        // apart from the pack's own prompt1/prompt2, so the demo shows at a
+        // glance which block is on screen.
+        function promptChips() {
+            return {
+                type: 'quick_replies',
+                items: [
+                    { label: 'Find my hostel', message: 'Which hostel should I pick?' },
+                    { label: 'Nest Pass', message: 'What is the Nest Pass?' }
+                ]
+            };
+        }
+
         return {
             init: function (done) {
                 reply(done, 201, {
                     conversation: { uuid: 'mock-' + Math.random().toString(36).slice(2, 10) },
                     greeting: t('greeting'),
                     // A site that HAS configured welcome elements — the interesting
-                    // case, and the one [] could not reach. Since 2.4.1 these render
-                    // alongside the widget's own TRY ASKING block rather than instead
-                    // of it, so shipping a non-empty array is what exercises both
-                    // halves of showWelcome() on the demo page.
-                    actions: [islandChips()],
+                    // case, and the one [] could not reach. TWO quick_replies rows,
+                    // mirroring the payload a real 1.5.0 server sends: the site's
+                    // own "try asking" prompts and a clarification row. Reusing the
+                    // type twice in one actions[] is contract-legal and each row is
+                    // handled independently.
+                    //
+                    // The cost, recorded rather than hidden: with init always
+                    // sending chips the demo no longer reaches showPrompts() or
+                    // setLocale's pill-repaint branch. Exercising the fallback means
+                    // temporarily setting this to actions: [] (CLAUDE.md says so
+                    // too).
+                    actions: [promptChips(), islandChips()],
                     contract_version: '1.4.1'
                 }, 700);
             },
@@ -1290,6 +1324,12 @@
      * argument deliberately stops here rather than being threaded through
      * renderActions()/renderAction(): that switch is the file's documented
      * extension seam and the whole regression gate runs through it.
+     *
+     * Returns the row node when one was appended, and nothing when the payload
+     * produced no chips — showWelcome() branches on THAT rather than on "the
+     * array contained a quick_replies element", which would suppress the fallback
+     * pills for a row that never made it to the screen. renderAction()'s branch
+     * ignores the return and still `return null`s, so its contract is unchanged.
      */
     function renderQuickReplies(action, parent) {
         if (!action.items || !action.items.length) { return; }
@@ -1317,6 +1357,7 @@
         if (!row.childNodes.length) { return; }
         (parent || els.body).appendChild(row);
         scrollDown();
+        return row;
     }
 
     // A factory, not a closure written inside the loop: `var` is function-scoped,
@@ -1930,24 +1971,24 @@
 
     /* ------------------------------------------------------ the welcome block */
     /*
-     * What sits under the greeting before the guest has said anything: whatever
-     * welcome elements the site configured on the init response, and two
-     * suggested openers of the widget's own. BOTH, never one or the other — a
-     * server chip row answers a question the server asked, the pack block offers
-     * somewhere to start, and the server has no way to send the second. (What it
-     * cannot send is a line of text above its own chips; see the open point in
-     * docs/proposals/response-contract-phase2-elements.md.)
+     * What sits under the greeting before the guest has said anything: the
+     * welcome elements the site configured on the init response, or — when it
+     * configured none that render — two suggested openers of the widget's own.
+     * The site's chips win outright: contract 1.5.0 defines an init
+     * quick_replies row as the site's own "try asking" chips, so showing the
+     * pack block beside one puts the same affordance on screen twice.
      *
      * The pack strings are cached in the widget rather than fetched: the welcome
      * state is the one moment the guest is watching a spinner, and it must not
-     * cost a second round trip.
+     * cost a second round trip. Being the fallback is also why they stay cached —
+     * they have to exist before any answer does.
      */
 
     var PROMPT_KEYS = ['prompt1', 'prompt2'];
 
     /**
-     * One wrapper holding both blocks, inserted after the greeting as a sibling
-     * inside .nc-body — never nested in the greeting bubble. followsBotMessage()
+     * One wrapper holding the whole welcome, inserted after the greeting as a
+     * sibling inside .nc-body — never nested in the greeting bubble. followsBotMessage()
      * reads els.body.lastElementChild, and a welcome tucked inside the greeting
      * would leave that bubble last, costing the next reply its avatar.
      *
@@ -1963,6 +2004,17 @@
      * cannot reach it: a tenant's init promo must not vanish the moment the guest
      * types.
      *
+     * Server chips REPLACE the widget's own pack block; they do not join it.
+     * Contract 1.5.0 says what an init quick_replies row is — "the site's
+     * chatbot.quick_prompts setting (the 'try asking' chips)" — so rendering both
+     * puts the same affordance on screen twice, the site's version and ours. Ours
+     * is the fallback: unconfigured sites, older servers, mock mode, actions: [].
+     *
+     * The branch is on what actually RENDERED, never on what the payload
+     * contained. renderQuickReplies() returns early when every item is malformed,
+     * and a widget that read the element rather than the row would answer a
+     * broken payload with an empty welcome and no fallback at all.
+     *
      * `null` as renderActions' bubble argument, never the greeting's own .nc-text:
      * an init async_result handed that node would retype the poll's answer OVER
      * the greeting. With null, pollResult opens a bubble of its own.
@@ -1972,19 +2024,25 @@
 
         var actions = intro.actions || [];
         var rest = [];
+        var chipped = false;
         for (var i = 0; i < actions.length; i++) {
             if (actions[i] && actions[i].type === 'quick_replies') {
-                renderQuickReplies(actions[i], welcome);
+                // Every row, not just the first: a site sends its "try asking"
+                // prompts and an island clarification as two elements, and each
+                // is handled independently — reusing the type is contract-legal.
+                if (renderQuickReplies(actions[i], welcome)) { chipped = true; }
             } else {
                 rest.push(actions[i]);
             }
         }
 
-        // Server chips first, the pack block second. A "TRY ASKING" label above
-        // "Tenerife" would assert that an island name is a thing to try asking,
-        // when it is an answer to a question the server asked. A judgement call,
-        // and one line to swap if a real site's chips ever read the other way.
-        showPrompts(welcome);
+        // Rows render BARE — no "TRY ASKING" label borrowed from the pack above
+        // them. A label reading "try asking" over "Tenerife" would assert an
+        // island name is a thing to try asking, when it is the answer to a
+        // question. 1.5.0 gives a row no way to say what it is asking; an
+        // optional element-level `heading` is the open request upstream
+        // (docs/proposals/response-contract-phase2-elements.md, open point 9).
+        if (!chipped) { showPrompts(welcome); }
 
         after.parentNode.insertBefore(welcome, after.nextSibling);
         renderActions(rest, null);
@@ -2544,11 +2602,10 @@
         // Only while the widget's OWN pack block is on screen — after the first
         // turn there is nothing to repaint, and the click handlers read their label
         // fresh anyway. Guarded on promptsLabel, not els.welcome: those are the
-        // fields this branch actually dereferences, and the server chips sharing
-        // that wrapper are payload strings that must never be repainted from a
-        // pack. A language switch therefore relabels the pills and leaves the chips
-        // in the language the server sent them — correct, and newly visible now
-        // that both blocks show at once.
+        // fields this branch actually dereferences, and it is null in exactly the
+        // case that matters — a welcome built from the server's chips, whose
+        // labels are payload strings, already server-localized, and must never be
+        // repainted from a pack.
         if (els.promptsLabel) {
             els.promptsLabel.textContent = t('tryAsking');
             PROMPT_KEYS.forEach(function (key, i) {

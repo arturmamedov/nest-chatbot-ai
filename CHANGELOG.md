@@ -5,6 +5,101 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.4.2 — 2026-07-31
+
+A patch: two defects and one revert to contract-specified behaviour. No new config attribute,
+no new i18n key, no new element type, no transport change. The new `localStorage` key is an
+implementation detail of the size fix, not new config surface, so under the repo's own rule
+this stays a patch — which also keeps **2.5.0 reserved for the contract sync** that CLAUDE.md
+and the proposals doc both promise. `BUILT_AGAINST` stays **1.4.1**.
+
+- **A returning guest gets the site's welcome elements back.** `startConversation()` returns
+  early whenever `readStore()` finds a conversation uuid, so `API.init` was never called on a
+  resume and `intro.actions` stayed `null`. On a live site that meant every repeat visitor
+  inside the 24h idle window silently lost the site's configured `chatbot.quick_prompts` **and**
+  its `show_at_init` promo card, while still getting the widget's fallback pills — so the
+  fallback was the only welcome a repeat visitor ever saw. Present since 2.4.0. What hid it is
+  worth recording: every browser check to date cleared `localStorage` first, which is exactly
+  the condition that masks the bug. The store now holds `{uuid, ts, actions}`, `readStore()`
+  returns the **object** rather than a bare uuid, and the resume branch seeds `intro.actions`
+  from it the same way it already defaults `intro.greeting`; `writeStore()` moved below the
+  assignment in the init callback so it persists the value that load renders. Replay is safe on
+  the renderers' existing terms — everything goes back through `textContent` / `safeHttpUrl` /
+  created nodes, so a tampered store can only produce what a hostile server could already
+  produce, which is the threat model those renderers are written against. A non-array `actions`
+  is dropped rather than trusted: a malformed record degrades to "no welcome elements" instead
+  of throwing and taking the conversation with it. Accepted cost, stated rather than hidden:
+  welcome elements can be up to `IDLE_MS` (24h) stale — they are site settings, not
+  conversation state. Verified: uuid **and** `ts` byte-identical across a reload with storage
+  intact (so no second init ran) and both chip rows still on screen; a hand-written
+  `{uuid, ts, actions: "garbage"}` boots with no page error and falls back to the pills.
+- **The expanded panel survives a reload.** `.nc-expanded` was runtime-only.
+  `nest-chatbot:user-shrank` recorded a *shrink* so auto-expand would not nag, but nothing
+  recorded that the panel **is** expanded, so every reload dropped a guest reading the wide
+  sheet back into the 420px floating card. New `localStorage` flag `nest-chatbot:expanded`,
+  written by `expandPanel()` and cleared by `shrinkPanel()` on **any** expand or shrink,
+  whoever caused it — it records the panel's last state rather than an intent, which is what
+  lets `boot()` restore it. `user-shrank` keeps its narrower meaning (only the guest, only
+  shrinking) and both flags are still needed: a guest who shrank once and later expanded by
+  hand now gets their expanded panel back on reload while auto-expand stays suppressed.
+  `clearFlag()` joins `readFlag`/`writeFlag` with the same try/catch, so `readFlag`'s
+  `'1'`-or-absent semantics stay the only ones in the file rather than gaining a `'0'` every
+  reader has to learn. Restore runs after `wire()` and **before** the `cfg.autoOpen` check, so
+  an auto-opened panel is already the right size when it appears. Deliberately **not** gated on
+  `matchMedia('(min-width: 1024px)')`: every expanded rule lives inside that media query, so
+  below 1024px the class simply stops matching — a gate here would be a second source of truth,
+  free to disagree with the stylesheet. Measured: expand → 670px, reload → still 670px with the
+  control reading "shrink"; shrink → 420px, reload → still 420px; and at a 900px viewport the
+  panel's box is **identical** with and without the class (885×800 at 0,0 both ways), so the
+  restored class is genuinely inert rather than coincidentally similar.
+- **Init `quick_replies` replace the widget's pills again, they do not join them.** 2.4.1's
+  "render both" decision was taken against the 1.4.1 packet. The packet on disk has since moved
+  to 1.5.0 and states what an init chip row *is*: *"Emitted on the init response from the site's
+  `chatbot.quick_prompts` setting (the "try asking" chips)"*. Rendering both therefore puts the
+  same affordance on screen twice — the site's version and ours. `showWelcome()` now calls
+  `showPrompts()` only when **no server chip row actually rendered**. The branch is on what was
+  rendered, never on what the payload contained: `renderQuickReplies()` returns early when every
+  item is malformed, and reading the element instead would answer a broken payload with an empty
+  welcome and no fallback at all — the 2.4.0 truthiness bug in a new place. It returns the row
+  node when it appends one and nothing when it does not; `renderAction()`'s branch ignores the
+  return and still `return null`s, so the extension seam's contract is unchanged. The partition
+  itself is untouched: `quick_replies` into the one-shot `.nc-welcome` wrapper, everything else
+  (a `show_at_init` promo) into `.nc-body` as transcript content. `els.promptsLabel` /
+  `els.promptButtons` therefore stay `null` whenever the server supplied chips, which is exactly
+  what `setLocale`'s existing guard needs — payload chips must never be repainted from a string
+  pack. Rows render **bare**, with no "TRY ASKING" label borrowed from the block above them: a
+  label reading "try asking" over "Tenerife" would assert an island name is a thing to try
+  asking, when it is the answer to a question. 1.5.0 gives a row no way to say what it is
+  asking, and an optional element-level `heading` is the live request upstream (proposals doc,
+  open point 9).
+- **The mock init sends two chip rows.** A new `promptChips()` factory beside `islandChips()`
+  carries the tenant-authored "try asking" row, and `Mock.init` returns
+  `actions: [promptChips(), islandChips()]` — mirroring the payload a real 1.5.0 server sends,
+  since reusing `quick_replies` twice in one `actions[]` is contract-legal and each row is
+  handled independently. English literals, because payload is server-localized and the widget
+  never translates it. Both messages chain into existing fixtures rather than dead-ending in the
+  catch-all: "Which hostel should I pick?" reaches the island-chips branch and "What is the Nest
+  Pass?" the word-bounded promo branch, and both are worded apart from the pack's own
+  `prompt1`/`prompt2` so the demo shows at a glance which block is on screen.
+  **Accepted coverage loss, recorded not hidden:** with init always sending chips the demo no
+  longer reaches `showPrompts()` or `setLocale`'s pill-repaint branch at all. Exercising the
+  fallback means temporarily setting `Mock.init`'s `actions: []` — CLAUDE.md says so too.
+- **No CSS changed** — `css/nest-chatbot.css` is untouched, so no new selector and no new
+  `!important` (the file's single pre-existing one is unchanged). Host-page computed styles are
+  byte-identical with and without the widget across `h2`, `textarea`, `a`, `.hidden`,
+  `.message`, `.chat-header`, `body`, `p`, `button` and `input` on the demo page, and every
+  selector in the stylesheet is still `#nest-chatbot`-scoped.
+- **Regression gate re-run** — `book contact rooms link available hostel tenerife pass offer
+  !unknown !xss !410 !429`, then `!403`: every branch renders its own elements, `tel:`/`wa.me`/
+  `mailto:` hrefs are still constructed, the `!xss` reply stays text and its `javascript:` url
+  is dropped, the unknown type is ignored with its sibling still rendering, `!403` tears the
+  widget down, and no page errors fire throughout. Keyboard: tabbing to a chip in the **second**
+  welcome row and pressing Enter lands `document.activeElement` on `TEXTAREA.nc-input` — two
+  rows in one wrapper is a new shape for `removeWelcome()`'s focus rescue and it holds. 2.4.1's
+  promo numbers re-asserted since `.nc-body`'s children change shape here: `offsetHeight ===
+  scrollHeight` (113px at the 670px sheet), `overflow: clip`, `flex-shrink: 0`, CTA inside the
+  card.
+
 ## 2.4.1 — 2026-07-30
 
 A patch: one rendering defect and one restructure of the welcome state. No new config

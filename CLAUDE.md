@@ -99,7 +99,7 @@ page rather than in production.
 |---|---|
 | `config` | reads `data-*`, derives `assetBase` from `script.src`, resolves the locale |
 | `i18n` | UI strings per locale (`en es it de fr`) |
-| `storage` | the conversation uuid in `localStorage`, 24h idle window |
+| `storage` | `{uuid, ts, actions}` in `localStorage`, 24h idle window — the init `actions[]` ride along so a resume can replay the site's welcome elements |
 | **`api`** | **the seam** — `init` / `send` / `poll` plus the mock fixtures |
 | `dom` | `el()`, `attrs()`, `svgNode()`, the icon and flag constants, `build()` |
 | `render` | bubbles, thinking dots, `renderAction()`, `safeHttpUrl()` |
@@ -120,7 +120,7 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.4.1 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.5.0 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
@@ -131,8 +131,10 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 `BUILT_AGAINST` (api section) moves **only** during a sync — it is a claim about what this
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
-rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: pinned 2026-07-28 from
-upstream tag `chatbot-contract-v1.4.1`.
+rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: pinned 2026-07-31 from
+upstream tag `chatbot-contract-v1.5.0`, while `BUILT_AGAINST` is still `'1.4.1'` — the packet
+is re-vendored ahead of the code that reconciles against it, which is the point of the two
+being separate claims. See the open item below.
 
 Three endpoints: init a conversation, post a turn, poll an async turn.
 
@@ -230,25 +232,38 @@ are shaped exactly like the real envelope. Drive them from the composer:
 | `!xss` | a hostile reply and a `javascript:` url (both must be inert) |
 | `!410` `!403` `!429` `!500` | forces that status |
 
+`Mock.init` returns **two** `quick_replies` rows — the tenant's "try asking" prompts and the
+island chips — mirroring a real 1.5.0 payload; both prompt messages chain into the table above
+rather than the catch-all reply. Since server chips **replace** the widget's own pack block,
+that means the demo never reaches `showPrompts()` or `setLocale`'s pill-repaint branch:
+exercising the fallback means temporarily setting `Mock.init`'s `actions: []`.
+
 ### The panel-size flags will confuse you before they confuse a guest
 
-Two flags decide whether the panel offers itself as the wide sheet. Neither is ever cleared by
-the widget, and one of them outlives the tab — so a machine that has been used to *test* the
-expanded sheet has auto-expand switched off, permanently, and nothing on screen says so.
+Three flags decide how the panel is sized. Two of them outlive the tab and only one is ever
+cleared by the widget — so a machine that has been used to *test* the expanded sheet has
+auto-expand switched off, permanently, and nothing on screen says so.
 
 | Key | Store | Written by | Cleared by |
 |---|---|---|---|
 | `nest-chatbot:auto-expanded` | `sessionStorage` | `maybeAutoExpand()`, the once-per-session auto-expand | closing the tab — nothing else |
 | `nest-chatbot:user-shrank` | `localStorage` | `shrinkPanel(true)`, i.e. the guest pressing ⤡ | **nothing, ever** |
+| `nest-chatbot:expanded` | `localStorage` | `expandPanel()` — **any** expand, guest or auto | `shrinkPanel()` — any shrink |
+
+The last one is the panel's *current* size, restored by `boot()` so a reload does not drop a
+guest out of the wide sheet. It answers a different question from `user-shrank` and both are
+needed: a guest who shrank once (auto-expand suppressed forever) and later expanded by hand
+gets their expanded panel back. It is not gated on `matchMedia('(min-width: 1024px)')` — every
+expanded rule lives inside that media query, so below 1024px the class is simply inert.
 
 ⤢/⤡ is a single toggle, so expanding the sheet to look at it and collapsing it again *is*
 `shrinkPanel(true)` and writes the permanent flag. `maybeAutoExpand()` then reads it as a
 stated preference and never auto-expands in that browser again. This is working as specified —
 a guest who has pulled the sheet back in once has said something — it is just far easier to
-trip during development than in a guest's session. Reset both from the console:
+trip during development than in a guest's session. Reset all three from the console:
 
 ```js
-localStorage.removeItem('nest-chatbot:user-shrank'); sessionStorage.removeItem('nest-chatbot:auto-expanded');
+localStorage.removeItem('nest-chatbot:user-shrank'); localStorage.removeItem('nest-chatbot:expanded'); sessionStorage.removeItem('nest-chatbot:auto-expanded');
 ```
 
 The realistic test is serving the widget and the host page from **different origins** — that is
@@ -270,13 +285,19 @@ what a customer hits. Run a second static server on another port with a page tha
   system stack. Nothing on screen says so and the widget keeps working — the only trace is
   the browser's own CORS error in devtools — so verify from a page on a **different** origin,
   never from the CDN's own domain.
-- **The 1.5.0 contract sync is pending.** `BUILT_AGAINST` is `'1.4.1'` while 2.4.0 already
-  renders `property_cards` / `promo_card` / `quick_replies` and reads the init `actions[]`, so
-  a server reporting 1.5.0 fires the one-time drift warn **by design**. Release **2.5.0** is
-  the sync: re-vendor `docs/wsuite/` from tag `chatbot-contract-v1.5.0`, reconcile the three
-  renderers against the shipped spec, then move `BUILT_AGAINST`.
-  `docs/proposals/response-contract-phase2-elements.md` records what 2.4.0 implements and the
-  open points to settle with the platform team.
+- **The 1.5.0 contract sync is half done.** The packet is vendored (tag
+  `chatbot-contract-v1.5.0`); `BUILT_AGAINST` is still `'1.4.1'`, so a server reporting 1.5.0
+  fires the one-time drift warn **by design**. Release **2.5.0** closes it: reconcile the
+  renderers field-by-field against the shipped spec, then move `BUILT_AGAINST`. Two known gaps,
+  both widget-side and both recorded in
+  `docs/proposals/response-contract-phase2-elements.md` — **Book-button dedupe** (1.5.0 asks a
+  card-aware renderer to suppress a `link_button`/`booking_link` whose `url` equals a card
+  item's in the same `actions[]`; `renderAction()` handles elements in isolation and does not,
+  and the mock cannot catch it because its CTA trio uses three different urls — open point 6),
+  and **one-shot mid-transcript chip rows** (a row a *reply* carries still stands; only the
+  welcome row is one-shot — open point 7, and it needs the same focus rescue `removeWelcome()`
+  carries). The same doc holds the open questions for the platform team, chief among them an
+  optional element-level `heading` on `quick_replies`.
 - **Origin allow-listing shipped platform-side (D-039)** — opt-in per site, default
   allow-all. Once a site configures a list, every embedding origin must be registered
   (guide §7, exact `scheme://host[:port]`) or requests are refused with
