@@ -1,12 +1,25 @@
 > **Provenance: copied verbatim from the wSuite platform repo**, `modules/chatbot/docs/consumer-sync.md`
-> §4 ("The sync prompt"), as of contract **1.6.1** (2026-07-31). The platform authors and renders this
-> prompt per consumer from its own registry — it is *their* document, reproduced here so the sync's input
-> sits beside this repo's other plans. **Do not edit it to reflect local opinion**; if it is wrong, that is
-> a correction to send upstream. Re-copy it at the next sync rather than patching this file.
+> §4 ("The sync prompt"), at contract **1.6.1**. The platform authors and renders this prompt per
+> consumer from its own registry — it is *their* document, reproduced here so the sync's input sits
+> beside this repo's other plans. **Do not edit it to reflect local opinion**; if it is wrong, that is a
+> correction to send upstream. Re-copy it at the next sync rather than patching this file.
 >
-> Two corrections that were already true when it was rendered, so do not be thrown by them:
-> this repo is at its own `VERSION` **2.4.2** (not 2.4.0) and `BUILT_AGAINST` **'1.4.1'** (not '1.5.0').
-> The widget renders 1.5.0 shapes but never moved the constant — Step 0 will surface both.
+> **This is revision 2, re-copied 2026-07-31 after the platform rewrote §4.** An earlier copy is
+> superseded — they asked explicitly that the current version be used. What changed: a new **Step 1b**
+> listing five defects their own browser pass found in the reference renderer, the §1 registry row
+> corrected to this repo's real numbers (`2.4.2` / `BUILT_AGAINST` `1.4.1`), and Step 0 now *asks* for
+> `BUILT_AGAINST` rather than asserting it.
+>
+> **Step 1b defect 1 is the one to check first.** The `410`/`404` re-init drawing the replacement
+> conversation's greeting and chips is 1.5.0-era behaviour, so it may be live in this build; it is
+> invisible until a `410` is forced, and the mock's `!410` does **not** reach it (the fixture returns
+> `410` to the retry as well, so it exercises the give-up branch, not recovery).
+>
+> **Packet provenance, recorded in their §2 and easy to get wrong:** the two docs come from tag
+> `chatbot-contract-v1.6.1`, but `chatbot.reference.js` comes from **main** — a widget bugfix does not
+> bump the contract, so the renderer is ~86 lines ahead of the tag while the docs are byte-identical to
+> it. Taking all three from the tag ships the buggy renderer. The built packet is at
+> `C:\Users\artur\Herd\nest-packet-1.6.1\`; vendoring it into `docs/wsuite/` is step one of the sync.
 
 # Task — sync this widget to wSuite chatbot response contract 1.6.1
 
@@ -54,9 +67,13 @@ the vendored files to make them look current.
 
 Read `nest-chatbot.js` end to end, then report:
 
-- `BUILT_AGAINST` — should read `1.5.0`.
+- `BUILT_AGAINST` — **read the literal value and report it.** Upstream's registry recorded
+  `1.5.0`; your last report said `1.4.1`. Do not assume either — whichever it says, state it,
+  then state which 1.5.0 elements you actually render (`property_cards`, `promo_card`,
+  `quick_replies`, init `actions[]`). If the constant is behind what the code does, say so:
+  that gap is the reason this drifted, and it gets corrected in Step 4, not papered over.
 - `var VERSION` — this repo's **own** release number, a separate thing (currently
-  `2.4.0`). Confirm you can tell the two apart before you change either.
+  `2.4.2`). Confirm you can tell the two apart before you change either.
 - your `property_cards` renderer — does it read `item.url` before or after your scheme
   gate, and does it record a dropped item's url anywhere? (Step 1, item 1.)
 - your `promo_card` renderer — what does it do when `body` or `cta` is absent?
@@ -82,6 +99,43 @@ Post a short findings list. Then proceed.
    did — you already gate both, so this is a confirmation, not a change). The full gated
    set is: `link_button`, `booking_link`, `availability`, `property_cards` item `url` +
    `image` **and the new element-level `more.url`**, and `promo_card` `image` + `cta.url`.
+
+## Step 1b — five defects the reference renderer's own browser pass found (2026-07-31)
+
+The platform ran the browser pass it owed on `chatbot.js` and found five real defects. **None is
+a contract change** — the contract was right, the reference renderer was wrong — but every one of
+them is a bug you can have too, because they are all in code paths you copied or mirrored. Check
+each against your renderer and fix what applies. The refreshed `chatbot.reference.js` in your
+packet already has all five.
+
+1. **The `410`/`404` re-init was not actually transparent.** The recovery path called the same
+   `startConversation()` the launcher does, so it drew the *replacement* conversation's greeting
+   — and, on a configured site, its `promo_card` and a fresh `quick_replies` row — **after** the
+   message the guest had already sent. The chip row is stale on arrival by the one-shot rule.
+   Fix: the silent recovery path must establish the new conversation (uuid, storage, version
+   check) and render **nothing**. This is the highest-value one for you: it is 1.5.0-era
+   behaviour, so it is probably present in your build today, and it is invisible until you
+   force a `410`.
+2. **`promo_card.style` must match your OWN known list.** The reference accepted any
+   `/^[a-z-]+$/` value and emitted `wsc-promo-<that value>`, so tenant-authored text reached the
+   DOM as a class name — and it had no rule for `highlight`, the one value the contract
+   documents, so the whitelist was decorative anyway. The contract requires matching against a
+   list you control and degrading anything unrecognised to default styling.
+3. **`conversation_ended` needs a branch** (this is also the 1.6.0 delta item). Without one, a
+   capped conversation leaves the composer open and every further message returns the same canned
+   reply. The reference now closes the composer and offers a "start a new chat" affordance that
+   clears the stored uuid and re-inits.
+4. **Four accessibility gaps**, all named in the contract's Accessibility section, which describes
+   them as things the reference widget already did — it did not. If your panel body is a single
+   `aria-live` region, a card rail, promo and chip row all announce **over** the reply; mark those
+   containers `aria-live="off"`. Expose the rail as a labelled list of list items, name the promo
+   region by its `title`, and when a chip row retires under focus move focus to the composer
+   instead of dropping it to `<body>`.
+5. **Verify the dedupe with the case that actually isolates it.** A `javascript:` card URL cannot
+   test the D-043(c) trap, because there the card *and* the Book button are both rejected and you
+   see the correct result for the wrong reason. The case that isolates it is a card dropped for a
+   **non-URL** reason — no `name` — carrying a **valid** url that a `link_button` in the same list
+   also carries. Correct behaviour: card dropped, Book button still rendered.
 
 ## Step 2 — adopt the contract delta (1.5.0 → 1.6.1)
 
