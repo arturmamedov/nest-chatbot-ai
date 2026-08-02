@@ -51,7 +51,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.5.0';
+    var BUILT_AGAINST = '1.6.1';
 
     // ---- state ---------------------------------------------------------------
     var conversationUuid = null;
@@ -59,6 +59,8 @@
     var busy = false;      // a request is in flight
     var removed = false;   // widget torn down (403)
     var contractWarned = false; // contract-drift warning emitted once (O-40)
+    var chipRows = [];     // live quick_replies rows — retired on any send (1.6.0)
+    var ended = false;     // conversation_ended received — composer closed (1.6.0)
     var els = {};
 
     // ---- localStorage helpers -----------------------------------------------
@@ -193,8 +195,14 @@
             '.wsc-promo{background:#fff;border:1px solid #e6e8ec;border-radius:12px;overflow:hidden;margin:6px 0;max-width:88%}',
             '.wsc-promo img{display:block;width:100%;height:100px;object-fit:cover}',
             '.wsc-promo-title{font-size:14px;font-weight:700;color:#1f2430;padding:10px 12px 0}',
-            '.wsc-promo-body{font-size:13px;color:#3b4252;padding:4px 12px 0;line-height:1.4}',
-            '.wsc-promo .wsc-act{margin:10px 12px 12px}'
+            // pre-wrap: promo body MAY carry newlines (contract 1.6.0) — a tenant's
+            // two-line offer must stay two lines, as the reply bubble already does.
+            '.wsc-promo-body{font-size:13px;color:#3b4252;padding:4px 12px 0;line-height:1.4;white-space:pre-wrap}',
+            '.wsc-promo .wsc-act{margin:10px 12px 12px}',
+            // `highlight` is the ONLY style value the contract documents, and it
+            // means "the tenant's primary offer — give it more visual weight".
+            '.wsc-promo-highlight{border-color:' + color + ';border-left-width:3px}',
+            '.wsc-restart{border:none;cursor:pointer;font-family:inherit}'
         ].join('');
         var style = document.createElement('style');
         style.appendChild(document.createTextNode(css));
@@ -269,65 +277,88 @@
 
     function digits(value) { return (value || '').replace(/[^0-9]/g, ''); }
 
-    // Element-supplied link urls (booking_url / website / availability deep-link)
-    // are honoured ONLY for http(s); anything else -- javascript:/data:, or a scheme
-    // hidden behind leading whitespace/control chars -- fails the test and is dropped.
-    // Defence in depth (the urls are code-emitted from the DB, never the LLM);
+    // EVERY element-supplied url and image is honoured ONLY for http(s): the
+    // catalog links (booking_url / website / map_url / availability deep-link),
+    // property_cards item url + image + the element-level more.url, and the
+    // TENANT-AUTHORED promo_card image + cta.url. Anything else -- javascript:,
+    // data:, or a scheme hidden behind leading whitespace/control chars -- fails
+    // the test and is dropped. Most of these are code-emitted from the DB (defence
+    // in depth), but the promo pair is authored in site settings and is the reason
+    // this gate is a requirement rather than a belt-and-braces check.
     // tel:/mailto:/wa.me hrefs are built by the widget, so they stay safe.
     function safeHttpUrl(url) {
         if (typeof url !== 'string') { return null; }
         return /^\s*https?:\/\//i.test(url) ? url : null;
     }
 
+    // A card item renders only when it has a name AND an http(s) url — the same
+    // gate propertyCards() applies. Returns that url, or null when the item will
+    // be dropped: the dedupe pre-scan MUST agree with what actually reaches the
+    // DOM, or a card rejected here would silently suppress the guest's only Book
+    // button (response-contract.md, the D-043(c) dedupe rule).
+    function renderableCardUrl(item) {
+        if (!item || typeof item.name !== 'string' || !item.name) { return null; }
+        return safeHttpUrl(item.url);
+    }
+
     // The versioned response contract (modules/chatbot/docs/response-contract.md):
     // iterate the typed actions[] list, one renderer branch per element `type`.
     // A new rich type = one new branch here + one Element class server-side + a
     // server-side contract version bump and Changelog row (see response-contract.md).
-    // The pre-scan collects every property_cards item url so the Book-button
-    // branches can dedupe against a card CTA in the same list (D-043(c)).
-    function renderActions(actions, botBubble) {
+    // The pre-scan collects the url of every RENDERABLE property_cards item so the
+    // Book-button branch can dedupe against a card CTA in the same list (D-043(c)).
+    // `rendered` (optional) accumulates every url this turn actually anchored, so a
+    // later poll resolution can skip one it already showed (1.6.0).
+    function renderActions(actions, botBubble, rendered) {
         if (!actions || !actions.length) { return; }
         var cardUrls = Object.create(null);
         for (var i = 0; i < actions.length; i++) {
             var a = actions[i];
             if (a && a.type === 'property_cards' && a.items && a.items.length) {
                 for (var j = 0; j < a.items.length; j++) {
-                    if (a.items[j] && typeof a.items[j].url === 'string') { cardUrls[a.items[j].url] = true; }
+                    var url = renderableCardUrl(a.items[j]);
+                    if (url) { cardUrls[url] = true; }
                 }
             }
         }
-        for (var k = 0; k < actions.length; k++) { renderAction(actions[k], botBubble, cardUrls); }
+        for (var k = 0; k < actions.length; k++) { renderAction(actions[k], botBubble, cardUrls, rendered); }
     }
 
-    function renderAction(action, botBubble, cardUrls) {
+    function renderAction(action, botBubble, cardUrls, rendered) {
         if (!action || !action.type) { return; }
 
         // Async tool turn (D-037(f)): the final reply is generated off-request;
-        // poll for it. `botBubble` is the interim reply node to replace in place.
+        // poll for it. `botBubble` is the interim reply node to replace in place,
+        // and `rendered` carries this turn's already-anchored urls so the final
+        // actions[] -- which is ADDITIVE to what we drew here -- can skip a repeat.
         if (action.type === 'async_result' && action.url) {
-            pollResult(action.url, botBubble);
+            pollResult(action.url, botBubble, rendered);
             return;
         }
 
         if (action.type === 'link_button') {
             if (cardUrls && cardUrls[action.url]) { return; } // a card in this list carries the same CTA (D-043(c))
-            linkButton(action.label, action.url);
+            linkButton(action.label, action.url, rendered);
             return;
         }
 
         if (action.type === 'booking_link') {
             if (cardUrls && cardUrls[action.url]) { return; } // same dedupe rule
-            linkButton('Book now →', action.url);
+            linkButton('Book now →', action.url, rendered);
             return;
         }
 
+        // A poll's availability url falls back to the property's booking_url, which
+        // the interim turn already anchored as booking_link -- so without this check
+        // the guest ends up with two identical Book buttons (1.6.0).
         if (action.type === 'availability' && action.url) {
-            linkButton('Book now →', action.url);
+            if (rendered && rendered[action.url]) { return; }
+            linkButton('Book now →', action.url, rendered);
             return;
         }
 
         if (action.type === 'property_cards') {
-            propertyCards(action);
+            propertyCards(action, rendered);
             return;
         }
 
@@ -341,6 +372,14 @@
             return;
         }
 
+        // The turn cap (1.6.0): this conversation accepts no further turns. The
+        // element carries no visual payload — `reply` already told the guest —
+        // so all we add is the one thing that still works: a new conversation.
+        if (action.type === 'conversation_ended') {
+            endConversation();
+            return;
+        }
+
         if (action.type === 'contact_channels') {
             if (action.phone) { channelLink('Call ' + action.phone, 'tel:' + digits(action.phone)); }
             if (action.whatsapp) { channelLink('WhatsApp', 'https://wa.me/' + digits(action.whatsapp)); }
@@ -348,23 +387,48 @@
         }
     }
 
-    // property_cards (contract 1.5.0): a horizontally scrollable rail of catalog
-    // cards. Every string lands via textContent; image/CTA urls pass safeHttpUrl
-    // or the card part is dropped (no url → no card at all: the CTA is mandatory).
-    function propertyCards(action) {
+    // The from-price line. `period`/`basis` (1.6.0) are OPTIONAL and absent unless
+    // the tenant declared them -- when they are, never invent a period: a bare
+    // "From €22" is honest, "From €22/night" on a per-stay price is not.
+    function priceLine(price) {
+        var text = 'From ' + price.amount + (price.currency ? ' ' + price.currency : '');
+        if (price.period === 'night') { text += ' / night'; }
+        else if (price.period === 'stay') { text += ' / stay'; }
+        if (price.basis === 'per_person') { text += ' per person'; }
+        else if (price.basis === 'per_unit') { text += ' per unit'; }
+        return text;
+    }
+
+    // property_cards (contract 1.5.0, extended 1.6.0): a horizontally scrollable
+    // rail of catalog cards. Every string lands via textContent; image/CTA urls
+    // pass safeHttpUrl or the card part is dropped (no url → no card at all: the
+    // CTA is mandatory). `total`/`more` drive the overflow affordance so a capped
+    // rail no longer silently loses the rest of the catalog.
+    function propertyCards(action, rendered) {
         if (!action.items || !action.items.length) { return; }
         var rail = el('div', 'wsc-cards');
+        // A labelled LIST, not a slideshow: the cards are peers and every CTA is
+        // reachable by keyboard in order. `aria-live="off"` because the whole
+        // .wsc-body is a polite live region — without this the rail announces
+        // itself over the reply it accompanies (contract → Accessibility).
+        rail.setAttribute('role', 'list');
+        rail.setAttribute('aria-label', 'Properties');
+        rail.setAttribute('aria-live', 'off');
+        var shown = 0;
         for (var i = 0; i < action.items.length; i++) {
             var item = action.items[i];
-            if (!item || typeof item.name !== 'string' || !item.name) { continue; }
-            var href = safeHttpUrl(item.url);
+            var href = renderableCardUrl(item);
             if (!href) { continue; }
             var card = el('div', 'wsc-card');
+            card.setAttribute('role', 'listitem');
             var img = safeHttpUrl(item.image);
             if (img) {
                 var image = el('img');
                 image.setAttribute('src', img);
-                image.setAttribute('alt', item.name);
+                // Decorative by default: the card name below already carries the
+                // meaning, so reusing it here makes a screen reader say it twice.
+                // image_alt is only set when the catalog image means something more.
+                image.setAttribute('alt', typeof item.image_alt === 'string' ? item.image_alt : '');
                 image.setAttribute('loading', 'lazy');
                 image.setAttribute('referrerpolicy', 'no-referrer');
                 card.appendChild(image);
@@ -374,59 +438,124 @@
             body.appendChild(el('div', 'wsc-card-name', item.name));
             if (typeof item.location === 'string' && item.location) { body.appendChild(el('div', 'wsc-card-loc', item.location)); }
             if (item.price_from && item.price_from.amount) {
-                body.appendChild(el('div', 'wsc-card-price',
-                    'From ' + item.price_from.amount + (item.price_from.currency ? ' ' + item.price_from.currency : '')));
+                body.appendChild(el('div', 'wsc-card-price', priceLine(item.price_from)));
             }
-            var cta = el('a', 'wsc-act wsc-card-cta', 'Book now →');
+            // cta_label is server-localized (1.6.0) — prefer it over our English default.
+            var cta = el('a', 'wsc-act wsc-card-cta',
+                (typeof item.cta_label === 'string' && item.cta_label) ? item.cta_label : 'Book now →');
             cta.setAttribute('href', href);
             cta.setAttribute('target', '_blank');
             cta.setAttribute('rel', 'noopener noreferrer');
             body.appendChild(cta);
             card.appendChild(body);
             rail.appendChild(card);
+            if (rendered) { rendered[href] = true; }
+            shown++;
         }
-        if (rail.firstChild) { els.body.appendChild(rail); scrollDown(); }
+        if (!rail.firstChild) { return; }
+        els.body.appendChild(rail);
+
+        var moreUrl = action.more ? safeHttpUrl(action.more.url) : null;
+        if (moreUrl && typeof action.more.label === 'string' && action.more.label) {
+            linkButton(action.more.label, moreUrl, rendered);   // label is server-localized
+        } else if (typeof action.total === 'number' && action.total > shown) {
+            els.body.appendChild(el('div', 'wsc-card-loc', 'Showing ' + shown + ' of ' + action.total + '.'));
+        }
+        scrollDown();
     }
 
-    // promo_card (contract 1.5.0): a tenant-authored promotional block. The
-    // `style` hint is honoured only as a whitelisted class suffix — never raw.
+    // The `style` values this renderer knows how to present. `highlight` is the
+    // only one the platform documents; an unrecognised value must fall back to
+    // default styling rather than reach the DOM as a class we have no rule for.
+    var PROMO_STYLES = { highlight: true };
+
+    // promo_card (contract 1.5.0, extended 1.6.0): a tenant-authored promotional
+    // block. `style` is honoured only as a whitelisted class suffix — never raw.
+    //
+    // title / body / cta{label,url} are all REQUIRED, so a payload missing any of
+    // them gets the whole element dropped (the contract's fail-closed rule): a
+    // promo whose CTA we cannot anchor is an advert with no way to act on it.
+    // SiteContentElements already rejects such a promo server-side, so this is
+    // defence in depth against a non-reference producer, not a live bug.
     function promoCard(action) {
-        if (typeof action.title !== 'string' || !action.title) { return; }
+        var href = action.cta ? safeHttpUrl(action.cta.url) : null;
+        if (typeof action.title !== 'string' || !action.title
+            || typeof action.body !== 'string' || !action.body
+            || !action.cta || typeof action.cta.label !== 'string' || !action.cta.label
+            || !href) { return; }
+
         var box = el('div', 'wsc-promo');
-        if (typeof action.style === 'string' && /^[a-z-]+$/.test(action.style)) {
+        // A region named by its title, and NOT a live region: the reply bubble is
+        // the one thing that announces (contract → Accessibility).
+        box.setAttribute('role', 'region');
+        box.setAttribute('aria-label', action.title);
+        box.setAttribute('aria-live', 'off');
+        // `style` is tenant-supplied, so match it against OUR OWN known list and
+        // degrade anything else to default styling — never emit an unknown class
+        // (contract → "The style hint"). `=== true` keeps inherited Object
+        // members (`constructor`, `toString`) from passing the lookup.
+        if (typeof action.style === 'string' && PROMO_STYLES[action.style] === true) {
             box.className += ' wsc-promo-' + action.style;
+        }
+        // Tenant copy is not necessarily in the guest's language (contract 1.6.0
+        // reports which one it IS), so mark it up or a screen reader reads Spanish
+        // with an English voice.
+        if (typeof action.locale === 'string' && /^[a-z]{2}$/.test(action.locale)) {
+            box.setAttribute('lang', action.locale);
         }
         var img = safeHttpUrl(action.image);
         if (img) {
             var image = el('img');
             image.setAttribute('src', img);
-            image.setAttribute('alt', action.title);
+            image.setAttribute('alt', ''); // decorative — the title below carries the meaning
             image.setAttribute('loading', 'lazy');
             image.setAttribute('referrerpolicy', 'no-referrer');
             box.appendChild(image);
         }
         box.appendChild(el('div', 'wsc-promo-title', action.title));
-        if (typeof action.body === 'string' && action.body) { box.appendChild(el('div', 'wsc-promo-body', action.body)); }
-        if (action.cta && typeof action.cta.label === 'string' && action.cta.label) {
-            var href = safeHttpUrl(action.cta.url);
-            if (href) {
-                var cta = el('a', 'wsc-act', action.cta.label);
-                cta.setAttribute('href', href);
-                cta.setAttribute('target', '_blank');
-                cta.setAttribute('rel', 'noopener noreferrer');
-                box.appendChild(cta);
-            }
-        }
+        box.appendChild(el('div', 'wsc-promo-body', action.body));
+        var cta = el('a', 'wsc-act', action.cta.label);
+        cta.setAttribute('href', href);
+        cta.setAttribute('target', '_blank');
+        cta.setAttribute('rel', 'noopener noreferrer');
+        box.appendChild(cta);
         els.body.appendChild(box);
         scrollDown();
     }
 
+    // A chip row belongs to the turn it arrived on, so ANY send — a chip tap or a
+    // typed message — retires EVERY row on screen, not just the tapped one (the
+    // contract's one-shot rule, made precise at 1.6.0). Not restored on a failed
+    // turn: the guest's message is already in the transcript and can be retyped,
+    // whereas a restored row invites a double send.
+    function retireChipRows() {
+        var hadFocus = false;
+        for (var i = 0; i < chipRows.length; i++) {
+            var row = chipRows[i];
+            // Checked BEFORE removal: tearing out the row a keyboard or switch
+            // user is standing in would drop focus to <body>. Move it somewhere
+            // sensible instead (contract → Accessibility).
+            if (row.contains(document.activeElement)) { hadFocus = true; }
+            if (row.parentNode) { row.parentNode.removeChild(row); }
+        }
+        chipRows = [];
+        if (hadFocus && els.input && !els.input.disabled) { els.input.focus(); }
+    }
+
     // quick_replies (contract 1.5.0): tap-to-send chips. A chip carries NO url —
     // tapping sends its `message` down the exact normal-turn path (the sent text
-    // shows as a guest bubble: honest transcript). The row is one-shot.
+    // shows as a guest bubble: honest transcript).
     function quickReplies(action) {
         if (!action.items || !action.items.length) { return; }
         var row = el('div', 'wsc-chips');
+        row.setAttribute('role', 'group');
+        row.setAttribute('aria-label', 'Suggested questions');
+        row.setAttribute('aria-live', 'off'); // announced by the reply, not by itself
+        // Tenant-authored labels may be in the tenant's language, not the guest's;
+        // the island_choice row omits `locale` because its labels are proper nouns.
+        if (typeof action.locale === 'string' && /^[a-z]{2}$/.test(action.locale)) {
+            row.setAttribute('lang', action.locale);
+        }
         for (var i = 0; i < action.items.length; i++) {
             (function (item) {
                 if (!item || typeof item.label !== 'string' || !item.label
@@ -434,18 +563,18 @@
                 var chip = el('button', 'wsc-chip', item.label);
                 chip.setAttribute('type', 'button');
                 chip.addEventListener('click', function () {
-                    if (busy || removed) { return; }
-                    if (row.parentNode) { row.parentNode.removeChild(row); }
+                    if (busy || removed || ended) { return; }
+                    retireChipRows();
                     addBubble('guest', item.message);
                     ensureConversation(function () { sendMessage(item.message, false); });
                 });
                 row.appendChild(chip);
             })(action.items[i]);
         }
-        if (row.firstChild) { els.body.appendChild(row); scrollDown(); }
+        if (row.firstChild) { els.body.appendChild(row); chipRows.push(row); scrollDown(); }
     }
 
-    function linkButton(label, url) {
+    function linkButton(label, url, rendered) {
         var href = safeHttpUrl(url);
         if (!href) { return; }
         var link = el('a', 'wsc-act', label || 'Open'); // label via textContent — never markup
@@ -453,6 +582,7 @@
         link.setAttribute('target', '_blank');
         link.setAttribute('rel', 'noopener noreferrer');
         els.body.appendChild(link);
+        if (rendered) { rendered[href] = true; }
         scrollDown();
     }
 
@@ -481,7 +611,12 @@
         startConversation(cb);
     }
 
-    function startConversation(cb) {
+    // `silent` suppresses the greeting + init actions: the 410/404 recovery path
+    // opens a replacement conversation MID-SEND, and drawing a second greeting
+    // (plus a promo and a chip row the guest has already moved past) after the
+    // message they just sent is not the "transparent re-init" the guide promises.
+    // The new conversation is still fully established — uuid, store, version check.
+    function startConversation(cb, silent) {
         if (busy) { return; }
         busy = true;
         post('/api/v1/chatbot/conversations', { locale: locale, property: property }, function (status, data) {
@@ -494,17 +629,49 @@
             started = true;
             writeStore(conversationUuid);
             checkContractVersion(data.contract_version);
-            if (data.greeting) { addBubble('bot', data.greeting); }
-            renderActions(data.actions); // init actions since 1.5.0 (quick prompts / promo); absent on older servers
+            if (!silent) {
+                if (data.greeting) { addBubble('bot', data.greeting); }
+                renderActions(data.actions); // init actions since 1.5.0 (quick prompts / promo); absent on older servers
+            }
             cb();
         });
     }
 
+    // conversation_ended (contract 1.6.0): the turn cap is reached, so close the
+    // composer — every further message would return the same canned reply — and
+    // offer the only thing that still works. The transcript is cleared on restart
+    // because the new conversation shares no memory with the old one; keeping the
+    // old exchange on screen implies a continuity the server does not have.
+    function endConversation() {
+        if (ended || removed) { return; }
+        ended = true;
+        retireChipRows();
+        els.input.disabled = true;
+        els.send.disabled = true;
+
+        var restart = el('button', 'wsc-act wsc-restart', 'Start a new chat');
+        restart.setAttribute('type', 'button');
+        restart.addEventListener('click', function () {
+            clearStore();
+            conversationUuid = null;
+            started = false;
+            ended = false;
+            chipRows = [];
+            els.body.textContent = '';          // drops every child node — never innerHTML
+            els.input.disabled = false;
+            els.send.disabled = false;
+            startConversation(function () { els.input.focus(); });
+        });
+        els.body.appendChild(restart);
+        scrollDown();
+    }
+
     function submit() {
-        if (busy || removed) { return; }
+        if (busy || removed || ended) { return; }
         var text = (els.input.value || '').trim();
         if (!text) { return; }
         els.input.value = '';
+        retireChipRows();   // typing instead of tapping retires the chips too (1.6.0)
         addBubble('guest', text);
         ensureConversation(function () { sendMessage(text, false); });
     }
@@ -524,7 +691,9 @@
 
                 if (status === 200 && data) {
                     var botBubble = data.reply ? addBubble('bot', data.reply) : null;
-                    renderActions(data.actions, botBubble);
+                    // Per-turn url set: an async turn's poll actions[] is additive to
+                    // what we draw now, so it needs to know what is already on screen.
+                    renderActions(data.actions, botBubble, Object.create(null));
                     return;
                 }
                 // 410 = idled out, 404 = the conversation is gone (pruned, or a uuid
@@ -537,7 +706,7 @@
                     clearStore();
                     conversationUuid = null;
                     started = false;
-                    startConversation(function () { sendMessage(text, true); });
+                    startConversation(function () { sendMessage(text, true); }, true);
                     return;
                 }
                 if (status === 403) { teardown(); return; }
@@ -560,7 +729,7 @@
     // Poll the relative turn-result path (resolved against the widget's OWN
     // origin — the Bearer key never leaves it) until the final reply is ready,
     // then replace the interim bubble in place. Accepts ONLY a relative path.
-    function pollResult(path, botBubble) {
+    function pollResult(path, botBubble, rendered) {
         if (typeof path !== 'string' || path.charAt(0) !== '/') { return; }
 
         var started = Date.now();
@@ -581,14 +750,20 @@
             if (removed) { return; }
             get(path, function (status, data) {
                 if (status === 403) { teardown(); return; }
-                if (status === 410) { return; } // conversation gone — stop
+                // 410 = the conversation that owns this turn is gone, so its result
+                // is no longer worth fetching. Stop, keep the interim reply and its
+                // fallbacks, and re-init NOTHING: the guest's next message hits the
+                // turn endpoint, gets its own 410 and re-inits there, where a fresh
+                // conversation actually has a message to carry (guide §5.1).
+                if (status === 410) { return; }
 
                 if (status === 200 && data && (data.status === 'ready' || data.status === 'failed')) {
                     // Replace the interim bubble's text in place (the server
-                    // overwrote the same transcript row), then render final actions.
+                    // overwrote the same transcript row), then render final actions —
+                    // ADDITIVE to the interim's, so `rendered` suppresses a repeat.
                     if (botBubble) { botBubble.textContent = data.reply || ''; }
                     else { addBubble('bot', data.reply || ''); }
-                    renderActions(data.actions);
+                    renderActions(data.actions, null, rendered);
                     scrollDown();
                     return;
                 }

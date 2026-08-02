@@ -5,6 +5,150 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.5.0 — 2026-08-02
+
+**Synced to wSuite chatbot contract 1.6.1** — the sync CLAUDE.md and the proposals doc reserved
+this number for. `BUILT_AGAINST` moves `1.4.1` → `1.6.1` in one step: 2.4.x already rendered the
+1.5.0 shapes but was never reconciled field-by-field, and this release reconciles against the
+whole 1.5.0→1.6.1 span at once. Packet pair: `docs @ chatbot-contract-v1.6.1 (90f3cfd) ·
+widget @ e66fe4f`, committed alongside this release. A minor, per the repo's own rule: a
+contract sync is genuinely new surface. Contract 1.6.0 exists because of this widget's own
+conformance report — most fields adopted below are ones this repo asked for (proposals doc open
+points 1, 2, 6, 7).
+
+**Adopted, behaviour:**
+
+- **Book-button dedupe (D-043(c)) — the first of the two gaps this sync owned.** A new
+  `renderableCardUrl()` is the ONE card-item gate (name, then http(s) url), shared by
+  `propertyCard()` and a pre-scan in `renderActions()` so the comparison set can only ever
+  hold urls of cards that actually render — recording a rejected item's url would silently
+  suppress the guest's only Book button, which the contract calls out as strictly worse than
+  the duplicate. Raw-string equality, no normalization (the co-occurring urls are the same
+  catalog value byte-for-byte; ours compares against the post-`trim()` href — exact for clean
+  strings, and a padded near-duplicate renders both, which is the contract's "redundant, never
+  harmful"). Suppression sits at the top of the `link_button` **and** `booking_link` branches
+  (the second is reference parity — one handler per turn means it cannot co-occur with cards
+  today) and passes the CTA `row` through untouched, so a suppressed button cannot close its
+  siblings' group. The set is `Object.create(null)`: a payload url of `constructor` must not
+  phantom-match.
+- **The poll's `actions[]` is additive (1.6.0), so turns now carry a rendered-url set.** A
+  fresh `Object.create(null)` per turn 200 in `sendMessage`, threaded
+  `renderActions → renderAction → linkButton/renderPropertyCards → pollResult → renderActions`;
+  every href a turn puts on screen is recorded, and the ONE contract-scoped suppression reads
+  it: an `availability` whose `url` fell back to the property's `booking_url` duplicates the
+  interim `booking_link`, so only its trailing Book button is skipped — the options list is new
+  content and always renders. Deliberately availability-only (the reference's asymmetry):
+  `link_button`s in a poll result dedupe against cards, not against the interim. The
+  init/welcome/resume paths pass no set — welcome elements render outside any turn.
+- **One-shot chip rows, both halves (the second owned gap).** Mid-transcript `quick_replies`
+  rows now register in a module `chipRows[]` (welcome rows deliberately do not — they retire
+  with the wrapper `removeWelcome()` sweeps, and two owners racing over one node means two
+  focus rescues). `retireChipRows()` removes every registered row on ANY send — chip tap in any
+  row, typed message, pack pill — with one call site in `sendGuestText()`, the documented send
+  seam, plus `endConversation()`. Focus is sampled per row BEFORE removal and handed to the
+  composer, the same rescue `removeWelcome()` carries. Not restored after a failed turn (the
+  contract's MAY): the message is in the transcript and can be retyped; a restored row invites
+  a double send.
+- **`conversation_ended` (1.6.0) — the turn cap finally has a branch.** `endConversation()`:
+  idempotent via the new `ended` flag (the server re-emits the element on every further capped
+  POST), clears `sendQueue` (queued turns would each buy the same canned refusal — and must not
+  leak into the next conversation), retires chip rows BEFORE the composer closes (the rescue
+  needs an enabled input), appends a localized "Start a new chat" `<button>` in a normal CTA
+  row, hands it focus when the guest was standing in the composer (disabling a focused control
+  drops focus to `<body>` — the four-times-rediscovered bug), then disables input and send.
+  `restartConversation()` wipes the transcript (keeping the hidden loader node — it is the
+  greeting's insertion anchor), clears the store, resets the conversation-scoped latches
+  (`guestTurned` now documents that a restart begins a new conversation's life), re-enables the
+  composer, and re-inits through the normal `startConversation()` — so `initWaiters`
+  serialization, the failed-init pack-greeting fallback and the 403 teardown all apply — then
+  renders the new greeting + welcome itself, the same shape `introMaybeFinish()` draws minus
+  the loader dance. The intro latches stay spent on purpose: the branded loader is a
+  first-open experience, not a restart one. `ended` also gates `sendGuestText` and `drainSend`.
+- **A stale poll cannot haunt the restart.** New `chatEpoch` counter, bumped per restart and
+  captured per `pollResult` — a poll from the dead conversation (up to 120s of back-off, its
+  request possibly in flight during the restart) re-checks the epoch at the timer, the tick AND
+  the response callback, and silently stops rather than typing into a detached bubble or
+  rendering actions into the new conversation's transcript. The reference has this hole; we do
+  not copy it.
+
+**Adopted, fields:**
+
+- **`price_from.period`/`basis`** — a localized suffix of the widget's own (the contract's
+  instruction; the reference hardcodes English, a deliberate divergence for a five-locale
+  widget), composed period-then-basis from four new pack keys ×5 locales, resolved **per card**
+  (1.6.1: two cards in one rail may differ, and the mock proves it with `/night per person`
+  beside `/night per unit`). Absent means a **bare price** — never an inferred "/night"; the
+  contract calls that a guest-facing pricing error, and CLAUDE.md now carries it as a gotcha.
+- **`cta_label`** — server-localized Book text, preferred over the pack's `book` string per
+  card; empty or non-string falls back.
+- **`total` + `more`** — the overflow affordance this repo requested (open point 1). After the
+  rail: a gated `more` (`safeHttpUrl` + non-empty label, server-localized, never `t()`) renders
+  as a trailing link button and feeds the rendered set; otherwise a `total` greater than the
+  cards *shown* renders a quiet localized count line (`showingOf`, the file's first two-slot
+  string — `tf()` is now sequential-replace varargs, one-slot callers untouched). `CARD_MAX`
+  stays 8 as OUR layout cap; the comment now records that the server's cap is a deployment
+  setting the widget must not hardcode.
+- **`locale` → `lang`** on `promo_card` and `quick_replies` containers, validated
+  `/^[a-z]{2}$/`; absent means unknown and sets nothing — the island rows omit it on purpose
+  (proper nouns claim no language).
+- **`image_alt`** — future-proofed as `typeof item.image_alt === 'string' ? item.image_alt : ''`
+  (reserved, unemitted at 1.6.x; absent = decorative `alt=""`, which was already this widget's
+  behaviour and is now the contract's stated rule). The promo image stays hardcoded `alt=""`.
+
+**Declined, with reasons (also going in the upstream report):**
+
+- **`id`-keyed promo frequency capping / dismissal memory** — the widget has no dismissal UI
+  and the server caps per conversation; the reference ignores `id` too. The field flows through
+  untouched.
+- **Restoring a chip row after a failed turn** — contract MAY; see the one-shot entry above.
+- **Per-element `aria-live="off"`** — not needed here, an architectural difference worth
+  recording: the contract's rule exists for a widget whose transcript is the polite live
+  region, and `.nc-body` is `role="log"` + `aria-live="off"` with a sibling announcer as the
+  single live region fed only by reply text. Elements have never announced over the reply in
+  this widget. Same outcome, different mechanism.
+
+**Accessibility (the contract's new section, matched or deliberately differed):** the card
+track is now `role="list"` with `role="listitem"` cards inside the labelled carousel group
+(`aria-label` from the new `properties` key, roledescription unchanged — arrows, fades and
+dots are wrapper children, siblings of the track, so the list's children stay pure listitems);
+the promo is a `role="region"` named by its `title` string (`aria-label`, not
+`aria-labelledby` — nothing in this widget emits element ids) with `lang` when declared; chip
+rows are a `role="group"` named from the new `quickReplies` key (screen-reader only — the
+visible row stays bare by the owner's decision) — chips were already real
+`<button type="button">`s.
+
+**Mock:** the island branch is now the 1.6.x showcase (per-card suffixes, a `cta_label`, the
+D-043(c) isolator — a name-less item sharing the website button's url, dropped without
+suppressing it, exactly the case a `javascript:` url could never isolate — a Book button
+matching a rendered card's url, and the `total`/`more` split: ibiza total-only → count line,
+the others both → `more` wins). The promo factory is Spanish with `locale: 'es'`, a `\n` in
+the body and a content-derived `id`; the chip factories carry their provenance `id`s. New
+`!cap` trigger: canned cap reply + `contact_channels` + `conversation_ended` last. `Mock.poll`'s
+ready payload is now an `availability` sharing the interim url — the poll-dedupe demo. Init
+reports `contract_version: '1.6.1'`.
+
+**CSS:** two new rules, both `#nest-chatbot`-scoped and `nc-`-prefixed — `.nc-restart` (button
+chrome reset + the house focus ring over the `.nc-action` pill) and `.nc-car-count`. A
+stylesheet walk in the browser confirms **zero** selectors outside `#nest-chatbot`.
+
+**Verified** (Playwright against the mock demo, it-locale browser): welcome = two chip rows
+with roles/langs (`lang="en"` on the tenant row only), no pack pills; tenerife → 3 cards
+(name-less dropped), `da 22 €/notte a persona` + `da 24 €/notte per unità` + bare `da 26 €` in
+one rail, "Book a bed" CTA beside two pack CTAs, Book-now suppressed while the website button
+survives, "See all our properties" below the rail and no count line; ibiza → `Mostrati 3 di 5`;
+`available` → exactly one las-eras Book button across interim and poll, options rendered,
+bubble replaced in place; `rooms` unchanged; chip rows retired by tap AND by typed send with
+keyboard focus landing in the composer; `!cap` → chips retired, channels rendered, composer
+closed, Enter-submitted cap hands focus to the restart button, language switch repaints it,
+restart wipes to a fresh greeting + welcome on a new uuid and a normal turn follows; `!410` →
+transparent re-init (no second greeting, no welcome, uuid replaced); `!xss` and `!unknown`
+inert; `!403` teardown; resume replays the stored welcome through the new signatures; drift
+warn silent at 1.6.1 and firing once against a forced 1.7.0. Cross-origin (:8080 host page →
+:5501 widget): boots, renders, dedupes; the only console noise is the documented fonts-CORS
+open item (the bare dev server sends no ACAO on `fonts/`) plus the host page's own favicon.
+**Not run:** the live pass — `http://nest-mind.test/` did not resolve at release time; the
+mock and cross-origin passes stand in, limitation stated in the sync report.
+
 ## 2.4.2 — 2026-07-31
 
 A patch: two defects and one revert to contract-specified behaviour. No new config attribute,

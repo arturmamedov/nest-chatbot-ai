@@ -120,7 +120,7 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.5.0 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.6.1 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
@@ -131,10 +131,10 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 `BUILT_AGAINST` (api section) moves **only** during a sync — it is a claim about what this
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
-rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: pinned 2026-07-31 from
-upstream tag `chatbot-contract-v1.5.0`, while `BUILT_AGAINST` is still `'1.4.1'` — the packet
-is re-vendored ahead of the code that reconciles against it, which is the point of the two
-being separate claims. See the open item below.
+rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-08-02 as
+`docs @ chatbot-contract-v1.6.1 (90f3cfd) · widget @ e66fe4f` — the widget SHA is part of the
+packet's identity, because the reference renderer legitimately moves between contract tags.
+`BUILT_AGAINST` is `'1.6.1'`, in lockstep since release 2.5.0 closed the sync.
 
 Three endpoints: init a conversation, post a turn, poll an async turn.
 
@@ -158,7 +158,13 @@ GET  {apiBase}{async_result.url}                          → 200 {status, reply
   dead — re-init, or this browser retries it for the full 24h retention window). On the
   **poll** endpoint a `404` is **transient** instead: back off exactly as for `pending` and
   stop only at the give-up deadline — re-initing there would abandon an answer still being
-  generated.
+  generated. A poll **`410`** stops the poll and nothing more (guide §5.1): keep the interim
+  reply, re-init **nothing** — the guest's next message re-inits on the turn endpoint, where
+  a fresh conversation actually has a message to carry.
+- **Never infer a price period.** `price_from.period`/`basis` are optional and **per item** —
+  two cards in one rail may differ, so `cardPrice()` resolves the suffix per card and renders
+  the **bare** price when they are absent. An invented "/night" on a per-stay figure is a
+  guest-facing pricing error, not a cosmetic one.
 - **The init response reports `contract_version`.** Compare it to `BUILT_AGAINST` (api
   section) and `console.warn` once when the server is ahead — never gate, never hard-fail
   (guide §3.1); the ignore-unknown rule keeps the widget functional. That warn is the sole
@@ -224,16 +230,17 @@ are shaped exactly like the real envelope. Drive them from the composer:
 | `contact` | `contact_channels` (phone + whatsapp + email) |
 | `rooms` | `availability` with room options |
 | `link` | three `link_button`s (book / website / directions), one with `style: primary` |
-| `available` | `async_result` — interim reply, then the poll replaces it in place |
-| `hostel` | `quick_replies` — the three island chips (also matches suggested prompt 1) |
-| `tenerife` `canaria` `ibiza` | `property_cards` carousel + `promo_card` + the CTA trio |
-| `pass` `offer` | `promo_card` alone (`pass` is word-bounded: "compass" falls through) |
+| `available` | `async_result` — interim reply, then the poll replaces it in place; the final is an `availability` sharing the interim url, so the per-turn dedupe must leave exactly **one** Book button |
+| `hostel` | `quick_replies` — the three island chips (also matches suggested prompt 1); any send retires every row (one-shot) |
+| `tenerife` `canaria` `ibiza` | `property_cards` carousel + `promo_card` + the CTA trio — and the 1.6.x showcase: per-card `period`/`basis` (two different suffixes in one rail), a `cta_label`, the D-043(c) isolator (name-less card sharing the website button's url — card dropped, button survives), a Book button matching a rendered card's url (suppressed), and `total`/`more` (ibiza: `total` only → count line; the others: both → `more` wins) |
+| `pass` `offer` | `promo_card` alone (`pass` is word-bounded: "compass" falls through) — Spanish copy with `locale: 'es'` (→ `lang`) and a `\n` in the body (pre-wrap) |
+| `!cap` | the turn-cap reply: `contact_channels` + `conversation_ended` last — composer closes, "start a new chat" appears |
 | `!unknown` | an unrecognised element type (must be ignored, sibling still renders) |
 | `!xss` | a hostile reply and a `javascript:` url (both must be inert) |
 | `!410` `!403` `!429` `!500` | forces that status |
 
 `Mock.init` returns **two** `quick_replies` rows — the tenant's "try asking" prompts and the
-island chips — mirroring a real 1.5.0 payload; both prompt messages chain into the table above
+island chips — mirroring a real welcome payload; both prompt messages chain into the table above
 rather than the catch-all reply. Since server chips **replace** the widget's own pack block,
 that means the demo never reaches `showPrompts()` or `setLocale`'s pill-repaint branch:
 exercising the fallback means temporarily setting `Mock.init`'s `actions: []`.
@@ -285,19 +292,10 @@ what a customer hits. Run a second static server on another port with a page tha
   system stack. Nothing on screen says so and the widget keeps working — the only trace is
   the browser's own CORS error in devtools — so verify from a page on a **different** origin,
   never from the CDN's own domain.
-- **The 1.5.0 contract sync is half done.** The packet is vendored (tag
-  `chatbot-contract-v1.5.0`); `BUILT_AGAINST` is still `'1.4.1'`, so a server reporting 1.5.0
-  fires the one-time drift warn **by design**. Release **2.5.0** closes it: reconcile the
-  renderers field-by-field against the shipped spec, then move `BUILT_AGAINST`. Two known gaps,
-  both widget-side and both recorded in
-  `docs/proposals/response-contract-phase2-elements.md` — **Book-button dedupe** (1.5.0 asks a
-  card-aware renderer to suppress a `link_button`/`booking_link` whose `url` equals a card
-  item's in the same `actions[]`; `renderAction()` handles elements in isolation and does not,
-  and the mock cannot catch it because its CTA trio uses three different urls — open point 6),
-  and **one-shot mid-transcript chip rows** (a row a *reply* carries still stands; only the
-  welcome row is one-shot — open point 7, and it needs the same focus rescue `removeWelcome()`
-  carries). The same doc holds the open questions for the platform team, chief among them an
-  optional element-level `heading` on `quick_replies`.
+- **An element-level `heading` on `quick_replies` is still the live request upstream**
+  (`docs/proposals/response-contract-phase2-elements.md`, open point 9): 1.6.1 still gives a
+  chip row no way to say what it is asking, so a server welcome row renders as bare chips
+  under a greeting that does not mention them.
 - **Origin allow-listing shipped platform-side (D-039)** — opt-in per site, default
   allow-all. Once a site configures a list, every embedding origin must be registered
   (guide §7, exact `scheme://host[:port]`) or requests are refused with

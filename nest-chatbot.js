@@ -20,10 +20,10 @@
  *   Element-supplied urls are honoured for http(s) only; tel:/mailto:/wa.me hrefs
  *   are constructed here from channel values, never taken verbatim.
  *
- * Built against response contract 1.4.1 (BUILT_AGAINST, api section). The packet
- * vendored in docs/wsuite/ is already at 1.5.0 — BUILT_AGAINST records what this
- * code implements, not what the docs say, and 2.5.0 is the release that
- * reconciles the two. The server reports its live contract_version at init; the
+ * Built against response contract 1.6.1 (BUILT_AGAINST, api section), in
+ * lockstep with the packet vendored in docs/wsuite/ — release 2.5.0 is the sync
+ * that reconciled the two. BUILT_AGAINST records what this code implements, not
+ * what the docs say. The server reports its live contract_version at init; the
  * widget warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
  * the transport or the element contract is unclear.
@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.4.2';
+    var VERSION = '2.5.0';
 
     /* =========================================================== config ===== */
 
@@ -108,11 +108,19 @@
     var sendQueue = [];     // turns queued behind an in-flight turn — one at a time
     var replyCount = 0;     // real assistant turn replies this session — see maybeAutoExpand
     var introPlayed = false;
-    // The guest has sent at least one turn. Latched, never cleared: the welcome
-    // block is a first-contact affordance, and a conversation that has started
-    // must never have it appear on top of it — including the race where the
-    // greeting is still typing when the first message goes out.
+    // The guest has sent at least one turn. Latched for the life of the
+    // conversation, never cleared within it: the welcome block is a
+    // first-contact affordance, and a conversation that has started must never
+    // have it appear on top of it — including the race where the greeting is
+    // still typing when the first message goes out. restartConversation() is
+    // the one reset: a restart begins a NEW conversation's life.
     var guestTurned = false;
+    var chipRows = [];      // live mid-transcript quick_replies rows — retired on ANY send (1.6.0 one-shot rule)
+    var ended = false;      // conversation_ended received — composer closed until the guest restarts
+    // Bumped by restartConversation(): a poll from the dead conversation can be
+    // backing off for up to 120s, and without this it would type into a detached
+    // bubble and render actions into the NEW conversation's transcript.
+    var chatEpoch = 0;
     var els = {};
 
     /* ============================================================= i18n ===== */
@@ -128,13 +136,18 @@
             subline: 'Nests Hostels · replies in seconds', aiAssistant: 'AI assistant',
             expand: 'Expand the chat', shrink: 'Shrink the chat',
             tryAsking: 'Try asking',
+            quickReplies: 'Quick replies',
             prompt1: 'Which hostel fits me best?', prompt2: 'How does the Nest Pass work?',
             disclaimer: 'AI answers — double-check important',
             priceFrom: 'from %s',
+            priceNight: '/night', priceStay: '/stay',
+            pricePerPerson: 'per person', pricePerUnit: 'per unit',
             carousel: 'carousel', carouselPrev: 'Scroll back', carouselNext: 'Scroll forward',
+            properties: 'Properties', showingOf: 'Showing %s of %s',
             send: 'Send message', input: 'Type your message',
             language: 'Change language', languageOf: 'Switch to %s',
             book: 'Book now', open_link: 'Open',
+            newChat: 'Start a new chat',
             call: 'Call %s', whatsapp: 'WhatsApp', email: 'Email %s',
             noAvailability: 'No availability for those dates.',
             error: 'Sorry, something went wrong. Please try again, or reach us directly and we\'ll be glad to help.',
@@ -151,13 +164,18 @@
             subline: 'Nests Hostels · responde en segundos', aiAssistant: 'Asistente IA',
             expand: 'Ampliar el chat', shrink: 'Reducir el chat',
             tryAsking: 'Prueba a preguntar',
+            quickReplies: 'Respuestas rápidas',
             prompt1: '¿Qué hostel me encaja mejor?', prompt2: '¿Cómo funciona el Nest Pass?',
             disclaimer: 'Respuestas de IA — verifica lo importante',
             priceFrom: 'desde %s',
+            priceNight: '/noche', priceStay: '/estancia',
+            pricePerPerson: 'por persona', pricePerUnit: 'por unidad',
             carousel: 'carrusel', carouselPrev: 'Retroceder', carouselNext: 'Avanzar',
+            properties: 'Alojamientos', showingOf: 'Mostrando %s de %s',
             send: 'Enviar mensaje', input: 'Escribe tu mensaje',
             language: 'Cambiar idioma', languageOf: 'Cambiar a %s',
             book: 'Reservar ahora', open_link: 'Abrir',
+            newChat: 'Empezar un chat nuevo',
             call: 'Llamar %s', whatsapp: 'WhatsApp', email: 'Escribir a %s',
             noAvailability: 'No hay disponibilidad para esas fechas.',
             error: 'Lo siento, algo ha ido mal. Inténtalo de nuevo o escríbenos directamente y te ayudamos encantados.',
@@ -176,13 +194,18 @@
             // controls sit side by side in the header — one accessible name each.
             expand: 'Espandi la chat', shrink: 'Rimpicciolisci la chat',
             tryAsking: 'Prova a chiedere',
+            quickReplies: 'Risposte rapide',
             prompt1: 'Quale hostel fa per me?', prompt2: 'Come funziona il Nest Pass?',
             disclaimer: 'Risposte IA — verifica ciò che è importante',
             priceFrom: 'da %s',
+            priceNight: '/notte', priceStay: '/soggiorno',
+            pricePerPerson: 'a persona', pricePerUnit: 'per unità',
             carousel: 'carosello', carouselPrev: 'Indietro', carouselNext: 'Avanti',
+            properties: 'Strutture', showingOf: 'Mostrati %s di %s',
             send: 'Invia messaggio', input: 'Scrivi il tuo messaggio',
             language: 'Cambia lingua', languageOf: 'Passa a %s',
             book: 'Prenota ora', open_link: 'Apri',
+            newChat: 'Inizia una nuova chat',
             call: 'Chiama %s', whatsapp: 'WhatsApp', email: 'Scrivi a %s',
             noAvailability: 'Nessuna disponibilità per quelle date.',
             error: 'Mi dispiace, qualcosa è andato storto. Riprova o scrivici direttamente, saremo felici di aiutarti.',
@@ -199,13 +222,18 @@
             subline: 'Nests Hostels · antwortet in Sekunden', aiAssistant: 'KI-Assistent',
             expand: 'Chat vergrößern', shrink: 'Chat verkleinern',
             tryAsking: 'Frag zum Beispiel',
+            quickReplies: 'Schnellantworten',
             prompt1: 'Welches Hostel passt zu mir?', prompt2: 'Wie funktioniert der Nest Pass?',
             disclaimer: 'KI-Antworten — Wichtiges bitte prüfen',
             priceFrom: 'ab %s',
+            priceNight: '/Nacht', priceStay: '/Aufenthalt',
+            pricePerPerson: 'pro Person', pricePerUnit: 'pro Einheit',
             carousel: 'Karussell', carouselPrev: 'Zurück', carouselNext: 'Weiter',
+            properties: 'Unterkünfte', showingOf: '%s von %s angezeigt',
             send: 'Nachricht senden', input: 'Schreibe deine Nachricht',
             language: 'Sprache wechseln', languageOf: 'Zu %s wechseln',
             book: 'Jetzt buchen', open_link: 'Öffnen',
+            newChat: 'Neuen Chat starten',
             call: '%s anrufen', whatsapp: 'WhatsApp', email: 'E-Mail an %s',
             noAvailability: 'Keine Verfügbarkeit für diese Daten.',
             error: 'Entschuldigung, da ist etwas schiefgelaufen. Bitte versuche es erneut oder kontaktiere uns direkt.',
@@ -224,13 +252,18 @@
             // controls sit side by side in the header — one accessible name each.
             expand: 'Agrandir le chat', shrink: 'Rétrécir le chat',
             tryAsking: 'Essayez de demander',
+            quickReplies: 'Réponses rapides',
             prompt1: 'Quel hostel me correspond le mieux ?', prompt2: 'Comment fonctionne le Nest Pass ?',
             disclaimer: 'Réponses IA — vérifiez l\'essentiel',
             priceFrom: 'à partir de %s',
+            priceNight: '/nuit', priceStay: '/séjour',
+            pricePerPerson: 'par personne', pricePerUnit: 'par unité',
             carousel: 'carrousel', carouselPrev: 'Précédent', carouselNext: 'Suivant',
+            properties: 'Hébergements', showingOf: '%s sur %s affichés',
             send: 'Envoyer le message', input: 'Écris ton message',
             language: 'Changer de langue', languageOf: 'Passer en %s',
             book: 'Réserver', open_link: 'Ouvrir',
+            newChat: 'Commencer un nouveau chat',
             call: 'Appeler %s', whatsapp: 'WhatsApp', email: 'Écrire à %s',
             noAvailability: 'Aucune disponibilité pour ces dates.',
             error: 'Désolé, une erreur est survenue. Réessaie ou contacte-nous directement, nous serons ravis de t\'aider.',
@@ -248,8 +281,13 @@
         return pack[key] != null ? pack[key] : STRINGS.en[key];
     }
 
-    function tf(key, value) {
-        return String(t(key)).replace('%s', value);
+    // Each extra argument fills the NEXT %s in order — String.replace with a
+    // string replaces the first match only — so a two-slot key like showingOf
+    // needs no second formatter and every one-slot caller is untouched.
+    function tf(key) {
+        var out = String(t(key));
+        for (var i = 1; i < arguments.length; i++) { out = out.replace('%s', arguments[i]); }
+        return out;
     }
 
     /* ========================================================== storage ===== */
@@ -373,7 +411,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.4.1';
+    var BUILT_AGAINST = '1.6.1';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -459,14 +497,27 @@
      *   "book"      → booking_link with a stay summary
      *   "contact"   → contact_channels (phone + whatsapp + email)
      *   "link"      → three link_buttons (book / website / directions)
-     *   "available" → async_result: interim reply now, final reply after polling
+     *   "available" → async_result: interim reply now, final reply after polling.
+     *                 The final is an `availability` sharing the interim's url —
+     *                 the ONE interim→poll duplicate 1.6.0 documents, so exactly
+     *                 one Book button must ever be on screen for this turn
      *   "rooms"     → availability with room options
-     *   "tenerife" / "canaria" / "ibiza" → property_cards + promo_card + the CTA trio
+     *   "tenerife" / "canaria" / "ibiza" → property_cards + promo_card + the CTA
+     *                 trio. The rail is also the 1.6.x showcase: per-card
+     *                 period/basis (two DIFFERENT suffixes on one rail), a
+     *                 cta_label, a name-less item sharing the website button's
+     *                 url (the D-043(c) isolator: card dropped, button SURVIVES),
+     *                 a "Book now" whose url equals a rendered card's (suppressed),
+     *                 and `more` + `total` — ibiza sends total only (count line),
+     *                 the other two send both (`more` wins)
      *   "hostel"    → quick_replies: the three island chips — the SAME payload the
      *                 init response carries, so this keyword also regression-tests
      *                 the welcome block's chip row
      *   "pass" / "offer" → promo_card on its own ("pass" is word-bounded, so
      *                 "passport" and "compass" fall through to the plain reply)
+     *   "!cap"      → the turn-cap reply: contact_channels + conversation_ended
+     *                 (emitted last, per contract) — composer closes, restart
+     *                 button appears
      *   "!unknown"  → an unrecognised element type (must be ignored silently)
      *   "!xss"      → a hostile reply and a javascript: url (must both be inert)
      *   "!410" "!403" "!429" "!500" → force that status
@@ -488,12 +539,21 @@
         // "pass"/"offer" answer — and the renderer has to see byte-identical
         // payloads from both. A factory, not a shared literal: each reply gets its
         // own object, so nothing downstream can leak state between turns.
+        //
+        // Spanish copy with locale: 'es' since the 1.6.1 sync: the demo page is
+        // English, so this is the case the field exists for — a screen reader
+        // must not read this block with an English voice, and devtools must show
+        // lang="es" on .nc-promo. The \n in body exercises the pre-wrap rule
+        // (promo bodies may carry newlines), and `id` is the content-derived
+        // identity the widget deliberately ignores (no client-side capping).
         function promoCard() {
             return {
                 type: 'promo_card',
-                title: 'One booking. All Hostels.',
-                body: '7 nights for €140 — the Nest Pass moves with you between our islands.',
-                cta: { label: 'Get Your Nest Pass', url: 'https://nestshostels.com/nest-pass' },
+                id: 'promo:6f3a1c2b',
+                locale: 'es',
+                title: 'Una reserva. Todos los hostels.',
+                body: '7 noches por 140 € — el Nest Pass viaja contigo entre nuestras islas.\nCanjéalo en cualquier Nest.',
+                cta: { label: 'Consigue tu Nest Pass', url: 'https://nestshostels.com/nest-pass' },
                 style: 'highlight'
             };
         }
@@ -504,8 +564,13 @@
         // welcome path — both see a byte-identical payload, so a chip that renders
         // one way in the transcript cannot quietly render another way at init.
         function islandChips() {
+            // id names the row's provenance (1.6.0); NO locale on purpose — the
+            // labels are island proper nouns, and the contract says the server
+            // omits the field rather than claim a language for text that has
+            // none. The widget must then set no lang attribute.
             return {
                 type: 'quick_replies',
+                id: 'island_choice',
                 items: [
                     { label: 'Tenerife', message: 'Tenerife' },
                     { label: 'Gran Canaria', message: 'Gran Canaria' },
@@ -526,8 +591,12 @@
         // apart from the pack's own prompt1/prompt2, so the demo shows at a
         // glance which block is on screen.
         function promptChips() {
+            // locale + id per 1.6.0: tenant-authored text declares its language
+            // (→ lang="en" on the row) and quick_prompts is its provenance.
             return {
                 type: 'quick_replies',
+                id: 'quick_prompts',
+                locale: 'en',
                 items: [
                     { label: 'Find my hostel', message: 'Which hostel should I pick?' },
                     { label: 'Nest Pass', message: 'What is the Nest Pass?' }
@@ -553,7 +622,7 @@
                     // temporarily setting this to actions: [] (CLAUDE.md says so
                     // too).
                     actions: [promptChips(), islandChips()],
-                    contract_version: '1.4.1'
+                    contract_version: '1.6.1'
                 }, 700);
             },
 
@@ -578,6 +647,27 @@
                         actions: [
                             { type: 'totally_new_thing', payload: { a: 1 } },
                             { type: 'link_button', label: 'But this one still renders', url: 'https://nestshostels.com' }
+                        ],
+                        turn: turn
+                    });
+                }
+
+                if (q.indexOf('!cap') === 0) {
+                    // The turn-cap reply (1.6.0): canned text, the actionable
+                    // contact_channels, then conversation_ended LAST — the order
+                    // the contract specifies. The real server would also repeat
+                    // the previous exchange's turn number; `turn` here is close
+                    // enough, since the widget never reads it on this path.
+                    return reply(done, 200, {
+                        reply: 'We have reached this conversation’s message limit. Start a new chat to keep talking — or reach the team directly below.',
+                        actions: [
+                            {
+                                type: 'contact_channels',
+                                phone: '+34 922 123 456',
+                                whatsapp: '+34 600 111 222',
+                                email: 'hola@nestshostels.com'
+                            },
+                            { type: 'conversation_ended', reason: 'turn_cap' }
                         ],
                         turn: turn
                     });
@@ -659,45 +749,85 @@
                 // All three island chips land here on purpose — in production any
                 // reply can carry any element and the server decides which.
                 if (q.indexOf('tenerife') !== -1 || q.indexOf('canaria') !== -1 || q.indexOf('ibiza') !== -1) {
+                    var cards = {
+                        type: 'property_cards',
+                        items: [
+                            {
+                                key: 'medano',
+                                name: 'Medano Nest',
+                                location: 'El Médano, Tenerife',
+                                image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/3.jpg',
+                                // period + basis together (1.6.0): a dorm bed —
+                                // "from €22.00/night per person".
+                                price_from: { amount: '22.00', currency: 'EUR', period: 'night', basis: 'per_person' },
+                                badge: 'Nest Pass',
+                                url: 'https://hotels.cloudbeds.com/reservation/medano-nest',
+                                // Server-localized Book text (1.6.0) — must beat
+                                // the pack's "Book now" on THIS card only.
+                                cta_label: 'Book a bed'
+                            },
+                            {
+                                // No `location` key at all: optional fields are
+                                // OMITTED rather than nulled, and the platform
+                                // really does have properties without one. The
+                                // card must simply skip the line.
+                                //
+                                // basis differs from medano's on purpose: 1.6.1
+                                // states period/basis are PER ITEM, so one rail
+                                // must be able to show two different suffixes.
+                                key: 'ashavana',
+                                name: 'Ashavana Nest',
+                                image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/6.jpg',
+                                price_from: { amount: '24.00', currency: 'EUR', period: 'night', basis: 'per_unit' },
+                                url: 'https://hotels.cloudbeds.com/reservation/ashavana-nest'
+                            },
+                            {
+                                // No period/basis: the bare price. The widget must
+                                // NOT invent "/night" here — absence means the
+                                // tenant declared nothing.
+                                key: 'duque',
+                                name: 'Duque Nest',
+                                location: 'Costa Adeje, Tenerife',
+                                image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/1.jpg',
+                                price_from: { amount: '26.00', currency: 'EUR' },
+                                badge: 'Loooong Stay',
+                                url: 'https://hotels.cloudbeds.com/reservation/duque-nest'
+                            },
+                            {
+                                // The D-043(c) isolator (reference browser pass,
+                                // 2026-07-31): dropped for a NON-url reason — no
+                                // name — while carrying a VALID url the "Visit our
+                                // website" button below also carries. The card is
+                                // dropped and that button must SURVIVE; a
+                                // javascript: url here would drop both and prove
+                                // nothing.
+                                key: 'no-name',
+                                url: 'https://nestshostels.com'
+                            }
+                        ]
+                    };
+                    if (q.indexOf('ibiza') !== -1) {
+                        // total alone (no more link): "Showing 3 of 5" — the
+                        // count line is the else-branch and needs its own path.
+                        cards.total = 5;
+                    } else {
+                        // Both together: `more` must WIN and the count line must
+                        // not render.
+                        cards.total = 14;
+                        cards.more = { label: 'See all our properties', url: 'https://nestshostels.com/hostels' };
+                    }
                     return reply(done, 200, {
                         reply: 'Three Nests match — El Médano is the surf one.',
                         actions: [
-                            {
-                                type: 'property_cards',
-                                items: [
-                                    {
-                                        key: 'medano',
-                                        name: 'Medano Nest',
-                                        location: 'El Médano, Tenerife',
-                                        image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/3.jpg',
-                                        price_from: { amount: '22.00', currency: 'EUR' },
-                                        badge: 'Nest Pass',
-                                        url: 'https://hotels.cloudbeds.com/reservation/medano-nest'
-                                    },
-                                    {
-                                        // No `location` key at all: optional fields are
-                                        // OMITTED rather than nulled, and the platform
-                                        // really does have properties without one. The
-                                        // card must simply skip the line.
-                                        key: 'ashavana',
-                                        name: 'Ashavana Nest',
-                                        image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/6.jpg',
-                                        price_from: { amount: '24.00', currency: 'EUR' },
-                                        url: 'https://hotels.cloudbeds.com/reservation/ashavana-nest'
-                                    },
-                                    {
-                                        key: 'duque',
-                                        name: 'Duque Nest',
-                                        location: 'Costa Adeje, Tenerife',
-                                        image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/1.jpg',
-                                        price_from: { amount: '26.00', currency: 'EUR' },
-                                        badge: 'Loooong Stay',
-                                        url: 'https://hotels.cloudbeds.com/reservation/duque-nest'
-                                    }
-                                ]
-                            },
+                            cards,
                             promoCard(),
-                            { type: 'link_button', label: 'Book now', url: 'https://book.nestshostels.com', style: 'primary' },
+                            // Equals medano's rendered url → suppressed by the
+                            // dedupe pre-scan. The trio used to point at
+                            // book.nestshostels.com, which no card carries — that
+                            // is why the old fixture could never catch D-043(c).
+                            { type: 'link_button', label: 'Book now', url: 'https://hotels.cloudbeds.com/reservation/medano-nest', style: 'primary' },
+                            // Shares the NAME-LESS item's url → must render: a
+                            // dropped card suppresses nothing.
                             { type: 'link_button', label: 'Visit our website', url: 'https://nestshostels.com' },
                             { type: 'link_button', label: 'Get directions', url: 'https://maps.google.com/?q=Las+Eras+Nest+Hostel' }
                         ],
@@ -738,10 +868,20 @@
                 if (pollCounts[path] < 3) {
                     return reply(done, 200, { status: 'pending', turn: turn }, 60);
                 }
+                // An `availability` whose url fell back to the property's
+                // booking_url — the same url the interim booking_link already
+                // rendered. This is the ONE interim→poll duplicate 1.6.0
+                // documents, and the per-turn `rendered` set must suppress the
+                // trailing Book button while the options list still renders.
                 return reply(done, 200, {
                     status: 'ready',
                     reply: 'Yes! We have 4 beds free in the mixed dorm for those nights, at 25 € per night.',
-                    actions: [{ type: 'booking_link', url: 'https://book.nestshostels.com/las-eras' }],
+                    actions: [{
+                        type: 'availability',
+                        available: true,
+                        options: [{ room: 'Mixed dorm', price: '25', currency: 'EUR' }],
+                        url: 'https://book.nestshostels.com/las-eras'
+                    }],
                     turn: turn
                 }, 60);
             }
@@ -1042,7 +1182,9 @@
             // the surface in one place. The two prompt handles are the pack block
             // inside it, which setLocale() repaints; the server chips sharing the
             // wrapper deliberately get no handle, because nothing may repaint them.
-            welcome: null, promptsLabel: null, promptButtons: null
+            // `restart` is the conversation_ended button (endConversation), the
+            // third live control setLocale() repaints.
+            welcome: null, promptsLabel: null, promptButtons: null, restart: null
         };
     }
 
@@ -1173,13 +1315,31 @@
     }
 
     /**
+     * The ONE card-item gate, shared by propertyCard() and the dedupe pre-scan in
+     * renderActions(). The two MUST agree: the pre-scan collects the urls of cards
+     * that WILL render, and recording the url of an item propertyCard() would
+     * reject — no name, no http(s) url — would silently suppress the guest's only
+     * Book button, which is strictly worse than the duplicate the dedupe removes
+     * (response-contract.md, D-043(c): "a card you dropped suppresses nothing").
+     * Returns the post-gate (trimmed) href, or null when the item drops.
+     */
+    function renderableCardUrl(item) {
+        if (!item || typeof item.name !== 'string' || !item.name) { return null; }
+        return safeHttpUrl(item.url);
+    }
+
+    /**
      * `row` is the CTA row this button joins — null opens a new one. Returns the row
      * so the caller can hand it to the next button: consecutive CTAs (contract 1.4.0
      * ships three) then share one wrapping row instead of stacking into a column of
      * full-width bars. A dropped url returns `row` untouched, so a rejected link
      * never leaves an empty row behind.
+     *
+     * `rendered` is the per-turn url set (see sendMessage): every href this turn
+     * puts on screen is recorded so the poll's additive actions[] can suppress a
+     * repeat. Optional — the init/welcome/resume paths render outside any turn.
      */
-    function linkButton(label, url, style, row) {
+    function linkButton(label, url, style, row, rendered) {
         var href = safeHttpUrl(url);
         if (!href) { log('dropped a non-http(s) url', url); return row; }
         var link = el('a', 'nc-action' + (style === 'primary' ? ' nc-action--primary' : ''), label || t('open_link'));
@@ -1189,18 +1349,40 @@
             els.body.appendChild(row);
         }
         row.appendChild(link);
+        if (rendered) { rendered[href] = true; }
         scrollDown();
         return row;
     }
 
-    function renderActions(actions, bubble) {
+    function renderActions(actions, bubble, rendered) {
         if (!actions || !actions.length) { return; }
+        // Dedupe pre-scan (contract 1.6.0, D-043(c)): the post-gate urls of every
+        // card that WILL render in THIS list, collected before any element renders
+        // so a link_button that precedes its card is still suppressed. Local to one
+        // actions[] on purpose — the cross-turn case belongs to `rendered`.
+        // CARD_MAX is deliberately NOT applied here: the only payload where the
+        // dedupe can fire is the resolved-property turn, whose card set is always
+        // exactly one (an island carousel never carries a matching link_button),
+        // so the pre-scan and the rendered rail cannot diverge — and the
+        // reference builds its set the same uncapped way.
+        // Object.create(null): payload urls must never collide with
+        // Object.prototype ('constructor' as a url key would phantom-match).
+        var cardUrls = Object.create(null);
+        for (var i = 0; i < actions.length; i++) {
+            var a = actions[i];
+            if (a && a.type === 'property_cards' && a.items && a.items.length) {
+                for (var j = 0; j < a.items.length; j++) {
+                    var url = renderableCardUrl(a.items[j]);
+                    if (url) { cardUrls[url] = true; }
+                }
+            }
+        }
         // The open CTA row travels with the pass rather than living module-side, so
         // DOM order still follows payload order and an element that renders something
         // else closes the group.
         var row = null;
-        for (var i = 0; i < actions.length; i++) {
-            row = renderAction(actions[i], bubble, row);
+        for (var k = 0; k < actions.length; k++) {
+            row = renderAction(actions[k], bubble, row, cardUrls, rendered);
         }
     }
 
@@ -1216,29 +1398,39 @@
      * consecutive buttons. An element that renders something of its own returns null
      * and closes the group; one that renders nothing passes `row` straight through.
      */
-    function renderAction(action, bubble, row) {
+    function renderAction(action, bubble, row, cardUrls, rendered) {
         if (!action || !action.type) { return row; }
 
         switch (action.type) {
             case 'async_result':
-                if (action.url) { pollResult(action.url, bubble); }
+                if (action.url) { pollResult(action.url, bubble, rendered); }
                 return row;
 
+            // Suppression passes `row` through untouched — a suppressed button must
+            // not close the CTA group its siblings share. Raw action.url against a
+            // set of trimmed hrefs: within one payload both are the same catalog
+            // booking_url byte-for-byte (the contract forbids normalizing), so
+            // plain equality is exact; a whitespace-padded near-duplicate simply
+            // renders both, which the contract calls redundant, never harmful.
             case 'link_button':
-                return linkButton(action.label, action.url, action.style, row);
+                if (cardUrls[action.url]) { return row; } // a card in this list carries the same CTA (D-043(c))
+                return linkButton(action.label, action.url, action.style, row, rendered);
 
             case 'booking_link':
-                return linkButton(t('book'), action.url, 'primary', row);
+                // Reference parity; cannot co-occur with cards today (one handler
+                // per turn, D-009), so this branch of the check is dormant.
+                if (cardUrls[action.url]) { return row; }
+                return linkButton(t('book'), action.url, 'primary', row, rendered);
 
             case 'availability':
-                return renderAvailability(action);
+                return renderAvailability(action, rendered);
 
             case 'contact_channels':
                 renderChannels(action);
                 return null;
 
             case 'property_cards':
-                renderPropertyCards(action);
+                renderPropertyCards(action, rendered);
                 return null;
 
             case 'quick_replies':
@@ -1249,6 +1441,14 @@
                 renderPromoCard(action);
                 return null;
 
+            // The turn cap (1.6.0). No visual payload of its own — the reply
+            // text already told the guest — so the branch only flips the widget
+            // into its ended state. Passes `row` through: the element is emitted
+            // last, after the contact_channels a capped reply may carry.
+            case 'conversation_ended':
+                endConversation();
+                return row;
+
             default:
                 log('ignoring unknown element type', action.type);
                 return row;
@@ -1257,7 +1457,7 @@
 
     // The options card closes any open CTA group; the trailing booking button opens a
     // fresh row, which is returned for whatever follows.
-    function renderAvailability(action) {
+    function renderAvailability(action, rendered) {
         if (action.available === false) {
             els.body.appendChild(el('div', 'nc-options', t('noAvailability')));
         } else if (action.options && action.options.length) {
@@ -1269,7 +1469,14 @@
             });
             els.body.appendChild(list);
         }
-        var row = action.url ? linkButton(t('book'), action.url, 'primary', null) : null;
+        // The ONE contract-scoped interim→poll suppression (1.6.0): an availability
+        // url that fell back to the property's booking_url duplicates the Book
+        // button the interim turn already rendered. Only the trailing button is
+        // deduped — the options list is new content and always renders.
+        var row = null;
+        if (action.url && !(rendered && rendered[action.url])) {
+            row = linkButton(t('book'), action.url, 'primary', null, rendered);
+        }
         scrollDown();
         return row;
     }
@@ -1335,6 +1542,16 @@
         if (!action.items || !action.items.length) { return; }
 
         var row = el('div', 'nc-chip-row');
+        // A group with an accessible name (contract → Accessibility): the chips
+        // are real buttons, and the name says what they are before they are read
+        // out one by one. The visible row stays BARE by the owner's decision —
+        // this label is for screen readers, not a rendered heading.
+        attrs(row, { role: 'group', 'aria-label': t('quickReplies') });
+        // Same rule as the promo: locale (1.6.0) marks the labels' language when
+        // the server declares one; absent means unknown — set nothing.
+        if (typeof action.locale === 'string' && /^[a-z]{2}$/.test(action.locale)) {
+            attrs(row, { lang: action.locale });
+        }
         for (var i = 0; i < action.items.length; i++) {
             var item = action.items[i] || {};
             // The message IS the chip: without one there is nothing to send, so a
@@ -1356,8 +1573,36 @@
         // and leave a phantom indent under the bubble.
         if (!row.childNodes.length) { return; }
         (parent || els.body).appendChild(row);
+        // Only mid-transcript rows register for the one-shot retirement (1.6.0):
+        // a welcome row already retires with the wrapper removeWelcome() sweeps,
+        // and registering it too would put two owners — and two focus rescues —
+        // on one node.
+        if (!parent) { chipRows.push(row); }
         scrollDown();
         return row;
+    }
+
+    /**
+     * The one-shot rule, made precise at 1.6.0: a chip row belongs to the turn it
+     * arrived on, so ANY send — a chip tap in any row, a typed message, a pack
+     * pill — retires EVERY registered row on screen, not just the tapped one.
+     * sendGuestText() is the single send seam, so this has exactly one call site
+     * there, plus endConversation(). Rows are NOT restored after a failed turn
+     * (the contract's MAY): the guest's message is in the transcript and can be
+     * retyped, whereas a restored row invites a double send.
+     */
+    function retireChipRows() {
+        var hadFocus = false;
+        for (var i = 0; i < chipRows.length; i++) {
+            var row = chipRows[i];
+            // Sampled BEFORE removal — the browser answers a removed
+            // activeElement by resetting focus to <body>, and the guest who just
+            // activated a chip with the keyboard is standing in this row.
+            if (row.contains(document.activeElement)) { hadFocus = true; }
+            if (row.parentNode) { row.parentNode.removeChild(row); }
+        }
+        chipRows = [];
+        if (hadFocus && els.input && !els.input.disabled) { els.input.focus(); }
     }
 
     // A factory, not a closure written inside the loop: `var` is function-scoped,
@@ -1369,9 +1614,12 @@
 
     /* --------------------------------------------------- property carousel --- */
 
-    // No "see all" card and no page counter: the wire carries neither a `more`
-    // link nor a `total`, and inventing one would put a number on screen that
-    // nothing verified. Eight is simply where the strip stops.
+    // Eight is where OUR strip stops — a layout cap, deliberately separate from
+    // the server's item cap, which is a deployment setting this widget must not
+    // hardcode. Since 1.6.0 the wire can say what a cut cost: `total` is the
+    // match count before any cap and `more` a "see all" link, and
+    // renderPropertyCards() puts one of them under a cut rail instead of
+    // inventing a number nothing verified.
     var CARD_MAX = 8;
 
     // Mirrors the .nc-car-track gap. The scroll step is one card plus one gap, and
@@ -1398,15 +1646,19 @@
      * link_buttons a reply carries after the carousel still group into one
      * wrapping row of their own.
      */
-    function renderPropertyCards(action) {
+    function renderPropertyCards(action, rendered) {
         if (!action.items || !action.items.length) { return; }
 
         var track = el('div', 'nc-car-track');
         var count = 0;
         for (var i = 0; i < action.items.length && count < CARD_MAX; i++) {
-            var card = propertyCard(action.items[i] || {});
+            var item = action.items[i] || {};
+            var card = propertyCard(item);
             if (!card) { continue; }
             track.appendChild(card);
+            // Only cards that actually reached the DOM feed the per-turn set —
+            // the same will-it-render rule the dedupe pre-scan lives by.
+            if (rendered) { rendered[renderableCardUrl(item)] = true; }
             count += 1;
         }
 
@@ -1415,10 +1667,19 @@
         if (!count) { return; }
 
         var wrap = el('div', 'nc-carousel');
-        // A group rather than a list: the cards are peers of one another, and the
-        // roledescription is what tells a screen-reader guest that ←/→ across the
-        // book links is a walk through a strip and not a jump between replies.
-        attrs(wrap, { role: 'group', 'aria-roledescription': t('carousel') });
+        // The wrapper stays the labelled group carrying the carousel
+        // roledescription (←/→ across the book links is a walk through a strip,
+        // not a jump between replies); the TRACK is the labelled list the
+        // contract's Accessibility section asks for — cards are peers, not
+        // slides. The roles are explicit because these are divs. Arrows, fades
+        // and dots are wrapper children, siblings of the track, so the list's
+        // children stay pure listitems.
+        attrs(wrap, {
+            role: 'group',
+            'aria-roledescription': t('carousel'),
+            'aria-label': t('properties')
+        });
+        attrs(track, { role: 'list' });
         wrap.appendChild(track);
 
         var fadeL = attrs(el('div', 'nc-car-fade nc-car-fade--l'), { 'aria-hidden': 'true' });
@@ -1455,6 +1716,19 @@
         // measurement is real even for a reply that arrives unopened.
         els.body.appendChild(wrap);
         wireCarousel(wrap, track, [prev, fadeL], [next, fadeR], dots);
+
+        // The overflow affordance (1.6.0). `more` WINS over `total`: a tappable
+        // "see all" answers the question the count line only states. `total` is
+        // compared against the cards actually shown — the server's own cap and
+        // CARD_MAX both cut, and the guest is told about either the same way.
+        var more = action.more || null;
+        var moreUrl = more ? safeHttpUrl(more.url) : null;
+        if (moreUrl && typeof more.label === 'string' && more.label) {
+            // Label is server-localized — textContent via linkButton, never t().
+            linkButton(more.label, moreUrl, null, null, rendered);
+        } else if (typeof action.total === 'number' && action.total > count) {
+            els.body.appendChild(el('div', 'nc-car-count', tf('showingOf', count, action.total)));
+        }
         scrollDown();
     }
 
@@ -1470,23 +1744,28 @@
      * renders nothing at all rather than an empty line.
      */
     function propertyCard(item) {
-        var href = safeHttpUrl(item.url);
-        if (!href) { log('property card dropped — no usable booking url', item.key); return null; }
-        if (typeof item.name !== 'string' || !item.name) {
-            log('property card dropped — no name', item.key);
-            return null;
-        }
+        // The shared gate — see renderableCardUrl(): the dedupe pre-scan must
+        // agree with this drop decision or it suppresses a Book button wrongly.
+        var href = renderableCardUrl(item);
+        if (!href) { log('property card dropped — no name or usable booking url', item.key); return null; }
 
         var card = el('div', 'nc-card');
+        attrs(card, { role: 'listitem' }); // the track is the labelled list
 
         var photo = el('div', 'nc-card-photo');
         var image = safeHttpUrl(item.image);
         if (image) {
             var img = el('img');
-            // alt="" on purpose: the photo restates the title sitting directly
-            // under it, so announcing it twice is noise. Everything the card
-            // means is in its text.
-            attrs(img, { src: image, alt: '', loading: 'lazy' });
+            // Decorative by default — the title sitting directly under the photo
+            // already carries its meaning, so absent image_alt the alt is the
+            // empty string (the contract's stated rule since 1.6.0; image_alt is
+            // reserved and unemitted today). typeof, not ||: a non-string must
+            // not stringify into the attribute.
+            attrs(img, {
+                src: image,
+                alt: typeof item.image_alt === 'string' ? item.image_alt : '',
+                loading: 'lazy'
+            });
             photo.appendChild(img);
         }
         if (typeof item.badge === 'string' && item.badge) {
@@ -1503,9 +1782,10 @@
         var price = cardPrice(item.price_from);
         if (price) { body.appendChild(price); }
 
-        // The wire sends no label for this one — it is the same "Book now" the
-        // booking_link element uses, so it comes from the same pack key.
-        var book = el('a', 'nc-card-book', t('book'));
+        // cta_label (1.6.0) is server-localized Book text — prefer it, and keep
+        // the pack's "Book now" as the fallback (empty string falls back too).
+        var book = el('a', 'nc-card-book',
+            (typeof item.cta_label === 'string' && item.cta_label) ? item.cta_label : t('book'));
         attrs(book, { href: href, target: '_blank', rel: 'noopener noreferrer' });
         body.appendChild(book);
 
@@ -1576,6 +1856,19 @@
         if (parts[0]) { line.appendChild(document.createTextNode(parts[0])); }
         line.appendChild(el('span', 'nc-card-price', fmt));
         if (parts[1]) { line.appendChild(document.createTextNode(parts[1])); }
+
+        // period/basis (1.6.0; PER ITEM since 1.6.1 — two cards in one rail may
+        // legitimately differ, so this resolves per card, never once per rail).
+        // Strict matches: an unknown value contributes nothing. Absence means a
+        // BARE price — the server omits both unless the tenant declared them,
+        // and inventing "/night" on a per-stay figure is a guest-facing pricing
+        // error, not a cosmetic one (response-contract.md, reading price_from).
+        var suffix = '';
+        if (price.period === 'night') { suffix += t('priceNight'); }
+        else if (price.period === 'stay') { suffix += t('priceStay'); }
+        if (price.basis === 'per_person') { suffix += ' ' + t('pricePerPerson'); }
+        else if (price.basis === 'per_unit') { suffix += ' ' + t('pricePerUnit'); }
+        if (suffix) { line.appendChild(el('span', 'nc-card-per', suffix)); }
         return line;
     }
 
@@ -1795,6 +2088,18 @@
         }
 
         var card = el('div', 'nc-promo' + (action.style === 'highlight' ? ' nc-promo--highlight' : ''));
+        // A region NAMED BY ITS TITLE (contract → Accessibility), not a live one:
+        // .nc-body is already non-live and the announcer speaks only replies.
+        // aria-label with the title string, not aria-labelledby — nothing in this
+        // widget emits element ids. The gates above guarantee title is non-empty.
+        attrs(card, { role: 'region', 'aria-label': action.title });
+        // locale (1.6.0) names the language of the block's DISPLAYED text — mark
+        // it up so a screen reader does not read Spanish copy with an English
+        // voice. Absent means unknown: set nothing, never guess (the island rows
+        // omit it on purpose — proper nouns have no language to claim).
+        if (typeof action.locale === 'string' && /^[a-z]{2}$/.test(action.locale)) {
+            attrs(card, { lang: action.locale });
+        }
 
         var image = safeHttpUrl(action.image);
         if (image) {
@@ -2371,9 +2676,14 @@
      * it never touches els.input and never preventDefault()s anything.
      */
     function sendGuestText(text) {
-        if (busy || removed) { return; }
+        if (busy || removed || ended) { return; }
         guestTurned = true;
         removeWelcome();
+        // ANY send retires every chip row on screen (the 1.6.0 one-shot rule) —
+        // this seam is what makes "any" true with one call site. Both rescues
+        // land on the composer, and welcome rows are not registered, so the two
+        // sweeps never fight over a node.
+        retireChipRows();
         addBubble('guest', text);                     // textContent — a typed <img> stays text
         ensureConversation(function () { sendMessage(text, false); });
     }
@@ -2418,7 +2728,11 @@
             if (status === 200 && body) {
                 var bubble = body.reply ? addBubble('bot', '') : null;
                 if (bubble) { typeText(bubble, body.reply); }
-                renderActions(body.actions, bubble);
+                // A fresh per-turn url set: an async turn's poll actions[] are
+                // additive to what renders now, so the poll must know what this
+                // turn already put on screen. Never shared across turns — and the
+                // init/welcome/resume paths deliberately pass none.
+                renderActions(body.actions, bubble, Object.create(null));
                 drainSend();
                 // Counts real turn replies only — never the greeting (intro path),
                 // an error/retry/timeout bubble (the non-200 branches below), or
@@ -2452,8 +2766,100 @@
     }
 
     function drainSend() {
-        if (removed || busy || !sendQueue.length) { return; }
+        // `ended` too: a capped conversation answers every queued turn with the
+        // same canned refusal — endConversation() already emptied the queue, and
+        // this guard keeps a race from re-draining into it.
+        if (removed || ended || busy || !sendQueue.length) { return; }
         sendMessage(sendQueue.shift(), false);
+    }
+
+    /**
+     * conversation_ended (contract 1.6.0, D-044): the turn cap. Every further
+     * POST returns the same canned refusal with no LLM call, so close the
+     * composer — an open input inviting messages that all buy the same answer is
+     * worse than a stated ending — and offer the one thing that still works: a
+     * new conversation. The element carries no visual payload; `reply` already
+     * told the guest, so the button is all this adds.
+     *
+     * Idempotent: the server re-emits the element on every further capped POST,
+     * and a second button under the first would read as a broken widget.
+     */
+    function endConversation() {
+        if (ended || removed) { return; }
+        ended = true;
+        // Queued turns would each buy the same refusal — and must NOT survive
+        // into the next conversation through a restart.
+        sendQueue.length = 0;
+        // BEFORE the composer closes: retireChipRows()'s focus rescue lands on
+        // els.input, which must still be enabled to take it.
+        retireChipRows();
+
+        var restart = el('button', 'nc-action nc-action--primary nc-restart', t('newChat'));
+        attrs(restart, { type: 'button' });
+        restart.addEventListener('click', restartConversation);
+        var row = el('div', 'nc-action-row');
+        row.appendChild(restart);
+        els.body.appendChild(row);
+        els.restart = restart;
+        // Disabling a focused control drops focus to <body> — the standing rule,
+        // rediscovered four times in this repo. The guest who just sent the
+        // capped message is standing in the composer; hand them the only
+        // control that still does anything.
+        if (els.form.contains(document.activeElement)) { restart.focus(); }
+        els.input.disabled = true;
+        els.send.disabled = true;
+        scrollDown();
+    }
+
+    /**
+     * The restart. Deliberately NOT a replay of the intro: its latches
+     * (intro.settled, introPlayed) stay spent, and this renders the new greeting
+     * itself — the same shape introMaybeFinish() draws, minus the loader dance.
+     * The transcript is wiped because the new conversation shares no memory with
+     * the old one; keeping the exchange on screen implies a continuity the
+     * server does not have.
+     */
+    function restartConversation() {
+        if (removed) { return; }
+        clearStore();
+        conversationUuid = null;
+        started = false;
+        ended = false;
+        guestTurned = false;      // a NEW conversation gets first-contact affordances again
+        intro.greeting = null;    // the fresh init must re-settle both
+        intro.actions = null;
+        chipRows = [];            // already retired; the wipe below removes any remnant
+        chatEpoch += 1;           // orphan any poll still backing off for the dead conversation
+
+        els.input.disabled = false;
+        els.send.disabled = false;
+        els.restart = null;
+        // The activeElement IS the restart button about to be wiped.
+        if (els.body.contains(document.activeElement)) { els.input.focus(); }
+        // Wipe the transcript but KEEP the (hidden) loader node: els.loader must
+        // stay attached — it is the greeting's insertion anchor below, exactly as
+        // it is for introMaybeFinish().
+        while (els.body.lastChild && els.body.lastChild !== els.loader) {
+            els.body.removeChild(els.body.lastChild);
+        }
+
+        startConversation(function () {
+            if (removed) { return; }
+            var wrap = el('div', 'nc-message nc-message--bot nc-greeting');
+            var text = el('div', 'nc-text');
+            wrap.appendChild(avatarNode());
+            wrap.appendChild(text);
+            // After the loader, not appended: the composer is live again, so an
+            // impatient guest's bubble may already be here — the greeting still
+            // reads first.
+            els.body.insertBefore(wrap, els.loader.nextSibling);
+            requestAnimationFrame(function () {
+                wrap.classList.add('nc-visible');
+                if (!removed && !guestTurned) { showWelcome(wrap); }
+                typeText(text, intro.greeting);
+            });
+            if (isOpen() && !guestTurned) { els.input.focus(); }
+        });
     }
 
     function teardown() {
@@ -2471,7 +2877,11 @@
 
     var POLL_START_MS = 2000, POLL_FACTOR = 1.5, POLL_MAX_MS = 5000, POLL_GIVE_UP_MS = 120000;
 
-    function pollResult(path, bubble) {
+    // `rendered` is the turn's url set: the poll's actions[] are ADDITIVE to what
+    // the interim turn drew (contract 1.6.0), so the final render needs to know
+    // which hrefs are already on screen to suppress the one duplicate that can
+    // arise (see renderAvailability).
+    function pollResult(path, bubble, rendered) {
         // Must be relative. Resolving it against the API base ourselves is what
         // keeps the Bearer key on the origin we already POST to.
         if (typeof path !== 'string' || path.charAt(0) !== '/') {
@@ -2481,9 +2891,15 @@
 
         var startedAt = Date.now();
         var delay = POLL_START_MS;
+        // This poll belongs to the conversation live at its start. A restart
+        // (conversation_ended → new chat) bumps chatEpoch, and a stale poll must
+        // then do nothing: its bubble is detached and its actions would render
+        // into a transcript that is not its own.
+        var epoch = chatEpoch;
 
         function schedule() {
-            if (removed) { return; }   // the 120s give-up must not bubble post-teardown
+            // the 120s give-up must not bubble post-teardown or post-restart
+            if (removed || epoch !== chatEpoch) { return; }
             if ((Date.now() - startedAt) >= POLL_GIVE_UP_MS) {
                 addBubble('bot', t('timeout'));
                 return;
@@ -2493,8 +2909,11 @@
         }
 
         function tick() {
-            if (removed) { return; }
+            if (removed || epoch !== chatEpoch) { return; }
             API.poll(path, function (status, body) {
+                // Re-checked HERE too: the request was in flight while the guest
+                // restarted, and this callback is the last gate before the DOM.
+                if (removed || epoch !== chatEpoch) { return; }
                 log('poll', status, body);
                 if (status === 403) { teardown(); return; }
                 if (status === 410) { return; }
@@ -2504,7 +2923,7 @@
                     // the same transcript row.
                     if (bubble) { typeText(bubble, body.reply || ''); }
                     else { typeText(addBubble('bot', ''), body.reply || ''); }
-                    renderActions(body.actions, bubble);
+                    renderActions(body.actions, bubble, rendered);
                     return;
                 }
 
@@ -2612,6 +3031,9 @@
                 els.promptButtons[i].textContent = t(key);
             });
         }
+        // The restart button is a live control like the pills, not frozen
+        // transcript — its label follows the language switcher.
+        if (els.restart) { els.restart.textContent = t('newChat'); }
         els.panel.setAttribute('aria-label', 'Germán — ' + t('assistantRole'));
         // The one control whose label depends on state, not just on locale: it
         // reads "shrink" while the sheet is out.

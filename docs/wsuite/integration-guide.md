@@ -2,7 +2,7 @@
 
 |                  |                                                                                                                                                                                                                        |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Version**      | matches `response-contract.md` 1.5.0 (the server reports the live version as `contract_version` — see §3.1)                                                                                                            |
+| **Version**      | matches `response-contract.md` 1.6.1 (the server reports the live version as `contract_version` — see §3.1)                                                                                                            |
 | **Audience**     | Any external website embedding a **custom** chat UI on top of the wSuite chatbot API — e.g. the branded `nest-chatbot-ai` microsite.                                                                                   |
 | **Scope**        | The **transport + auth** layer: base URL, the three endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS.                                                                            |
 | **Not in scope** | The **response envelope** (`reply` / typed `actions[]` / element types). That is fully specified in [`response-contract.md`](response-contract.md) — read it alongside this document; do not duplicate its rules here. |
@@ -62,7 +62,7 @@ Content-Type: application/json
 
 | Field      | Type            | Required | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ---------- | --------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `locale`   | `string` (≤5)   | no       | The guest's language hint — send `navigator.language`. Drives the reply language.                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `locale`   | `string` (≤5)   | no       | The guest's language hint — send `navigator.language`. Drives the greeting's language, and **since 1.6.0** also selects per-locale tenant content (the init promo card and quick-prompt chips) where the tenant has supplied translations.                                                                                                                                                                                                                                                                  |
 | `property` | `string` (≤255) | no       | A **soft** property-name lookup within the key's tenant. An unknown name is not an error — it simply yields a conversation with no property pre-scoped. No DB `exists` check; the site/tenant always come from the key, never the body. A **matched** name also seeds the conversation's working memory, so answers — from turn 1 — are scoped to that property until the guest names another one; send it whenever your page is about one specific property (the bundled widget does via `data-property`). |
 
 **`201` response:**
@@ -72,7 +72,7 @@ Content-Type: application/json
   "conversation": { "uuid": "9b2c…" },
   "greeting": "Hi! How can I help?",
   "actions": [],
-  "contract_version": "1.5.0"
+  "contract_version": "1.6.1"
 }
 ```
 
@@ -123,7 +123,7 @@ Send a per-turn `locale` when **your UI owns the language**, i.e. you have a lan
 { "reply": "Yes, free wifi throughout.", "actions": [ … ], "turn": 3 }
 ```
 
-A turn **always returns `200`** on success — the orchestrator degrades any LLM/provider/budget failure to a localized "busy" reply at `200`, never a 5xx. Render `reply`, then render each element of `actions` **in order** (§4). A conversation may also hit a server-side **turn cap**: past it, the turn returns a canned "message limit reached" reply in the same `200 {reply, actions, turn}` shape (no special field, no handling needed — render it like any reply); the guest should start a new conversation to continue. This capped reply **may** include a `contact_channels` element (the property's call/WhatsApp/email), an existing element you already render per §4 — no special handling.
+A turn **always returns `200`** on success — the orchestrator degrades any LLM/provider/budget failure to a localized "busy" reply at `200`, never a 5xx. Render `reply`, then render each element of `actions` **in order** (§4). A conversation may also hit a server-side **turn cap**: past it, the turn returns a canned "message limit reached" reply in the same `200 {reply, actions, turn}` shape — the envelope never changes — and the guest should start a new conversation to continue. That reply carries two elements you already handle per §4: **since 1.6.0** a `conversation_ended` element (read it if you want to offer "start a new chat" at exactly the right moment; ignore it and the reply text still says so), and **optionally** a `contact_channels` element with the property's call/WhatsApp/email.
 
 ### 3.3 Poll — resolve an async turn
 
@@ -148,35 +148,37 @@ Recommended cadence: **~2s → 5s backoff, give up ≈120s**. On `ready`/`failed
 
 ## 4. Rendering elements
 
-The element types (`link_button`, `contact_channels`, `booking_link`, `availability`, `async_result`, `property_cards`, `promo_card`, `quick_replies`) and their fields are the authority of [`response-contract.md`](response-contract.md) — implement against that. Three **MUST** rules a consumer cannot skip (all demonstrated in `chatbot.js` `renderAction` / `safeHttpUrl`):
+The element types (`link_button`, `contact_channels`, `booking_link`, `availability`, `async_result`, `property_cards`, `promo_card`, `quick_replies`, `conversation_ended`) and their fields are the authority of [`response-contract.md`](response-contract.md) — implement against that. Three **MUST** rules a consumer cannot skip (all demonstrated in `chatbot.js` `renderAction` / `safeHttpUrl`):
 
 1. **Ignore unknown `type`s.** New element types ship server-side ahead of any given UI. Skip a type you don't render; never break on it.
 2. **`async_result.url` must be treated as relative.** It always begins with `/`. Resolve it against `{API_BASE}` (§1) and **reject any non-relative value.** This structurally keeps the Bearer key on your own origin.
-3. **Render as text, links only for `http(s)`.** Put all guest/LLM/element strings into the DOM via `textContent` / `setAttribute` / created nodes — **never `innerHTML`** (XSS). Honor element `url` fields **only** for `http`/`https` schemes; construct `tel:` / `mailto:` / `https://wa.me/<digits>` yourself from `contact_channels` values, never verbatim.
+3. **Render as text, links and images only for `http(s)`.** Put all guest/LLM/element strings into the DOM via `textContent` / `setAttribute` / created nodes — **never `innerHTML`** (XSS). Honor element **`url` _and_ `image`** fields only for `http`/`https` schemes — that means `link_button`, `booking_link`, `availability`, `property_cards` items (`url` **and** `image`) and its element-level `more.url`, and `promo_card` (`image` **and** `cta.url`, which is tenant-authored). Anything else is dropped. Construct `tel:` / `mailto:` / `https://wa.me/<digits>` yourself from `contact_channels` values, never verbatim. `quick_replies` items carry no URLs at all. The authoritative inventory is [`response-contract.md`](response-contract.md)'s security rule — every URL-bearing field it adds inherits this.
 
 ---
 
 ## 5. Errors
 
-| Status | When                                                                                                                                                                               | Consumer action                                                                                                                              |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `401`  | Missing/invalid/revoked key, or token not prefixed `ws_live_`.                                                                                                                     | Fatal — bad key. Stop.                                                                                                                       |
-| `403`  | Init: `chatbot.enabled` is off for the site. Or: key scope not admitted. Or: the request `Origin` is not on the site's allow-list (§7) — body `{"message":"Origin not allowed."}`. | Hide the widget silently (register your origin — §7 — if the allow-list is the cause).                                                       |
-| `404`  | **Endpoint-specific — see below.** Turn: unknown/foreign `uuid`. Poll: the turn row is not visible to this request (or is not an async turn).                                      | Turn: treat the conversation as gone → **re-init** (as for `410`). Poll: treat as **transient** → keep backing off until give-up.            |
-| `410`  | Conversation idled out (24h since last activity).                                                                                                                                  | **Re-init transparently** (open a new conversation, optionally resend the last message once) — the reference widget does this automatically. |
-| `422`  | Init: no site resolved for the key.                                                                                                                                                | Configuration error.                                                                                                                         |
-| `429`  | Rate limit exceeded (§6).                                                                                                                                                          | Back off; show a soft "one moment" message and retry.                                                                                        |
+| Status | When                                                                                                                                                                               | Consumer action                                                                                                                                                                                                        |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `401`  | Missing/invalid/revoked key, or token not prefixed `ws_live_`.                                                                                                                     | Fatal — bad key. Stop.                                                                                                                                                                                                 |
+| `403`  | Init: `chatbot.enabled` is off for the site. Or: key scope not admitted. Or: the request `Origin` is not on the site's allow-list (§7) — body `{"message":"Origin not allowed."}`. | Hide the widget silently (register your origin — §7 — if the allow-list is the cause).                                                                                                                                 |
+| `404`  | **Endpoint-specific — see below.** Turn: unknown/foreign `uuid`. Poll: the turn row is not visible to this request (or is not an async turn).                                      | Turn: treat the conversation as gone → **re-init** (as for `410`). Poll: treat as **transient** → keep backing off until give-up.                                                                                      |
+| `410`  | Conversation idled out (24h since last activity). **Endpoint-specific — see below.**                                                                                               | Turn: **re-init transparently** (open a new conversation, optionally resend the last message once) — the reference widget does this automatically. Poll: **stop polling and do not re-init** — keep the interim reply. |
+| `422`  | Init: no site resolved for the key.                                                                                                                                                | Configuration error.                                                                                                                                                                                                   |
+| `429`  | Rate limit exceeded (§6).                                                                                                                                                          | Back off; show a soft "one moment" message and retry.                                                                                                                                                                  |
 
 Note: turn/poll **content** is always `200`; the non-200s above are resolution/auth failures only.
 
-### 5.1 `404` means different things on the turn and the poll endpoint
+### 5.1 `404` and `410` mean different things on the turn and the poll endpoint
 
-This is the one error whose handling is **not** uniform — get it wrong in either direction and you either wedge a browser or abandon a live answer.
+These are the two errors whose handling is **not** uniform — get either wrong and you can wedge a browser, abandon a live answer, or open a conversation the guest never spoke in.
 
-- **Turn** (`POST …/messages`) — a `404` means the stored `uuid` no longer resolves for your key. It is **terminal for that conversation**: clear the stored uuid, re-init, and resend the message once (exactly your `410` path). If you instead show a generic error **without clearing your stored uuid**, that browser retries the same dead uuid on every message until your retention window expires — up to 24h of a permanently broken widget for that visitor.
-- **Poll** (`GET …/turns/{turn}`) — treat a `404` as **transient**: keep backing off exactly as for `pending`, and stop only at your give-up deadline (~120s). You cannot tell a permanently unknown turn from a row that is simply not visible to _this_ request yet (replica lag, a request that raced the write), and the costs are asymmetric — backing off just ends at give-up, whereas re-initing throws away a conversation that is perfectly alive and abandons an answer that is still being generated.
+- **Turn `404`** (`POST …/messages`) — the stored `uuid` no longer resolves for your key. It is **terminal for that conversation**: clear the stored uuid, re-init, and resend the message once (exactly your `410` path). If you instead show a generic error **without clearing your stored uuid**, that browser retries the same dead uuid on every message until your retention window expires — up to 24h of a permanently broken widget for that visitor.
+- **Poll `404`** (`GET …/turns/{turn}`) — **transient**: keep backing off exactly as for `pending`, and stop only at your give-up deadline (~120s). You cannot tell a permanently unknown turn from a row that is simply not visible to _this_ request yet (replica lag, a request that raced the write), and the costs are asymmetric — backing off just ends at give-up, whereas re-initing throws away a conversation that is perfectly alive and abandons an answer that is still being generated.
+- **Turn `410`** — re-init transparently, as the error table says.
+- **Poll `410`** — **stop polling, and re-init nothing.** The conversation that owns this turn is gone, so its result is no longer worth fetching; keep the interim reply and its fallbacks, which are already a complete answer. The guest's _next_ message hits the turn endpoint, gets its own `410`, and re-inits there — where a fresh conversation actually has a message to carry. Re-initing from a poll opens a conversation the guest has not spoken in yet.
 
-The reference widget implements both: `sendMessage` treats `404` like `410`; `pollResult` folds `404` into its transient/back-off branch.
+The reference widget implements all four: `sendMessage` treats `404` like `410` (clear, re-init, resend once); `pollResult` folds `404` into its transient/back-off branch and returns silently on `410`.
 
 ---
 
@@ -203,7 +205,7 @@ Tunable per deployment via `WSUITE_CHATBOT_THROTTLE_PER_MINUTE` / `WSUITE_CHATBO
 
 Two independent layers apply to `api/v1/chatbot/*`:
 
-**CORS (transport).** Static and permanent: `allowed_origins: ['*']`, methods `POST, GET, OPTIONS`, headers `Content-Type, Authorization`, `supports_credentials: false`. It stays `*` because CORS preflights are unauthenticated (no key ⇒ the platform can't know which site, so it can't pick a per-site policy). CORS is **not** the access control — the origin lockdown below is.
+**CORS (transport).** Static and permanent: `allowed_origins: ['*']`, methods `POST, GET, OPTIONS`, request headers `Content-Type, Authorization`, **exposed response header `X-Chatbot-Contract`** (so a browser can read the contract version off the header as well as the init body — §3.1), `supports_credentials: false`. It stays `*` because CORS preflights are unauthenticated (no key ⇒ the platform can't know which site, so it can't pick a per-site policy). CORS is **not** the access control — the origin lockdown below is.
 
 **Origin allow-list (per-site access control).** A server-side `Origin` check (the `EnsureOriginAllowed` middleware), opt-in per site:
 

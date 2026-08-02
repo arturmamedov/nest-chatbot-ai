@@ -815,6 +815,21 @@
     color: #fff;
 }
 
+/* conversation_ended (contract 1.6.0): the one control left after the turn cap.
+   .nc-action supplies the pill; this strips the UA button chrome the anchor
+   variants never carry — a <button> does not inherit font-family, and ships its
+   own border. The focus ring is the house pattern the anchors get from the UA. */
+#nest-chatbot .nc-restart {
+    font-family: var(--nc-font-body);
+    border: none;
+    cursor: pointer;
+}
+
+#nest-chatbot .nc-restart:focus-visible {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: 2px;
+}
+
 /* Wrapping row, same as the CTAs: call / whatsapp / email sit side by side and
    break onto a second line only when they have to. */
 #nest-chatbot .nc-channels {
@@ -1090,6 +1105,13 @@
 #nest-chatbot .nc-card-book:focus-visible {
     outline: 2px solid var(--nc-secondary);
     outline-offset: 2px;
+}
+
+/* `total` (contract 1.6.0): the count line under a rail that was cut — quiet
+   metadata, not a control, in the same voice as a card's location line. */
+#nest-chatbot .nc-car-count {
+    font-size: 12px;
+    color: var(--nc-text-subtle);
 }
 
 /* -------------------------------------------------------------------- promo card */
