@@ -1348,6 +1348,75 @@
     display: flex;
     flex-direction: column;
     gap: 7px;
+    /* The positioning context the scroll cue hangs above — see .nc-scroll-cue.
+       No z-index of its own on purpose: `position: relative` with `z-index: auto`
+       is NOT a stacking context, so the cue's z-index competes at panel level and
+       lands over the transcript. Adding one here would trap it under .nc-body. */
+    position: relative;
+}
+
+/* ----------------------------------------------------------------- scroll cue */
+
+/* The way back to the latest message, floating over the transcript. Anchored to
+   the FOOTER's top edge, not to the panel: the textarea grows to 180px, and a
+   `bottom` measured from the panel would drift under the composer as it did. The
+   button is absolutely positioned, so it is out of the footer's flex flow and
+   costs nothing in its `gap`.
+
+   Right-hand side by the owner's call, at the body's own 15px gutter so it lines
+   up with the transcript rather than with the panel edge. */
+#nest-chatbot .nc-scroll-cue {
+    position: absolute;
+    bottom: 100%;
+    right: 15px;
+    margin-bottom: 10px;
+    z-index: 1;
+    height: 34px;
+    width: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--nc-secondary);
+    background: var(--nc-surface-alt);
+    box-shadow: var(--nc-shadow-card);
+    /* Driven by the motion tokens, so the reduced-motion block's --nc-dur: 0ms
+       collapses the fade with no rule of its own. */
+    transition: opacity var(--nc-dur) var(--nc-ease), transform var(--nc-dur) var(--nc-ease);
+}
+
+#nest-chatbot .nc-scroll-cue:hover {
+    transform: translateY(2px);
+}
+
+#nest-chatbot .nc-scroll-cue:focus-visible {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: 2px;
+}
+
+/* One chevron constant serves every direction — this is the carousel's glyph
+   turned a quarter turn, which is why there is no second icon in ICONS. */
+#nest-chatbot .nc-scroll-cue .nc-icon {
+    width: 13px;
+    height: 13px;
+    transform: rotate(90deg);
+}
+
+/* Hidden the way the panel is hidden, NOT with .nc-hidden's display: none.
+   `visibility` takes the button out of the tab order AND the accessibility tree
+   (the reasoning is spelled out on .nc-panel) while still leaving a fade to
+   watch — display: none would have neither. The step is delayed past the fade or
+   the button blinks out and there is no fade left. */
+#nest-chatbot .nc-scroll-cue.nc-cue-hidden {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition: opacity var(--nc-dur) var(--nc-ease),
+        transform var(--nc-dur) var(--nc-ease),
+        visibility 0s linear var(--nc-dur);
 }
 
 /* Quiet by design: the AI disclosure has to be present on every turn, and

@@ -211,6 +211,35 @@ Set on the `<script>` tag. `document.currentScript.dataset` reads them at boot.
 
 Runtime API: `window.NestChatbot` → `{ version, open, close, toggle, destroy, setLocale, locale }`.
 
+## The transcript scrolls itself exactly once per turn
+
+Since 2.6.0 there is no `scrollDown()`. **`anchorSend()` is the only thing that moves the view on
+its own**, once, when the guest sends: their message goes to the top so the reply has the whole
+panel to grow into. Nothing after that scrolls — not the thinking dots, not the typer, not the
+cards. The ⌄ cue (`.nc-scroll-cue`) is the way to the latest content.
+
+That is a rule with a reason. It used to pin the bottom from a dozen sites including every eighth
+character of the reveal, so any reply taller than the panel scrolled its own opening line away
+while the guest read it. **If you are adding a render path, call `afterRender()`, never a scroll.**
+
+Three things are easy to get wrong here:
+
+- **The anchor cannot work without the pad.** `scrollTop` can never exceed
+  `scrollHeight - clientHeight`, so on a real transcript the anchor just clamps and the message
+  lands wherever the content happens to end. `anchorFloor` + `applyAnchorPad()` make up the
+  shortfall as `padding-bottom` and melt it as the reply fills the room. Delete the pad and the
+  anchor silently stops working — it will still *look* implemented.
+- **Follow is cancelled against `autoTop`, the scrollTop we last wrote — never against "am I at
+  the bottom".** The typer appends between our write and the browser's async scroll event, so a
+  bottom test reads an already-grown `scrollHeight` and the reply cancels its own follow.
+- **The cue's focus rescue is the main path, not an edge case** — see the focus rule under
+  Conventions.
+
+The cue re-syncs at `open()`, `resyncCarousels()`'s post-transition beat, `adjustInputHeight()`
+and the restart wipe. There is deliberately **no** window resize listener (`teardown()` claims the
+widget attaches exactly two listeners outside `#nest-chatbot`, and that claim stays true), so a
+viewport resize can leave the cue briefly stale — the same accepted gap the carousel arrows have.
+
 ## Local development
 
 ```bash
@@ -314,8 +343,10 @@ what a customer hits. Run a second static server on another port with a page tha
   contains it, move focus somewhere still visible inside `#nest-chatbot` before the node goes.
   A removed or `display: none` element drops focus to `<body>`, so the guest's next Tab
   restarts at the top of the *customer's* page; a merely invisible one is worse, stranding them
-  on a control they cannot see. This repo has rediscovered that bug four times — the teaser,
-  the carousel arrows, the prompt pills, the language row. It is a rule, not a case.
+  on a control they cannot see. This repo has rediscovered that bug five times — the teaser,
+  the carousel arrows, the prompt pills, the language row, and the scroll cue, where hiding a
+  focused node is the control's *main* path rather than an edge case: pressing ⌄ scrolls to the
+  bottom, which is exactly the condition that hides ⌄. It is a rule, not a case.
 - Never touch `document.documentElement.lang`, the host's `<body>`, or anything outside
   `#nest-chatbot`. The host page is not ours.
 - Version bumps err small: little changes are a **patch**, even when they touch behaviour.

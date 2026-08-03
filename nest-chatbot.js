@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.5.0';
+    var VERSION = '2.6.0';
 
     /* =========================================================== config ===== */
 
@@ -143,6 +143,7 @@
             priceNight: '/night', priceStay: '/stay',
             pricePerPerson: 'per person', pricePerUnit: 'per unit',
             carousel: 'carousel', carouselPrev: 'Scroll back', carouselNext: 'Scroll forward',
+            scrollLatest: 'Scroll down to last message',
             properties: 'Properties', showingOf: 'Showing %s of %s',
             send: 'Send message', input: 'Type your message',
             language: 'Change language', languageOf: 'Switch to %s',
@@ -171,6 +172,7 @@
             priceNight: '/noche', priceStay: '/estancia',
             pricePerPerson: 'por persona', pricePerUnit: 'por unidad',
             carousel: 'carrusel', carouselPrev: 'Retroceder', carouselNext: 'Avanzar',
+            scrollLatest: 'Bajar al último mensaje',
             properties: 'Alojamientos', showingOf: 'Mostrando %s de %s',
             send: 'Enviar mensaje', input: 'Escribe tu mensaje',
             language: 'Cambiar idioma', languageOf: 'Cambiar a %s',
@@ -201,6 +203,7 @@
             priceNight: '/notte', priceStay: '/soggiorno',
             pricePerPerson: 'a persona', pricePerUnit: 'per unità',
             carousel: 'carosello', carouselPrev: 'Indietro', carouselNext: 'Avanti',
+            scrollLatest: 'Scendi all\'ultimo messaggio',
             properties: 'Strutture', showingOf: 'Mostrati %s di %s',
             send: 'Invia messaggio', input: 'Scrivi il tuo messaggio',
             language: 'Cambia lingua', languageOf: 'Passa a %s',
@@ -229,6 +232,7 @@
             priceNight: '/Nacht', priceStay: '/Aufenthalt',
             pricePerPerson: 'pro Person', pricePerUnit: 'pro Einheit',
             carousel: 'Karussell', carouselPrev: 'Zurück', carouselNext: 'Weiter',
+            scrollLatest: 'Zur letzten Nachricht springen',
             properties: 'Unterkünfte', showingOf: '%s von %s angezeigt',
             send: 'Nachricht senden', input: 'Schreibe deine Nachricht',
             language: 'Sprache wechseln', languageOf: 'Zu %s wechseln',
@@ -259,6 +263,7 @@
             priceNight: '/nuit', priceStay: '/séjour',
             pricePerPerson: 'par personne', pricePerUnit: 'par unité',
             carousel: 'carrousel', carouselPrev: 'Précédent', carouselNext: 'Suivant',
+            scrollLatest: 'Aller au dernier message',
             properties: 'Hébergements', showingOf: '%s sur %s affichés',
             send: 'Envoyer le message', input: 'Écris ton message',
             language: 'Changer de langue', languageOf: 'Passer en %s',
@@ -922,7 +927,8 @@
         // visible in .nc-expand — both markup so the toggle is instant, no re-render.
         expand: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon nc-icon--expand" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M5.828 10.172a.5.5 0 0 0-.707 0l-4.096 4.096V11.5a.5.5 0 0 0-1 0v3.975a.5.5 0 0 0 .5.5H4.5a.5.5 0 0 0 0-1H1.732l4.096-4.096a.5.5 0 0 0 0-.707m4.344-4.344a.5.5 0 0 0 .707 0l4.096-4.096V4.5a.5.5 0 1 0 1 0V.525a.5.5 0 0 0-.5-.5H11.5a.5.5 0 0 0 0 1h2.768l-4.096 4.096a.5.5 0 0 0 0 .707"/></svg>',
         shrink: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon nc-icon--shrink" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M.172 15.828a.5.5 0 0 0 .707 0l4.096-4.096V14.5a.5.5 0 1 0 1 0v-3.975a.5.5 0 0 0-.5-.5H1.5a.5.5 0 0 0 0 1h2.768L.172 15.121a.5.5 0 0 0 0 .707M15.828.172a.5.5 0 0 0-.707 0l-4.096 4.096V1.5a.5.5 0 1 0-1 0v3.975a.5.5 0 0 0 .5.5H14.5a.5.5 0 0 0 0-1h-2.768L15.828.879a.5.5 0 0 0 0-.707"/></svg>',
-        // Plain chevron — unused until Task 6 wires the carousel arrows.
+        // Plain chevron, drawn pointing RIGHT. Every other direction is this same
+        // node turned in CSS: the carousel's two arrows, and the scroll cue's ⌄.
         chevron: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708"/></svg>',
         send: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon" viewBox="0 0 512 512" aria-hidden="true"><path d="M498.1 5.6c10.1 7 15.4 19.1 13.5 31.2l-64 416c-1.5 9.7-7.4 18.2-16 23s-18.9 5.4-28 1.6L284 427.7l-68.5 74.1c-8.9 9.7-22.9 12.9-35.2 8.1S160 493.2 160 480v-83.6c0-4 1.5-7.8 4.2-10.8L331.8 202.8c5.8-6.3 5.6-16-.4-22s-15.7-6.4-22-.7L106 360.8 17.7 316.6C7.1 311.3.2 300.7 0 288.9s6.2-22.6 16.6-28.3l448-243.4c10.8-5.9 24-5 33.9 2.1z"/></svg>'
     };
@@ -1107,6 +1113,24 @@
 
         /* footer */
         var footer = el('div', 'nc-footer');
+
+        // The scroll cue floats ABOVE the footer, over the transcript — and it is a
+        // child of the footer rather than of .nc-body or .nc-panel for two reasons.
+        // .nc-body is the scroll container, so an absolutely positioned child of it
+        // scrolls away with the content; and the footer's own height moves (the
+        // textarea grows to 180px), so a `bottom` measured from the panel would
+        // drift under the composer. `bottom: 100%` against the footer tracks it for
+        // free. Out of flex flow, so it costs nothing in the footer's `gap`.
+        //
+        // FIRST child on purpose: it sits above the composer on screen, and the tab
+        // order has to read the same way — transcript, cue, language, input, send.
+        var cue = el('button', 'nc-scroll-cue nc-cue-hidden');
+        // title as well as aria-label: the glyph is a bare chevron, and a pointer
+        // guest gets no other chance to learn what it does.
+        attrs(cue, { type: 'button', 'aria-label': t('scrollLatest'), title: t('scrollLatest') });
+        cue.appendChild(svgNode(ICONS.chevron));
+        footer.appendChild(cue);
+
         var controls = el('div', 'nc-controls');
 
         var lang = el('div', 'nc-lang');
@@ -1176,7 +1200,7 @@
             controls: controls, langToggle: langToggle, langOptions: langOptions,
             optionButtons: optionButtons, badge: badge, subline: subline, expand: expandBtn,
             unread: unread, teaser: teaser, teaserBody: teaserBody, teaserClose: teaserClose,
-            announcer: announcer, disclaimer: disclaimer,
+            announcer: announcer, disclaimer: disclaimer, cue: cue,
             // The welcome wrapper is built later, by the intro, and removed whole
             // on the first guest turn — declared here so every reader of els sees
             // the surface in one place. The two prompt handles are the pack block
@@ -1190,8 +1214,193 @@
 
     /* =========================================================== render ===== */
 
-    function scrollDown() {
-        if (els.body) { els.body.scrollTop = els.body.scrollHeight; }
+    /* ------------------------------------------------------------- scrolling */
+    /*
+     * The transcript moves ITSELF exactly once per turn — when the guest sends —
+     * and never again.
+     *
+     * It used to be pinned to the bottom from a dozen places, including every
+     * eighth character of the typing reveal. That made a reply longer than the
+     * panel scroll its own opening line away while the guest was still reading
+     * it: being "at the bottom" is the transcript's default state, so it fired on
+     * essentially every substantial answer, and the guest could not read a long
+     * one from the beginning. Now anchorSend() frames the turn, the reply grows
+     * below a viewport that does not move, and the ⌄ cue is the way to the latest
+     * content — the shape claude.ai settled on.
+     */
+
+    // Mirrors .nc-body's own padding; the arithmetic below measures border boxes.
+    var BODY_PAD = 15;
+    // Fractional-DPR displays report scroll metrics in fractions, exactly as they
+    // do for the carousel (see CAR_END_EPS). Well under one line of text, so a
+    // hidden cue can never be concealing a readable line.
+    var CUE_EPS = 8;
+
+    // Per REPLY, not per session: the guest pressing ⌄ mid-stream is saying "take
+    // me along", and it lasts until that reply finishes or they scroll back up.
+    var followStream = false;
+    // The total .nc-body height the anchored turn needs in order to hold its
+    // position, and the breathing room currently making up the shortfall. See
+    // applyAnchorPad().
+    var anchorFloor = 0;
+    var anchorPad = 0;
+    // The last scrollTop WE wrote. The cancel test compares against this rather
+    // than against "am I at the bottom": the typer appends characters between our
+    // write and the browser's async scroll event, so scrollHeight has already
+    // grown by the time the handler runs and a bottom test would cancel itself.
+    var autoTop = 0;
+
+    function atBottom() {
+        return els.body.scrollHeight - els.body.scrollTop - els.body.clientHeight <= CUE_EPS;
+    }
+
+    // The transcript's REAL height, with any breathing room discounted.
+    function contentHeight() {
+        return els.body.scrollHeight - anchorPad;
+    }
+
+    /**
+     * The breathing room that lets an anchored message actually reach the top.
+     *
+     * Without it anchorSend() is a promise the browser cannot keep: scrollTop
+     * cannot exceed scrollHeight - clientHeight, so on a real transcript the write
+     * clamps and the guest's message lands wherever the existing content happens
+     * to end — measured at 408px down a 467px panel, which leaves a reply about
+     * two lines of room before it grows past the fold. Every turn. That is not the
+     * behaviour, it is the behaviour failing quietly.
+     *
+     * anchorFloor is the total height the turn needs; the pad makes up whatever
+     * the real content is short by, and is recomputed after every render. As the
+     * reply arrives, content grows, the shortfall shrinks, and the pad melts to
+     * nothing on its own — no timer, no teardown, no second code path. And because
+     * content + pad never drops below anchorFloor, scrollTop never has to be
+     * corrected: the guest's view cannot shift out from under them while they read.
+     *
+     * A short reply leaves some pad standing, so the message stays at the top with
+     * space below rather than snapping back down. That is wanted — the eye should
+     * stay where the answer is — and it is what the pattern this follows does.
+     *
+     * Padding on the scroll container rather than a spacer NODE: a spacer would
+     * have to be re-appended after every render to stay last, and .nc-body's last
+     * child is load-bearing — followsBotMessage() reads it to decide whether a
+     * reply keeps its avatar. An engine that ignored the padding would simply clamp
+     * as before, which is a graceful degradation rather than a break.
+     */
+    function applyAnchorPad() {
+        var pad = Math.max(0, anchorFloor - contentHeight());
+        if (pad === anchorPad) { return; }
+        anchorPad = pad;
+        // '' restores the stylesheet's own 15px rather than hardcoding it twice.
+        els.body.style.paddingBottom = pad ? (BODY_PAD + pad) + 'px' : '';
+    }
+
+    // Panel resizes and transcript wipes both invalidate a floor measured against
+    // the old clientHeight — give the room back rather than hold a stale gap open.
+    function clearAnchorPad() {
+        anchorFloor = 0;
+        applyAnchorPad();
+    }
+
+    function scrollToLatest(smooth) {
+        if (!els.body) { return; }
+        if (smooth) {
+            els.body.scrollTo({ top: els.body.scrollHeight, behavior: 'smooth' });
+        } else {
+            els.body.scrollTop = els.body.scrollHeight;
+        }
+        // Read BACK rather than reusing scrollHeight: the browser clamps the write,
+        // and a smooth scroll has not arrived yet. Either way this is a floor —
+        // the guest scrolling UP from here is what cancels the follow, and a
+        // conservative floor can only make that test less trigger-happy.
+        autoTop = els.body.scrollTop;
+        syncScrollCue();
+    }
+
+    /**
+     * The one forced move: bring the guest's just-sent bubble to the top of the
+     * visible transcript, so the reply that follows has the whole panel to grow
+     * into and its first line stays where the eye left it.
+     *
+     * getBoundingClientRect deltas, NOT offsetTop: .nc-body sets no `position`, so
+     * a child's offsetParent is .nc-panel and offsetTop measures the wrong box.
+     * And never scrollIntoView() — that walks EVERY ancestor scroller, including
+     * the host page's own. The host page is not ours.
+     *
+     * A short transcript needs no special case: the target comes out at or below
+     * zero, nothing moves, and nothing needs to — the reply grows from wherever
+     * there was room with its first line already on screen.
+     *
+     * Instant, never smooth: showThinking() inserts into the same box a moment
+     * later, and a smooth scroll racing a DOM insertion jitters.
+     */
+    function anchorSend(node) {
+        if (!els.body || !node) { return; }
+        // Last turn's room goes back BEFORE measuring, or the shortfall is
+        // computed against a height this turn has not earned.
+        clearAnchorPad();
+        var delta = node.getBoundingClientRect().top - els.body.getBoundingClientRect().top;
+        var target = els.body.scrollTop + delta - BODY_PAD;
+        if (target > 0) {
+            // scrollTop can never exceed scrollHeight - clientHeight, so this is
+            // the height the transcript must reach for `target` to be a position
+            // the browser will accept.
+            anchorFloor = target + els.body.clientHeight;
+            applyAnchorPad();
+        }
+        els.body.scrollTop = target;
+        autoTop = els.body.scrollTop;
+        syncScrollCue();
+    }
+
+    /**
+     * Show the cue whenever there is transcript below the fold — one positional
+     * rule, no "new content" state to keep in step with reality.
+     *
+     * The focus rescue here is the MAIN path, not an edge case: pressing ⌄ scrolls
+     * to the bottom, which hides ⌄, which blurs the button the guest just pressed
+     * and drops focus to <body> — the top of the customer's page. Fifth time this
+     * repo has met that bug (CLAUDE.md § Conventions).
+     */
+    function syncScrollCue() {
+        if (!els.cue || !els.body) { return; }
+        var hide = atBottom();
+        if (hide && els.cue.contains(document.activeElement)) {
+            // els.input is disabled once the turn cap lands (endConversation) and
+            // cannot take focus — there, the restart button is the only live
+            // control left to hand them.
+            var landing = (ended && els.restart) ? els.restart : els.input;
+            if (landing) { landing.focus(); }
+        }
+        els.cue.classList.toggle('nc-cue-hidden', hide);
+    }
+
+    /**
+     * Everything that renders under a still-typing bubble calls this: it measures
+     * and repaints the cue, and moves nothing — unless the guest pressed ⌄ and
+     * asked to be taken along, in which case the whole turn's output rides down.
+     */
+    function afterRender() {
+        // First: the new content pays back its share of the anchor's breathing
+        // room. Doing it here rather than on a timer is what makes the pad melt
+        // in step with the reply that is filling it.
+        applyAnchorPad();
+        if (followStream) { scrollToLatest(false); } else { syncScrollCue(); }
+    }
+
+    /**
+     * Scrolling UP is the guest taking the view back, and the only thing that
+     * cancels a follow.
+     *
+     * Tested against autoTop — the position WE last wrote — rather than against
+     * "am I still at the bottom". Content growing never changes scrollTop, so this
+     * cannot fire on the typer's own output; a bottom test would, because the
+     * typer appends more characters between our write and this (asynchronous)
+     * event and the reply would cancel its own follow within a frame. Scrolling
+     * further DOWN is the direction we were already going and cancels nothing.
+     */
+    function onBodyScroll() {
+        if (followStream && els.body.scrollTop < autoTop - CUE_EPS) { followStream = false; }
+        syncScrollCue();
     }
 
     /* ------------------------------------------------------------- announcing */
@@ -1266,7 +1475,9 @@
         var textNode = el('div', 'nc-text', text || '');   // textContent — never innerHTML
         wrap.appendChild(textNode);
         els.body.appendChild(wrap);
-        scrollDown();
+        // No forced scroll, for the GUEST's bubble either: sendGuestText() anchors
+        // it a line later, and that is the turn's one deliberate move.
+        afterRender();
 
         // Bot bubbles that never reach typeText — error, retry, timeout — would go
         // silent now that .nc-body is not live, so they announce from here. The
@@ -1295,7 +1506,9 @@
         if (!follow) { wrap.appendChild(avatarNode()); }
         wrap.appendChild(text);
         els.body.appendChild(wrap);
-        scrollDown();
+        // The dots land directly under the message anchorSend() just framed, so
+        // they are already on screen — nothing to chase.
+        afterRender();
         return wrap;
     }
 
@@ -1350,7 +1563,7 @@
         }
         row.appendChild(link);
         if (rendered) { rendered[href] = true; }
-        scrollDown();
+        afterRender();
         return row;
     }
 
@@ -1477,7 +1690,7 @@
         if (action.url && !(rendered && rendered[action.url])) {
             row = linkButton(t('book'), action.url, 'primary', null, rendered);
         }
-        scrollDown();
+        afterRender();
         return row;
     }
 
@@ -1496,7 +1709,7 @@
         }
         if (wrap.childNodes.length) {
             els.body.appendChild(wrap);
-            scrollDown();
+            afterRender();
         }
     }
 
@@ -1578,7 +1791,7 @@
         // and registering it too would put two owners — and two focus rescues —
         // on one node.
         if (!parent) { chipRows.push(row); }
-        scrollDown();
+        afterRender();
         return row;
     }
 
@@ -1729,7 +1942,7 @@
         } else if (typeof action.total === 'number' && action.total > count) {
             els.body.appendChild(el('div', 'nc-car-count', tf('showingOf', count, action.total)));
         }
-        scrollDown();
+        afterRender();
     }
 
     /**
@@ -2119,7 +2332,7 @@
         card.appendChild(link);
 
         els.body.appendChild(card);
-        scrollDown();
+        afterRender();
     }
 
     /* =========================================================== typing ===== */
@@ -2167,7 +2380,7 @@
         if (reduced) {
             node.classList.remove('nc-typing');
             node.textContent = full;
-            scrollDown();
+            endStream();
             return;
         }
 
@@ -2183,14 +2396,27 @@
             if (token !== node.ncTypeToken || removed) { return; }
             if (i >= chars.length) {
                 node.classList.remove('nc-typing');
-                scrollDown();
+                endStream();
                 return;
             }
             textNode.appendData(chars[i]);
             i += 1;
-            if (i % 8 === 0) { scrollDown(); }
+            // THE line the whole change is about. This used to jam the transcript
+            // to the bottom, dragging the reply's opening line off the top of the
+            // panel while the guest was still reading it. Now it only repaints the
+            // ⌄ cue as the text grows past the fold — unless the guest pressed ⌄
+            // and asked to be taken along, which is what afterRender() honours.
+            if (i % 8 === 0) { afterRender(); }
             setTimeout(step, 5 + Math.random() * 15);
         })();
+    }
+
+    // Follow is per REPLY: the guest asked to ride THIS one down, and the next
+    // turn starts from a still viewport again. One last move first, so a followed
+    // stream ends at the bottom rather than eight characters short of it.
+    function endStream() {
+        afterRender();
+        followStream = false;
     }
 
     /* ============================================================ intro ===== */
@@ -2352,7 +2578,7 @@
         after.parentNode.insertBefore(welcome, after.nextSibling);
         renderActions(rest, null);
         els.welcome = welcome;
-        scrollDown();
+        afterRender();
     }
 
     /**
@@ -2418,6 +2644,10 @@
         markOpened();
         hideTeaser();
         playIntro();
+        // A guest can close the panel mid-turn and reopen it to find the reply
+        // finished below the fold. The closed panel is only visibility: hidden and
+        // keeps its box in the layout (see .nc-panel), so this measures true.
+        syncScrollCue();
         // Re-checked at fire time, like every other timer here: the panel can be
         // closed again inside these 320ms (Escape, a second press of the
         // launcher), and focusing the composer of a CLOSING panel is the fourth
@@ -2540,6 +2770,13 @@
             // teardown() clears no timers, by contract — every callback re-checks.
             if (removed) { return; }
             syncCarousels();
+            // The sheet changes the body's height as well as the track's width,
+            // and a resize fires no scroll event — so the cue is stale for exactly
+            // the same reason the arrows are, and gets fixed on the same beat. The
+            // anchor's floor was measured against the OLD clientHeight and cannot
+            // survive the move.
+            clearAnchorPad();
+            syncScrollCue();
         }, reduced ? CAR_RESYNC_FAST_MS : CAR_RESYNC_MS);
     }
 
@@ -2684,7 +2921,15 @@
         // land on the composer, and welcome rows are not registered, so the two
         // sweeps never fight over a node.
         retireChipRows();
-        addBubble('guest', text);                     // textContent — a typed <img> stays text
+        // BEFORE the bubble lands, so its own afterRender() cannot ride a follow
+        // left armed by the previous reply: every turn starts from a still view.
+        followStream = false;
+        var bubble = addBubble('guest', text);        // textContent — a typed <img> stays text
+        // The turn's ONE deliberate move. Both sweeps above SHRANK the transcript,
+        // so this has to measure after them, not before. addBubble returns the
+        // .nc-text node; its parent is the whole .nc-message row, which is what
+        // has to reach the top — anchoring the text alone would cut the avatar.
+        anchorSend(bubble.parentNode);
         ensureConversation(function () { sendMessage(text, false); });
     }
 
@@ -2802,13 +3047,19 @@
         els.body.appendChild(row);
         els.restart = restart;
         // Disabling a focused control drops focus to <body> — the standing rule,
-        // rediscovered four times in this repo. The guest who just sent the
+        // rediscovered five times in this repo. The guest who just sent the
         // capped message is standing in the composer; hand them the only
         // control that still does anything.
+        //
+        // Focusing an off-screen button scrolls it into view, so this is the one
+        // place left that can still move the transcript on its own. Deliberate,
+        // not a leftover: the composer has just been disabled and the guest MUST
+        // be able to reach the only live control — the focus rule outranks the
+        // scroll rule.
         if (els.form.contains(document.activeElement)) { restart.focus(); }
         els.input.disabled = true;
         els.send.disabled = true;
-        scrollDown();
+        afterRender();
     }
 
     /**
@@ -2829,6 +3080,7 @@
         intro.greeting = null;    // the fresh init must re-settle both
         intro.actions = null;
         chipRows = [];            // already retired; the wipe below removes any remnant
+        followStream = false;     // a follow armed for the old reply must not ride into the new one
         chatEpoch += 1;           // orphan any poll still backing off for the dead conversation
 
         els.input.disabled = false;
@@ -2842,6 +3094,11 @@
         while (els.body.lastChild && els.body.lastChild !== els.loader) {
             els.body.removeChild(els.body.lastChild);
         }
+        // The transcript that was below the fold is gone; the cue and the anchor's
+        // breathing room must go with it rather than wait out the init round trip
+        // holding open a gap under nothing.
+        clearAnchorPad();
+        syncScrollCue();
 
         startConversation(function () {
             if (removed) { return; }
@@ -2946,6 +3203,9 @@
         var next = Math.max(INITIAL_INPUT_HEIGHT, els.input.scrollHeight);
         els.input.style.height = next + 'px';
         els.form.style.borderRadius = next > INITIAL_INPUT_HEIGHT ? '15px' : '32px';
+        // A composer growing towards its 180px max eats the transcript's height
+        // from below and pushes content past the fold, firing no scroll event.
+        syncScrollCue();
     }
 
     /* ------------------------------------------------------------- language */
@@ -3038,6 +3298,11 @@
         // The one control whose label depends on state, not just on locale: it
         // reads "shrink" while the sheet is out.
         els.expand.setAttribute('aria-label', isExpanded() ? t('shrink') : t('expand'));
+        // Both attributes: the tooltip is as visible to a pointer guest as the
+        // accessible name is to a screen reader, and a stale tooltip in the old
+        // language is exactly as wrong.
+        els.cue.setAttribute('aria-label', t('scrollLatest'));
+        els.cue.setAttribute('title', t('scrollLatest'));
 
         SUPPORTED.forEach(function (code2) {
             els.optionButtons[code2].classList.toggle('nc-hidden', code2 === locale);
@@ -3056,6 +3321,30 @@
         els.teaserBody.addEventListener('click', open);
         els.teaserClose.addEventListener('click', dismissTeaserForever);
         els.form.addEventListener('submit', submit);
+
+        els.cue.addEventListener('click', function () {
+            // Arming the follow is the whole point of the press mid-reply: without
+            // it the typer grows past the fold again within eight characters and
+            // the guest is pressing a button once a second to watch one answer.
+            // It lasts until the reply ends (endStream) or they scroll back up.
+            followStream = true;
+            // Re-read per press, exactly as scrollByStep() does — the OS preference
+            // can flip mid-session.
+            var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            scrollToLatest(!reduced);
+        });
+
+        // One pending frame at a time, not one per event: a single flick fires
+        // scroll dozens of times and each measurement below forces layout — the
+        // same reason wireCarousel() coalesces its own.
+        var cueFrame = 0;
+        els.body.addEventListener('scroll', function () {
+            if (cueFrame) { return; }
+            cueFrame = window.requestAnimationFrame(function () {
+                cueFrame = 0;
+                onBodyScroll();
+            });
+        });
 
         els.input.addEventListener('input', adjustInputHeight);
         els.input.addEventListener('keydown', function (e) {

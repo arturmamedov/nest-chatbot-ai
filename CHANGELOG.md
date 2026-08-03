@@ -5,6 +5,81 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.6.0 — 2026-08-03
+
+**A reply can be read from its first line again.** The transcript was pinned to the bottom from
+a dozen places, including *every eighth character of the typing reveal*. Any answer taller than
+the panel therefore scrolled its own opening line off the top while the guest was still reading
+it — and because sitting at the bottom is the transcript's default state, that fired on
+essentially every substantial reply, worst on the small mobile panel. The widget dragged the
+guest to the tail of a sentence that was still being written. A minor, per the repo's own rule:
+a new guest-visible control is new surface.
+
+**The new shape.** The transcript moves itself exactly once per turn — when the guest sends —
+and never again. A ⌄ cue in the bottom-right of the panel is the way to the latest content.
+
+- **`scrollDown()` is gone, replaced by a named seam.** `anchorSend()` is the turn's one
+  deliberate move; `scrollToLatest()` is the ⌄ press and the followed stream; `syncScrollCue()`
+  measures and repaints the cue without moving anything; `afterRender()` is what the twelve
+  former call sites now call. The typer's `if (i % 8 === 0)` line — the defect itself — repaints
+  the cue instead of jamming the scroll.
+- **`anchorSend()` brings the guest's own message to the top of the view**, so the reply has the
+  whole panel to grow into and its first line stays where the eye left it. `getBoundingClientRect`
+  deltas, never `offsetTop` (`.nc-body` sets no `position`, so a child's offsetParent is
+  `.nc-panel` and offsetTop measures the wrong box) and never `scrollIntoView()`, which walks
+  every ancestor scroller including the host page's own.
+- **A self-melting pad is what makes that promise keepable.** `scrollTop` cannot exceed
+  `scrollHeight - clientHeight`, so on a real transcript the anchor just clamped: measured at
+  408px down a 467px panel, leaving a reply about two lines before it ran past the fold, every
+  turn. `anchorFloor` records the height the turn needs and `applyAnchorPad()` makes up the
+  shortfall as `padding-bottom`, recomputed after every render. Content grows, the shortfall
+  shrinks, the pad melts to nothing on its own — and because content + pad never drops below the
+  floor, `scrollTop` is never corrected and the view cannot shift under a reading guest. Padding
+  on the container rather than a spacer node: a spacer would have to be re-appended after every
+  render to stay last, and `.nc-body`'s last child is load-bearing — `followsBotMessage()` reads
+  it to decide whether a reply keeps its avatar. An engine that ignored the padding clamps as
+  before, which is degradation rather than breakage.
+- **The cue shows whenever the transcript is not at its bottom** — one positional rule, no
+  "new content" state to keep in step with reality. Pressing it jumps to the bottom **and arms
+  the follow** until the reply ends or the guest scrolls up; without that the typer grows past
+  the fold again within eight characters and watching one answer costs a press a second.
+- **Follow is cancelled by comparing against the scrollTop we last wrote, not against "am I at
+  the bottom".** The typer appends characters between our write and the browser's asynchronous
+  scroll event, so a bottom test reads a `scrollHeight` that has already grown and the reply
+  cancels its own follow within a frame. Content growing never changes `scrollTop`; only the
+  guest scrolling up can lower it.
+- **The cue hides itself the way the panel does** — `visibility: hidden` with a delayed step, not
+  `.nc-hidden`'s `display: none`: it leaves the tab order and the accessibility tree while still
+  leaving a fade to watch. Hiding it is the **main** path, not an edge case — pressing ⌄ scrolls
+  to the bottom, which hides ⌄, which blurs the button the guest just pressed and drops focus to
+  `<body>`, i.e. the top of the customer's page. That is the fifth time this repo has met that
+  bug. `syncScrollCue()` rescues to the composer, or to the restart button once
+  `endConversation()` has disabled it.
+- **Anchored to the footer's top edge** (`bottom: 100%`), not to the panel: the textarea grows to
+  180px and a panel-relative offset drifts under it. Verified holding its 34px puck, 10px gap and
+  15px inset at 420px, in the expanded sheet, at 390px fullscreen, and against a composer grown
+  to eight lines. `.nc-footer` gains `position: relative` and deliberately no `z-index` — with
+  `z-index: auto` it is not a stacking context, so the cue competes at panel level and lands over
+  the transcript instead of under it.
+- **No new icon**: the cue is the carousel's own `ICONS.chevron` turned a quarter turn, the same
+  way the back arrow is that glyph turned around. New i18n key `scrollLatest` in all five
+  locales, carried on **both** `aria-label` and `title` (the owner asked for the tooltip) and
+  repainted by `setLocale()`.
+- **No new listener outside `#nest-chatbot`.** `teardown()`'s standing claim that the widget
+  attaches exactly two is intact: the scroll listener lives on `.nc-body` and leaves with it,
+  rAF-coalesced like `wireCarousel()`'s. The cue re-syncs at `open()`, `resyncCarousels()`'s
+  existing post-transition beat, `adjustInputHeight()` and the restart wipe. **Known limit,
+  matching the carousel's:** a viewport resize fires no scroll event and no sync, so the cue can
+  be briefly stale until the next scroll or message.
+
+**Verified in-browser** (mock + a cross-origin host page on another port): `scrollTop` constant
+for the whole of a long reply where it previously climbed; guest message anchored 10px from the
+body top with the pad melting 356px → 0 as the reply arrived; ⌄ riding the stream at `gap: 0`;
+scrolling up killing the follow permanently; focus landing on `.nc-input` and — after `!cap` — on
+`.nc-restart`, never on `<body>`; one Book button through the `available` poll; `!xss` inert;
+reduced motion landing the reply whole and jumping instantly; the host page's own scroll position,
+`h2`, `.hidden` and `.message` untouched.
+
 ## 2.5.0 — 2026-08-02
 
 **Synced to wSuite chatbot contract 1.6.1** — the sync CLAUDE.md and the proposals doc reserved
