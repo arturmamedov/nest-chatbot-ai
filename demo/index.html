@@ -160,6 +160,12 @@
     </div>
 
     <!-- ============ everything a host site adds, start to finish ============ -->
+    <!-- Add data-fonts="host" to watch the widget go Georgia like the rest of this
+         page, with nothing transferred from fonts/. data-fonts="system" and
+         data-font-body="…" are the other two. Check transferred BYTES, not the
+         length of the network list: on a warm cache the fonts still show as
+         entries with transferSize 0 and their faces left unloaded. Left off here
+         so what gets tested on this page is what ships. -->
     <script src="../nest-chatbot.js"
             data-mock="true"
             data-locale="auto"

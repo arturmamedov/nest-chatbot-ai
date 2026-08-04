@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.6.0';
+    var VERSION = '2.7.0';
 
     /* =========================================================== config ===== */
 
@@ -64,7 +64,12 @@
         offsetX: data.offsetX || '',
         offsetY: data.offsetY || '',
         autoOpen: data.autoOpen === 'true',
-        debug: data.debug === 'true'
+        debug: data.debug === 'true',
+        // Typography opt-out — see applyFonts() in the dom section for what each
+        // value does and why the default is worth keeping.
+        fonts: data.fonts || '',              // '' | 'nest' | 'host' | 'system'
+        fontHeading: data.fontHeading || '',
+        fontBody: data.fontBody || ''
     };
 
     function log() {
@@ -1004,6 +1009,60 @@
         document.head.appendChild(link);
     }
 
+    // Fallback stack for data-fonts="system" — the tail of --nc-font-body with the
+    // nc- families and Montserrat taken off the front.
+    var FONT_STACK_SYSTEM = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, ' +
+        'Helvetica, Arial, sans-serif';
+
+    // A family list is names, quotes, commas and spaces. Rejecting ( ) ; { } : / \
+    // blocks url(), var() and anything shaped like a second declaration. This is a
+    // typo guard, not a security boundary — setProperty() parses the value, so a
+    // stray ';' cannot open a new declaration, and the host wrote their own script
+    // tag anyway. A host wanting var() or calc() overrides the custom property in
+    // CSS instead; this is the no-CSS path, same as data-offset-x.
+    var FONT_OK = /^[\w\s,"'-]{1,200}$/;
+
+    /**
+     * --nc-font-heading / --nc-font-body are the widget's ENTIRE typography seam:
+     * every font-family in the stylesheet is one of those two vars or `inherit`.
+     * So overriding them here means nothing on screen ever matches nc-Poppins or
+     * nc-Montserrat, and an @font-face whose family goes unmatched is never
+     * fetched — the opt-out costs zero bytes with no second stylesheet and no
+     * build step. That only holds while the seam does: if a rule ever hardcodes a
+     * family name, these attributes silently stop covering it.
+     *
+     * The default stays the shipped Poppins/Montserrat — one look across every
+     * hostel site is what 2.4.0 bought — but it is not free, and the reason is
+     * not obvious: the CLOSED panel is `visibility: hidden`, not `display: none`,
+     * so its header, greeting and composer are laid out at boot and pull all
+     * three files at ~35ms on every page view, whether or not the guest ever
+     * opens the chat. That is what these attributes buy back.
+     */
+    function applyFonts(root) {
+        var heading = '';
+        var body = '';
+
+        if (cfg.fonts === 'system') {
+            heading = body = FONT_STACK_SYSTEM;
+        } else if (cfg.fonts === 'host' && document.body) {
+            // Read-only, and the host page is not touched. Resolved to a real
+            // stack rather than passing `inherit` through: a CSS-wide keyword in a
+            // custom property applies to the property itself, not to the var()
+            // substitution, so `--nc-font-body: inherit` would not do this. The
+            // root is a child of body, so body's computed family is exactly what
+            // the widget would have inherited.
+            heading = body = getComputedStyle(document.body).fontFamily || '';
+        }
+
+        // Explicit stacks win over the preset, so a host can take the body font
+        // from their theme and still keep Germán's Poppins headings.
+        if (FONT_OK.test(cfg.fontHeading)) { heading = cfg.fontHeading; }
+        if (FONT_OK.test(cfg.fontBody)) { body = cfg.fontBody; }
+
+        if (heading) { root.style.setProperty('--nc-font-heading', heading); }
+        if (body) { root.style.setProperty('--nc-font-body', body); }
+    }
+
     function build() {
         var root = el('div');
         root.id = 'nest-chatbot';
@@ -1015,6 +1074,7 @@
         // --nc-edge-x / --nc-edge-y in CSS instead; this is the no-CSS path.
         if (/^\d+$/.test(cfg.offsetX)) { root.style.setProperty('--nc-edge-x', cfg.offsetX + 'px'); }
         if (/^\d+$/.test(cfg.offsetY)) { root.style.setProperty('--nc-edge-y', cfg.offsetY + 'px'); }
+        applyFonts(root);
         root.style.setProperty('--nc-loader-logo', 'url("' + assetBase + 'img/logotipo-nests-tenerife.png")');
 
         /* launcher */

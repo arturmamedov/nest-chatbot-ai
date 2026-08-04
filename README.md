@@ -39,6 +39,9 @@ inside it either.
 | `data-offset-x` | `35` | Distance in px from the side of the window. Bare number, no unit. |
 | `data-offset-y` | `30` | Distance in px from the bottom. The panel follows the launcher. |
 | `data-color` | `#0D6F82` | Accent colour for the launcher, buttons and focus ring. |
+| `data-fonts` | `nest` | `nest` ships our Poppins/Montserrat. `host` matches your page's font. `system` uses the visitor's system font. The last two fetch no font files at all. |
+| `data-font-heading` | — | An explicit stack for the header title and card names, e.g. `"Poppins, sans-serif"`. Overrides `data-fonts`. |
+| `data-font-body` | — | An explicit stack for everything else. Overrides `data-fonts`. |
 | `data-z-index` | `2147483000` | Raise or lower it if it fights with your own overlays. |
 | `data-auto-open` | `false` | Open the panel on load instead of waiting for a click. |
 | `data-debug` | `false` | Verbose console logging. Leave off in production. |
@@ -63,6 +66,42 @@ override the custom properties instead:
 
 The widget injects its stylesheet into `<head>`, so put that rule in a sheet or `<style>` that
 loads after it — or use `html #nest-chatbot { … }` and stop caring about order.
+
+### Fonts
+
+By default the widget brings its own Poppins and Montserrat (37KB of WOFF2, served from the same
+origin as the script — never Google Fonts), so Germán looks the same on every site he lands on.
+
+Those three files are fetched when the page loads, not when the chat opens — the panel exists
+from the start, just hidden. They never delay a paint (`font-display: swap`), but they are 45KB
+on every visit.
+
+If your theme already serves the same families, or you would rather the widget simply looked
+like the rest of your site, say so and it stops fetching fonts entirely:
+
+```html
+data-fonts="host"      <!-- inherit your page's font -->
+data-fonts="system"    <!-- the visitor's system font -->
+```
+
+`host` reads your `<body>`'s computed font once at load and nothing else — it never writes to
+your page. For a specific stack, name it, and mix freely with `data-fonts`:
+
+```html
+data-font-heading="Poppins, sans-serif"
+data-font-body="Montserrat, sans-serif"
+```
+
+Naming a family your page already serves is the efficient version of `data-fonts="nest"`: the
+widget uses the copy you have loaded rather than fetching a second one. Values are plain family
+lists — anything with brackets, semicolons or `var()` is ignored, so use the custom properties
+for those:
+
+```css
+#nest-chatbot { --nc-font-heading: var(--my-display); --nc-font-body: var(--my-text); }
+```
+
+Those two custom properties cover every piece of text in the widget.
 
 ### Origins
 

@@ -49,17 +49,11 @@
         U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-@font-face {
-    font-family: "nc-Montserrat";
-    font-style: normal;
-    font-weight: 500;
-    font-display: swap;
-    src: url("../fonts/nc-montserrat-500.woff2") format("woff2");
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
+/* 400 and 600 only. A 500 face shipped until 2.7.0 for exactly one rule — the
+   .nc-prompt pills — at 18.7KB, 29% of the font payload. State 400 or 600 and
+   nothing between: with no 500 face registered, font matching searches weights
+   BELOW the target before above, so `font-weight: 500` renders 400 — lighter
+   than the default it started from, while reading as a request for heavier. */
 @font-face {
     font-family: "nc-Montserrat";
     font-style: normal;
@@ -109,7 +103,14 @@
 
     /* typography — nc- families first (self-hosted, see @font-face above), then
        the unprefixed name so a host that already serves it locally still gets
-       the right shape, then system fallbacks. */
+       the right shape, then system fallbacks.
+
+       These two are the widget's ENTIRE typography seam: every font-family below
+       is one of them or `inherit`. That is what makes data-fonts / data-font-*
+       (applyFonts() in the JS) free — override them and nothing matches the nc-
+       families, so an unmatched @font-face is never fetched and the host pays
+       zero font bytes. Hardcode a family name in a rule here and that quietly
+       stops being true. */
     --nc-font-heading: "nc-Poppins", Poppins, system-ui, sans-serif;
     --nc-font-body: "nc-Montserrat", Montserrat, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
@@ -709,7 +710,10 @@
 #nest-chatbot .nc-prompt {
     font-family: var(--nc-font-body);
     font-size: 13px;
-    font-weight: 500;
+    /* 600, not the 500 this carried until 2.7.0: the 500 face was 29% of the
+       font payload for this one rule. Stated explicitly because 500 with no 500
+       face registered resolves DOWN to 400, not up. */
+    font-weight: 600;
     text-align: left;
     color: var(--nc-secondary);
     background: var(--nc-surface-alt);

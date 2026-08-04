@@ -5,6 +5,85 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.7.0 — 2026-08-04
+
+**A host can tell the widget to use their fonts, and one weight stops shipping.** Three new
+config attributes, hence minor. No transport change, no contract change, `BUILT_AGAINST` stays
+**1.6.1**. The shipped font payload drops from 64KB across four WOFF2 files to 45.5KB across
+three, and a host that opts out fetches none of them.
+
+**The fonts load on every page view, whether or not anyone opens the chat.** This was checked
+rather than assumed, and the first answer was wrong. `@font-face` is lazy — a file is fetched
+only when text actually paints in that family — and the launcher paints none (it is an `<img>`
+plus a CSS dot), so the widget looks like it should cost nothing until a guest engages. It does
+not: **the closed panel is `visibility: hidden`, not `display: none`**, so its header, greeting
+and composer are laid out at boot and pull every font with them. Measured on the demo page,
+cold cache: three files, 45.5KB, starting at 35ms — one millisecond after `DOMContentLoaded`,
+with the panel still hidden and the teaser still eight seconds away. `font-display: swap` keeps
+that off the critical path for *painting*, but the bytes are spent on every visit regardless.
+
+That makes the two costs below real rather than theoretical:
+
+- On a theme already serving the same families, the widget downloaded a **second copy** —
+  `--nc-font-body` listed `"nc-Montserrat"` ahead of the host's own `Montserrat`, and HTTP cache
+  is keyed per-URL, so byte-identical files are not shared.
+- 45.5KB is the same order as the stylesheet (18KB gzipped) and a good fraction of the script
+  (53KB gzipped). It is not a rounding error on a hostel's mobile connection.
+
+- **`data-fonts` = `nest` | `host` | `system`.** `nest` is the default and unchanged — the
+  shipped Poppins/Montserrat, one look across every hostel site, which is what 2.4.0 bought and
+  is not being given back. `host` matches the embedding page; `system` uses the visitor's system
+  stack. Both fetch **nothing**: no font file, no second stylesheet, no build step. Unknown
+  values fall through to `nest`, the same ignore-and-carry-on the other attributes use.
+  Verified as a matched cold-cache pair on identical URLs — default transferred 46,368 bytes
+  with all three faces `loaded`; `host` transferred **0**, made no request, and left every face
+  `unloaded`. Worth knowing for anyone re-running it: on a warm cache the opt-out modes still
+  show resource-timing entries for the fonts, with `transferSize: 0` and the faces `unloaded`.
+  Those are cache reads of something the engine never used — count bytes and `document.fonts`
+  status, not the length of the network list.
+- **`data-font-heading` / `data-font-body` take an explicit family list** and beat `data-fonts`,
+  so the two mix — a host can take body text from their theme and keep Germán's Poppins headings.
+  Naming a family the page already serves is the efficient form of the default: the widget uses
+  the copy already loaded instead of fetching its own.
+- **Why it costs nothing to implement: the seam was already there.** Every `font-family` in
+  `css/nest-chatbot.css` is `var(--nc-font-heading)`, `var(--nc-font-body)` or `inherit` — ten
+  sites, no exceptions — so overriding the two vars covers 100% of the widget's typography, and
+  an `@font-face` whose family goes unmatched is never requested. `applyFonts()` writes the vars
+  and that is the entire mechanism. The invariant is now stated in both the stylesheet and
+  CLAUDE.md, because one hardcoded family name in one rule would break it while the attribute
+  still appeared to work everywhere else.
+- **`data-fonts="host"` reads `getComputedStyle(document.body).fontFamily`, once.** The obvious
+  implementation — `--nc-font-body: inherit` — does not work: a CSS-wide keyword as a custom
+  property's value applies to the property itself, not to the `var()` substitution. So the mode
+  resolves a real stack instead. This is the one place the widget looks outside `#nest-chatbot`;
+  it is a read, and nothing on the host page is written.
+- **Values are validated, and the guard is honest about what it is.** `FONT_OK` accepts names,
+  quotes, commas and spaces and rejects `( ) ; { } : / \`, which rules out `url()`, `var()` and
+  anything shaped like a second declaration. This is a typo guard, not a security boundary:
+  `setProperty()` parses the value, so a stray `;` cannot open a new declaration, and the host
+  wrote their own script tag. A host wanting `var()` or `calc()` overrides the custom property in
+  CSS — the same no-CSS/CSS split `data-offset-x` already draws.
+
+**Verified in-browser** (mock, same-origin and a cross-origin host page on another port): the
+cold-cache pair above; `host` resolving to the host page's Georgia on both vars and on the
+widget's own `h2`, cross-origin included, so it reads the *embedding* page and not the widget's
+origin; `system` resolving to the system stack with no request; `data-font-body` alone leaving
+`--nc-font-heading` on Poppins, so the two mix; `data-font-body="x; background: url(…); color:
+red"` rejected whole — var untouched, no background, no colour change, no request to the bogus
+origin — while a quoted `"Ok Name", sans-serif` was accepted; the fallback pills rendering at
+computed weight 600 against a registry holding only 400 and 600 (`Mock.init`'s `actions: []`,
+per the note in the fixture); no request for `nc-montserrat-500.woff2` and no 404 for it; and
+the demo page's own Georgia `h1`/`h2` at its 72px line-height, `.chat-header` and `.hidden`
+identical in every mode. Console clean.
+- **Montserrat 500 is gone — 18.7KB, 29% of the shipped font payload, for one rule.**
+  `.nc-prompt`, the fallback "try asking" pills, was its only consumer in the file. Unlike the
+  other three faces this one did **not** load at boot: the pills do not exist until
+  `showPrompts()` runs, so the file cost a site with configured `quick_prompts` nothing at
+  runtime and every other site 18.7KB shortly after init. The rule now states `600`, and stating
+  it is required rather than tidy: left at `500` with no 500 face registered, CSS font matching
+  searches weights **below** the target before above, so the pills would have rendered at 400 —
+  quietly lighter, while reading as if they had asked for heavier.
+
 ## 2.6.0 — 2026-08-03
 
 **A reply can be read from its first line again.** The transcript was pinned to the bottom from

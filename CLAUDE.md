@@ -41,6 +41,9 @@ flagsapi.com, never a webfont. A host should have to trust exactly one extra ori
 Text fonts follow the same rule the other way round: Poppins and Montserrat are self-hosted
 `nc-`-prefixed WOFF2 files in `fonts/`, declared by `@font-face` in `css/nest-chatbot.css` and
 resolved against `assetBase` — never `fonts.googleapis.com`, so the origin count stays at one.
+Since 2.7.0 that is the **default**, not the only mode: `data-fonts` / `data-font-*` let a host
+drop to their own or the system stack (`applyFonts()`). The escape hatch does not weaken the
+rule — the alternative to shipping the files was always a second origin, never a lighter one.
 
 ### 2. Never `innerHTML`
 
@@ -204,12 +207,49 @@ Set on the `<script>` tag. `document.currentScript.dataset` reads them at boot.
 | `data-offset-x` | `24` | Bare px number → `--nc-edge-x`. Non-numeric values are ignored. |
 | `data-offset-y` | `22` | Bare px number → `--nc-edge-y`. The panel derives its `bottom` from it. |
 | `data-color` | `#0D6F82` | Sets `--nc-secondary`. (Defaults live as CSS custom properties in `css/nest-chatbot.css`; the JS default `''` means "don't override".) |
+| `data-fonts` | `nest` | `nest` \| `host` \| `system` — see the typography seam below. Unknown values fall through to `nest`. |
+| `data-font-heading` `data-font-body` | — | An explicit family list for either var. Beats `data-fonts`, so the two mix. Validated by `FONT_OK`; a rejected value is ignored, same as `data-offset-x`. |
 | `data-z-index` | `2147483000` | For hosts with their own stacking conflicts. Same CSS-default mechanism as `data-color`. |
 | `data-auto-open` | `false` | |
 | `data-debug` | `false` | Gates **all** `console` output — sole exception: the one-time contract-drift warn (guide §3.1). |
 | `data-mock` | `false` | Serves replies from the local fixtures instead of the API — the dev harness. The demo page sets it; never a production page. |
 
 Runtime API: `window.NestChatbot` → `{ version, open, close, toggle, destroy, setLocale, locale }`.
+
+### The typography seam is exactly two custom properties
+
+Every `font-family` in `css/nest-chatbot.css` is `var(--nc-font-heading)`, `var(--nc-font-body)`
+or `inherit` — ten sites, no exceptions. That invariant is the whole reason `data-fonts` is free:
+override the two vars and nothing on screen matches `nc-Poppins` / `nc-Montserrat`, an
+`@font-face` whose family goes unmatched is **never fetched**, and the host pays zero font bytes
+with no second stylesheet and no build step. **Hardcode a family name in one rule and that
+silently stops being true** — the attribute keeps appearing to work everywhere else.
+
+Two things that look like they should work and do not:
+
+- **`--nc-font-body: inherit` does nothing useful.** A CSS-wide keyword as a custom property's
+  value applies to the *property*, not to the `var()` substitution. That is why
+  `data-fonts="host"` resolves a real stack through `getComputedStyle(document.body).fontFamily`
+  instead. Reading is not touching — nothing is written to the host page — but it is the one
+  place this widget looks outside `#nest-chatbot` at all.
+- **A weight with no face registered resolves *down*.** Only 400 and 600 ship. `font-weight: 500`
+  searches weights below the target before above, so it renders 400 while reading as if it asked
+  for something heavier. State 400 or 600.
+
+**The default mode's fonts load at boot, on every page view.** It is easy to convince yourself
+otherwise — `@font-face` is lazy, and the launcher paints no text (an `<img>` plus a CSS dot), so
+nothing *visible* should be asking for a font before the guest clicks. The panel is what asks:
+closed, it is `visibility: hidden`, **not** `display: none`, so its header, greeting and composer
+are laid out and pull all three files. Measured cold, 45.5KB starting at 35ms — one millisecond
+after `DOMContentLoaded`, panel hidden, teaser still 8s away. `font-display: swap` keeps it off
+the *painting* critical path; the bytes are spent either way. So `data-fonts="host"`/`"system"`
+is a genuine page-weight saving, not only a de-duplication.
+
+Measuring it again needs one precaution: **on a warm cache the opt-out modes still show
+resource-timing entries for the fonts.** They carry `transferSize: 0` and their `document.fonts`
+status stays `unloaded` — cache reads of something the engine never used. Judge by transferred
+bytes and face status, never by the length of the network list, or you will "reproduce" a
+regression that is not there.
 
 ## The transcript scrolls itself exactly once per turn
 
@@ -320,7 +360,9 @@ what a customer hits. Run a second static server on another port with a page tha
   and the licences ship beside them) on `fonts/*.woff2`, or every host page drops to the
   system stack. Nothing on screen says so and the widget keeps working — the only trace is
   the browser's own CORS error in devtools — so verify from a page on a **different** origin,
-  never from the CDN's own domain.
+  never from the CDN's own domain. `data-fonts="host"` / `"system"` are immune rather than a
+  fix: they fetch nothing, so there is nothing left to block. The default path still needs
+  the header.
 - **An element-level `heading` on `quick_replies` is still the live request upstream**
   (`docs/proposals/response-contract-phase2-elements.md`, open point 9): 1.6.1 still gives a
   chip row no way to say what it is asking, so a server welcome row renders as bare chips
