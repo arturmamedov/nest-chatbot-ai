@@ -2688,6 +2688,13 @@
                 // composer is live all through the intro, so an impatient guest may
                 // have sent a turn, and a 403 may have torn the widget down.
                 if (!removed && !guestTurned) { showWelcome(wrap); }
+                // The greeting is transcript turn 0 — UNSHIFTED, because this
+                // bubble is inserted BEFORE an impatient guest's already-sent
+                // message and the array must read like the screen. Created
+                // here, where the bubble is, and never in the init callback:
+                // that also fires on the 410 re-init, which paints nothing.
+                transcript.unshift({ r: 'bot', t: intro.greeting, a: null, n: null });
+                persist();
                 typeText(text, intro.greeting);
             });
         }, 900);
@@ -3124,6 +3131,12 @@
         // .nc-text node; its parent is the whole .nc-message row, which is what
         // has to reach the top — anchoring the text alone would cut the avatar.
         anchorSend(bubble.parentNode);
+        // Persisted HERE and never in sendMessage: the 410/404 branch re-enters
+        // sendMessage with the same text, and a write point there would store
+        // the guest's turn twice. On a first-ever turn the uuid may not exist
+        // yet — persist() skips, and init's own persist() carries this entry.
+        transcript.push({ r: 'guest', t: text, a: null, n: null });
+        persist();
         ensureConversation(function () { sendMessage(text, false); });
     }
 
@@ -3165,6 +3178,26 @@
             if (thinking.parentNode) { thinking.parentNode.removeChild(thinking); }
 
             if (status === 200 && body) {
+                // On ARRIVAL, not on settle: typeText is presentation, and a
+                // guest who navigates mid-reveal must not lose a turn the
+                // server already has. `t` is the FINAL text — the reveal is
+                // still painting it.
+                var entry = {
+                    r: 'bot',
+                    t: body.reply || '',
+                    a: persistableActions(body.actions),
+                    n: (typeof body.turn === 'number' && isFinite(body.turn)) ? body.turn : null
+                };
+                transcript.push(entry);
+                if (body.actions) {
+                    for (var pi = 0; pi < body.actions.length; pi++) {
+                        var pa = body.actions[pi];
+                        if (pa && pa.type === 'async_result' && typeof pa.url === 'string') {
+                            pollEntries[pa.url] = entry;   // the poll's final replaces this turn in place
+                        }
+                    }
+                }
+                persist();
                 var bubble = body.reply ? addBubble('bot', '') : null;
                 if (bubble) { typeText(bubble, body.reply); }
                 // A fresh per-turn url set: an async turn's poll actions[] are
@@ -3190,6 +3223,14 @@
             // endpoint a 404 is transient instead — see pollResult.)
             if ((status === 410 || status === 404) && !isRetry) {
                 clearStore();
+                // The transcript SURVIVES the re-init — the guest's message is
+                // on screen and must not become a question with no answer after
+                // a reload. Its turns now belong to a dead conversation, so
+                // their server numbers are unreconcilable by definition: null
+                // is the honest value (a future ?since={turn} must not ask the
+                // new conversation about the old one's numbers). persist() in
+                // the init callback rewrites everything under the new uuid.
+                for (var ti = 0; ti < transcript.length; ti++) { transcript[ti].n = null; }
                 conversationUuid = null;
                 started = false;
                 startConversation(function () { sendMessage(text, true); });
@@ -3229,6 +3270,10 @@
         // Queued turns would each buy the same refusal — and must NOT survive
         // into the next conversation through a restart.
         sendQueue.length = 0;
+        // The 200-branch persist fired before renderActions flipped this — and
+        // no further turn can carry it (the composer is closing). Without this
+        // write a reload reopens the composer on a dead conversation.
+        persist();
         // BEFORE the composer closes: retireChipRows()'s focus rescue lands on
         // els.input, which must still be enabled to take it.
         retireChipRows();
@@ -3274,6 +3319,8 @@
         intro.greeting = null;    // the fresh init must re-settle both
         intro.actions = null;
         chipRows = [];            // already retired; the wipe below removes any remnant
+        transcript = [];                     // a NEW conversation shares no history with the old one
+        pollEntries = Object.create(null);   // any orphaned poll handle died with its epoch
         followStream = false;     // a follow armed for the old reply must not ride into the new one
         chatEpoch += 1;           // orphan any poll still backing off for the dead conversation
 
@@ -3307,6 +3354,9 @@
             requestAnimationFrame(function () {
                 wrap.classList.add('nc-visible');
                 if (!removed && !guestTurned) { showWelcome(wrap); }
+                // Same rule as introMaybeFinish: the greeting entry is born with its bubble.
+                transcript.unshift({ r: 'bot', t: intro.greeting, a: null, n: null });
+                persist();
                 typeText(text, intro.greeting);
             });
             if (isOpen() && !guestTurned) { els.input.focus(); }
@@ -3375,6 +3425,18 @@
                     if (bubble) { typeText(bubble, body.reply || ''); }
                     else { typeText(addBubble('bot', ''), body.reply || ''); }
                     renderActions(body.actions, bubble, rendered);
+                    // The server overwrote the same transcript row — so does the
+                    // store: the interim's text and (already-stripped) actions
+                    // give way to the final payload, found by the poll path
+                    // because newer turns may sit after it by now.
+                    var final = pollEntries[path];
+                    if (final) {
+                        delete pollEntries[path];
+                        final.t = body.reply || '';
+                        final.a = persistableActions(body.actions);
+                        if (typeof body.turn === 'number' && isFinite(body.turn)) { final.n = body.turn; }
+                        persist();
+                    }
                     return;
                 }
 
