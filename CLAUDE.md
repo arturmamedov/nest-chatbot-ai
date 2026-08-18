@@ -102,7 +102,7 @@ page rather than in production.
 |---|---|
 | `config` | reads `data-*`, derives `assetBase` from `script.src`, resolves the locale |
 | `i18n` | UI strings per locale (`en es it de fr`) |
-| `storage` | `{uuid, ts, actions}` in `localStorage`, 24h idle window — the init `actions[]` ride along so a resume can replay the site's welcome elements |
+| `storage` | `{uuid, ts, actions, turns, guestTurned, ended}` in `localStorage`, 24h idle window — the init `actions[]` and the display-only transcript ride along so a resume replays the conversation, not just the welcome; `ts` is last activity |
 | **`api`** | **the seam** — `init` / `send` / `poll` plus the mock fixtures |
 | `dom` | `el()`, `attrs()`, `svgNode()`, the icon and flag constants, `build()` |
 | `render` | bubbles, thinking dots, `renderAction()`, `safeHttpUrl()` |
@@ -174,8 +174,10 @@ GET  {apiBase}{async_result.url}                          → 200 {status, reply
   exception to the `data-debug` logging gate.
 - **Do not send chat history.** The turn body is `{message}` plus the optional per-turn
   `locale` (contract 1.3.0). The server owns the transcript,
-  keyed by the conversation uuid. An earlier version of this widget accumulated a `chatHistory`
-  array and never sent it; do not resurrect it.
+  keyed by the conversation uuid. The widget keeps a **display-only** transcript copy in
+  `localStorage` (since 2.8.0) so a returning guest sees their conversation — it must never
+  enter a request body. An earlier version accumulated a `chatHistory` array with no purpose at
+  all; the stored transcript is not that: it exists to be replayed, never to be sent.
 - **Every request faces two rate limits** (guide §6), on two independent buckets: a
   per-**visitor** budget keyed on key + client IP (20/min turn, 60/min poll) and a
   per-**key** site ceiling (300/min turn, 900/min poll); a `429` means whichever tripped.

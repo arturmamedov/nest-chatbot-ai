@@ -5,6 +5,92 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.8.0 — 2026-08-18
+
+**The conversation now survives a page change.** The store record grows a display-only
+transcript (`turns`, plus the `guestTurned` and `ended` latches), and a returning guest inside
+the 24h idle window lands where they left off: no intro replay, no lost server greeting, no
+welcome block re-rendered over a live conversation. New stored surface and a new UI behaviour,
+hence minor. No transport change — the turn body is still `{message, locale}` and the transcript
+never enters a request — no contract change, `BUILT_AGAINST` stays **1.6.1**.
+
+Until now the record held `{uuid, ts, actions}`: a returning guest kept the *conversation* and
+the site's welcome elements, and lost every word of it. The server still had the transcript,
+keyed by that uuid, so "what did I just ask you?" worked while the screen showed an empty panel
+and a fresh greeting. The gap was only ever on our side of the wire.
+
+- **Persisted on payload arrival, not on settle.** `typeText` is presentation; a guest who
+  navigates mid-reveal must not lose a turn the server already has. Measured on the demo page:
+  at the moment the entry lands, the store holds all 46 characters of the reply while the bubble
+  shows 10. The guest's own turn is written in `sendGuestText` and deliberately **never** in
+  `sendMessage` — the 410/404 branch re-enters `sendMessage` with the same text, and a write
+  point there would store the turn twice.
+- **The greeting entry is born where its bubble is born** — in `introMaybeFinish()` and
+  `restartConversation()`'s callback, and *unshifted*, because both insert that bubble before an
+  impatient guest's already-sent message and the array has to read like the screen. Not in the
+  init callback, which also fires on the 410 re-init, where nothing is painted and the entry
+  would be a phantom.
+- **The paint-only rule.** `async_result` and `conversation_ended` are stripped at persist time,
+  so they never sit in the record at all. A replayed `async_result` passes every epoch guard —
+  the epoch is current — and would restart a poll for a turn that resolved hours ago, on every
+  page load. Verified with `data-debug` on: after reloading a completed async turn, the console
+  carries no `poll` line at all. `ended` comes back instead as state, through `endConversation()`
+  — one seam, not two — and travels via `intro.ended` rather than the boolean, because
+  `endConversation()` uses `ended` as its own idempotence guard and restoring it first would
+  no-op the call and leave a live composer on a dead conversation.
+- **A poll's final replaces its interim in place**, found through a map keyed on the poll path.
+  The interim is not necessarily the last entry when its poll resolves — the guest can send
+  again while it is pending — and threading a handle through `renderActions` is what that seam's
+  comments forbid. One entry either way: interim text with its fallback `booking_link`, then the
+  final text with its `availability`.
+- **A 410/404 re-init carries the transcript across**, with `n` nulled on every carried turn.
+  Wiping it would orphan the message the guest is looking at — they would reload into a question
+  with no answer. Their numbers belong to a conversation that no longer exists, so null is the
+  honest value; `clearStore()` stays exactly where it was.
+- **`n` is stored unused** — the server's turn number, kept so a future `?since={turn}`
+  reconciliation is a drop-in with no stored-data migration. Old records simply lack the new
+  fields and degrade to the previous behaviour; there is nothing to migrate.
+- **`ts` now means last activity**, which is what the server's `idle_hours` has always measured.
+  Before this it was written once at init, so a guest still chatting at hour 25 was reset
+  client-side under a conversation the server considered live. A fix that came for free with
+  writing on every turn, not a regression.
+- **Bounds: 40 turns / 64K chars**, oldest first, payload before text — a turn's rich elements
+  are the bulk of its bytes and a card-less old turn still reads. Never the newest turn, whose
+  `a` goes last; entries are copied before they are thinned, so the live transcript never loses
+  cards to a size check on its serialized twin. On quota the record retries once with `turns: []`
+  — the uuid must never be the casualty of its own history. Verified by filling the origin's
+  storage until a 3KB write throws: the widget's record came back at 477 bytes with the uuid
+  intact and the panel fully usable.
+- **The replay is silent.** `addBubble` announces every bot bubble; without a guard, twenty
+  stored replies would bury the live region at every page load. A five-turn replay produced no
+  announcer mutation at all, and the first live reply after it announced once, as ever. It also
+  never touches `replyCount` — that feeds `maybeAutoExpand()`, and a replay that counted would
+  throw the panel wide the instant a returning guest opened it.
+- **Chip rows stay one-shot across a reload.** Every send retires every row, so rows can be live
+  only on the final turn: the replay retires what it has painted before painting that turn.
+  Retire means *remove*, so a stale row comes back absent, not greyed.
+- **Accepted:** two tabs on one conversation are last-write-wins on the record — a lost stored
+  turn costs replay fidelity only, never the server's transcript. A reply that completes after
+  the tab closes is not in the store (the tail gap a future reconciliation exists to close). And
+  a guest turn persisted before its POST resolves can replay as a question with no answer, for
+  the sub-2s window before the reply lands.
+
+**Verified in-browser** (mock, Chromium; fresh, returning, throwing-storage and cross-origin):
+the record's shape and turn numbers after `book`/`rooms`; an `available` turn stripped of its
+`async_result` and updated in place by its poll; `!cap` restoring a closed composer with a
+focusable restart button that resets the record; `!410` carrying four turns across a new uuid
+with every `n` null; a `tenerife` turn replaying byte-identical to its live render for six of
+seven nodes — the seventh is the greeting, which correctly loses `nc-greeting` (that class is
+the intro's held-back `opacity: 0`, and keeping it would paint the greeting invisible); chips
+live on a final turn and absent on a superseded one; the full first-visit path after
+`localStorage.clear()` (loader animating at 300ms, greeting mid-reveal at 4.8s, welcome block);
+a greeting-only return showing the *stored* greeting and its welcome block; a 40-turn, 60-card
+record replaying complete and scrolled to the end in ~1s; and a hostile `!xss` payload
+round-tripped through storage still inert — `<img src=x onerror=…>` as literal text, the
+`javascript:` url dropped, the unknown element type ignored while its sibling still rendered.
+Console clean apart from the known font-CORS errors a plain `python -m http.server` produces
+cross-origin.
+
 ## 2.7.0 — 2026-08-04
 
 **A host can tell the widget to use their fonts, and one weight stops shipping.** Three new
