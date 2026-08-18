@@ -122,6 +122,24 @@
     var guestTurned = false;
     var chipRows = [];      // live mid-transcript quick_replies rows — retired on ANY send (1.6.0 one-shot rule)
     var ended = false;      // conversation_ended received — composer closed until the guest restarts
+    // The DISPLAY-ONLY transcript, oldest first: {r:'bot'|'guest', t:'<final
+    // text>', a: actions[]|null, n: <server turn>|null}. Persisted so a reload
+    // inside the idle window lands the guest where they left off; it must
+    // NEVER enter a request body — the server owns the real transcript, keyed
+    // by the conversation uuid (CLAUDE.md, "Do not send chat history").
+    var transcript = [];
+    // True only while replayTranscript() paints stored turns: the guest has
+    // seen all of it, so addBubble() must not announce it — twenty stored
+    // replies would bury the live region at every page load. The first LIVE
+    // reply after a replay announces as ever.
+    var replaying = false;
+    // async poll path → its transcript entry, so the final can replace the
+    // interim's t/a IN PLACE. Keyed by the poll path (the identity the wire
+    // already uses) because the interim turn is not necessarily the LAST
+    // entry when its poll resolves — the guest can send more turns meanwhile.
+    // Object.create(null): the path is payload-derived, and a key like
+    // 'constructor' must not phantom-match (same reason as cardUrls).
+    var pollEntries = Object.create(null);
     // Bumped by restartConversation(): a poll from the dead conversation can be
     // backing off for up to 120s, and without this it would type into a detached
     // bubble and render actions into the NEW conversation's transcript.
@@ -304,6 +322,8 @@
 
     var STORE_KEY = 'nest-chatbot:' + (cfg.key || cfg.apiBase || 'default');
     var IDLE_MS = 24 * 60 * 60 * 1000;   // mirrors the API's conversation idle window
+    var TURNS_MAX = 40;                  // safety rail — observed mean is ~1.3 turns/conversation
+    var STORE_MAX_CHARS = 64 * 1024;     // JSON.stringify().length — UTF-16 units, what quota charges
 
     /*
      * The record is {uuid, ts, actions} and readStore() hands back the OBJECT,
@@ -321,6 +341,15 @@
      * hostile server could already produce — which is the threat model the
      * renderers are written against, not an additional one.
      *
+     * Since 2.8.0 the record also carries the transcript ({r, t, a, n} turns,
+     * oldest first) plus the guestTurned and ended latches. The same argument
+     * covers it: replayed turn text and actions[] go back through the same
+     * renderers, which treat every payload string as untrusted already. `n` is
+     * the server's 1-based turn number, stored UNUSED so a future
+     * ?since={turn} reconciliation endpoint is a drop-in with no stored-data
+     * migration. `a` holds paint-only elements — persistableActions() strips
+     * anything whose renderer has a side effect (see its comment).
+     *
      * Accepted cost: welcome elements can be up to IDLE_MS stale. They are site
      * settings rather than conversation state, so the worst case is a returning
      * guest reading yesterday's promo copy until the conversation expires.
@@ -337,17 +366,121 @@
             // and above all never cost the guest the conversation it also holds.
             return {
                 uuid: parsed.uuid,
-                actions: (Array.isArray(parsed.actions) && parsed.actions.length) ? parsed.actions : null
+                actions: (Array.isArray(parsed.actions) && parsed.actions.length) ? parsed.actions : null,
+                turns: validTurns(parsed.turns),
+                guestTurned: parsed.guestTurned === true,
+                ended: parsed.ended === true
             };
         } catch (e) { return null; }
     }
 
-    function writeStore(uuid, actions) {
+    // Per-ENTRY defence, same posture as `actions` above: a malformed entry is
+    // dropped, a malformed list degrades to "no transcript" (today's intro), and
+    // nothing here can throw past readStore's try. Entries are REBUILT rather
+    // than passed through, so a tampered record cannot smuggle extra keys back
+    // into the next persist().
+    function validTurns(turns) {
+        if (!Array.isArray(turns) || !turns.length) { return null; }
+        var out = [];
+        for (var i = 0; i < turns.length; i++) {
+            var e = turns[i];
+            if (!e || (e.r !== 'bot' && e.r !== 'guest')) { continue; }
+            out.push({
+                r: e.r,
+                t: typeof e.t === 'string' ? e.t : '',
+                a: (Array.isArray(e.a) && e.a.length) ? e.a : null,
+                n: (typeof e.n === 'number' && isFinite(e.n)) ? e.n : null
+            });
+        }
+        return out.length ? out : null;
+    }
+
+    /*
+     * The paint-only rule: `a` may hold only elements whose renderer just
+     * paints. Anything with a side effect is stripped AT PERSIST TIME — it
+     * never sits in the record at all — and its effect is represented as
+     * explicit state instead:
+     *   - async_result: renderAction routes it into pollResult, and on a
+     *     replay the epoch is CURRENT, so every guard passes and each page
+     *     load would restart a poll for a turn that resolved hours ago. When
+     *     the live poll resolves, the final payload replaces the turn's t/a
+     *     anyway (see pollResult).
+     *   - conversation_ended: restored once from the stored `ended` boolean
+     *     through endConversation() — one seam, not two.
+     * A future element type with a side effect gets its exclusion HERE.
+     */
+    function persistableActions(actions) {
+        if (!actions || !actions.length) { return null; }
+        var kept = [];
+        for (var i = 0; i < actions.length; i++) {
+            var a = actions[i];
+            if (a && (a.type === 'async_result' || a.type === 'conversation_ended')) { continue; }
+            kept.push(a);
+        }
+        return kept.length ? kept : null;
+    }
+
+    /*
+     * The one writer. Serializes CURRENT state — uuid, the init welcome
+     * elements, the transcript, the two latches — so every caller is "state
+     * changed, record it" with no arguments to get wrong. With this firing on
+     * every turn, `ts` now means "last activity", which is what the server's
+     * idle_hours has always measured — a guest chatting past hour 24 is no
+     * longer reset client-side under a live server conversation.
+     */
+    function persist() {
+        // Never write without a uuid: readStore() rejects a uuid-less record,
+        // so a persist racing ahead of init (a guest bubble lands before the
+        // 201 arrives) would cost the guest the record it also holds. The
+        // in-memory transcript keeps the turn; init's own persist() writes it.
+        if (!conversationUuid) { return; }
+        var record = {
+            uuid: conversationUuid, ts: Date.now(), actions: intro.actions || null,
+            turns: transcript, guestTurned: guestTurned, ended: ended
+        };
         try {
-            window.localStorage.setItem(STORE_KEY, JSON.stringify({
-                uuid: uuid, ts: Date.now(), actions: actions || null
-            }));
-        } catch (e) { /* private mode — the widget still works, just not across reloads */ }
+            window.localStorage.setItem(STORE_KEY, boundedRecord(record));
+        } catch (e) {
+            // Quota, not private mode (that throws above too, and lands here
+            // the same): shed the transcript and keep the conversation — the
+            // uuid must never be the casualty of its own history.
+            try {
+                record.turns = [];
+                window.localStorage.setItem(STORE_KEY, JSON.stringify(record));
+            } catch (e2) { /* private mode — the widget still works, just not across reloads */ }
+        }
+    }
+
+    /*
+     * 40 turns / 64K chars, whichever hits first — a safety rail, not a
+     * working limit. Oldest first, payload before text: a turn's rich
+     * elements are the bulk of its bytes and a card-less old turn still
+     * reads, so shed `a` from the oldest turn that has one, then whole oldest
+     * turns — and never the most recent turn, whose `a` goes last. Entries
+     * are COPIED before they are thinned: the live transcript must not lose
+     * cards to a size check on its serialized twin.
+     */
+    function boundedRecord(record) {
+        var turns = record.turns.slice(-TURNS_MAX);
+        record.turns = turns;
+        var out = JSON.stringify(record);
+        while (out.length > STORE_MAX_CHARS && turns.length) {
+            var thinned = false;
+            for (var i = 0; i < turns.length - 1; i++) {
+                if (turns[i].a) {
+                    turns[i] = { r: turns[i].r, t: turns[i].t, a: null, n: turns[i].n };
+                    thinned = true;
+                    break;
+                }
+            }
+            if (!thinned) {
+                if (turns.length > 1) { turns.shift(); }
+                else if (turns[0].a) { turns[0] = { r: turns[0].r, t: turns[0].t, a: null, n: turns[0].n }; }
+                else { turns.length = 0; }
+            }
+            out = JSON.stringify(record);
+        }
+        return out;
     }
 
     function clearStore() {
@@ -2946,8 +3079,9 @@
                 intro.actions = (body.actions && body.actions.length) ? body.actions : null;
                 // Stored WITH the uuid, after intro.actions is settled: the resume
                 // branch above is the only other reader and it needs the same value
-                // this load is about to render.
-                writeStore(conversationUuid, intro.actions);
+                // this load is about to render. persist() also carries any
+                // transcript a 410 re-init brought across — see sendMessage.
+                persist();
             } else {
                 // Never strand the guest behind a failed init — greet them anyway
                 // and let the first real turn retry.
