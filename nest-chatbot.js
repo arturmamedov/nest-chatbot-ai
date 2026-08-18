@@ -1683,7 +1683,9 @@
         // just read. Announcing it would read them their own input back. (Chips
         // send `message`, which can differ from the label they pressed; that is
         // still their own act, and the bubble they can see says so.)
-        if (isBot && text) { announce(text); }
+        // …and never during a replay: the guest has read this history, and
+        // twenty stored replies would bury the live region at every load.
+        if (isBot && text && !replaying) { announce(text); }
         return textNode;
     }
 
@@ -2620,11 +2622,27 @@
      * nothing it was not already going to wait for.
      */
 
-    var intro = { animDone: false, greeting: null, actions: null, settled: false };
+    var intro = { animDone: false, greeting: null, actions: null, settled: false, ended: false };
 
     function playIntro() {
         if (introPlayed) { return; }
         introPlayed = true;
+
+        // A stored transcript makes this a RETURN, not an arrival: skip the
+        // loader and the typing entirely — both are first-visit theatre — and
+        // paint the conversation where the guest left it. readStore() twice in
+        // one tick (here and in startConversation) reads the same record; the
+        // empty-transcript fallback only fires if another tab cleared the
+        // store between the two reads, and lands on the arrival path.
+        var stored = readStore();
+        if (stored && stored.turns) {
+            intro.animDone = true;   // no animation armed — the join must not wait for one
+            startConversation(function () {
+                if (transcript.length) { replayTranscript(); }
+                else { introMaybeFinish(); }
+            });
+            return;
+        }
 
         var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -2698,6 +2716,49 @@
                 typeText(text, intro.greeting);
             });
         }, 900);
+    }
+
+    /*
+     * Paint a stored transcript through the SAME renderers a live payload
+     * uses (the threat-model comment above readStore() is the argument for
+     * why that is safe). No loader, no typing, no announcements — and
+     * deliberately no replyCount: it feeds maybeAutoExpand(), and a replay
+     * that counted would auto-expand the panel the instant a returning guest
+     * opens it.
+     */
+    function replayTranscript() {
+        intro.settled = true;
+        els.loader.classList.add('nc-hidden');
+
+        replaying = true;
+        var greetingWrap = null;
+        for (var i = 0; i < transcript.length; i++) {
+            // The one-shot rule survives the replay through its one owner:
+            // every send retires every chip row, so rows can be live only on
+            // the FINAL turn — retire everything painted so far before it.
+            // (A final guest turn carries no chips, so it needs no case.)
+            if (i === transcript.length - 1) { retireChipRows(); }
+            var turn = transcript[i];
+            var bubble = turn.t ? addBubble(turn.r, turn.t) : null;
+            if (i === 0 && turn.r === 'bot' && bubble) { greetingWrap = bubble.parentNode; }
+            // A fresh per-turn url set, exactly like a live turn's.
+            if (turn.a) { renderActions(turn.a, bubble, Object.create(null)); }
+        }
+        replaying = false;
+
+        // A guest who read the greeting and navigated without typing has a
+        // one-turn transcript: no intro animation, but the welcome block and
+        // promo still render — first-contact affordances belong to a
+        // conversation the guest has not yet joined. A decision, not an
+        // emergent behaviour.
+        if (!guestTurned && greetingWrap) { showWelcome(greetingWrap); }
+
+        // Restored as STATE through the existing path — persistableActions()
+        // stripped the element, so this is the one seam (composer closed,
+        // restart button appended, chips retired, focus handled).
+        if (intro.ended) { endConversation(); }
+
+        scrollToLatest(false);
     }
 
     /* ------------------------------------------------------ the welcome block */
@@ -3055,6 +3116,16 @@
             // it a returning guest gets the fallback pills and nothing the site
             // configured — see readStore().
             if (intro.actions === null) { intro.actions = stored.actions; }
+            // The transcript and its latches ride the same record. `ended` is
+            // handed to replayTranscript via intro rather than restored here:
+            // endConversation() uses `ended` as its idempotence guard and must
+            // see false, or the restore would no-op and leave a live composer
+            // on a dead conversation.
+            if (stored.turns) {
+                transcript = stored.turns;
+                guestTurned = stored.guestTurned;
+                intro.ended = stored.ended;
+            }
             cb();
             return;
         }
