@@ -18,8 +18,8 @@ its own — see [Requested](#requested).
 
 ## Status
 
-Current release **2.8.2**; the surface described here landed in **2.8.1**. `BUILT_AGAINST`
-stays **1.6.1** and **no transport changed** — the turn body is still `{message, locale}` and
+Current release **2.9.0**; the surface described here landed in **2.8.1**. `BUILT_AGAINST` is
+**1.6.2** since the 2.9.0 sync, and **no transport changed** — the turn body is still `{message, locale}` and
 init is still `{locale, property}`. The widget's stored transcript is display-only, lives in
 `localStorage`, and never enters a request body. Nothing in 2.8.1 needs anything from the
 platform in order to work.
@@ -28,7 +28,7 @@ platform in order to work.
 
 There is **no time field anywhere in the guest API surface** — not on the turn envelope, not on
 an element, not on the init response. `timestamp`, `created_at`, `sent_at` and `server_time`
-each return zero matches across the vendored 1.6.1 packet
+each return zero matches across the vendored 1.6.2 packet (re-run at the 2.9.0 sync — D-047 added no time field, so this ask is unchanged by it)
 ([`response-contract.md`](../wsuite/response-contract.md),
 [`integration-guide.md`](../wsuite/integration-guide.md)).
 

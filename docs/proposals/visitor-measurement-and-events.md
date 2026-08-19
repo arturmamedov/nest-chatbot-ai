@@ -13,7 +13,9 @@ before changing the shape of it.
 ## Status
 
 Shipped in **2.8.2** as a patch — additive, no `data-*` attribute, nothing new for a host's
-`<script>` tag to say. `BUILT_AGAINST` stays `1.6.1`; no transport changed.
+`<script>` tag to say. `BUILT_AGAINST` was `1.6.1` at that release and no transport changed;
+the packet has since moved to **1.6.2** in `2.9.0` (D-047, an emission rule), which touches
+nothing described here.
 
 The upstream ask at the foot of this document (`idle_hours` in the init response) is **open**
 and has not been sent.
