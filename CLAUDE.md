@@ -461,6 +461,20 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   `wchat:error {phase:'turn', status:410, retrying:true}` is what this desync looks like from
   the outside — part of why that event reports the transparent retry at all. Written up in
   `docs/proposals/visitor-measurement-and-events.md` § The ask upstream, unsent.
+- **Nothing records *when* a message happened, so the widget's clock is the guest's.** The
+  contract has no time field anywhere — not on the envelope, not on an element, not on the
+  init `201` (`timestamp`, `created_at`, `sent_at`, `server_time` all return nothing across
+  `docs/wsuite/`); `turn` is an order, not an instant. So 2.8.1's day separators date entries
+  from `at`, stamped client-side, which means a replay shows the **sending** browser's clock
+  and a guest who changes timezone between visits sees the days recomputed in the new zone.
+  Day granularity absorbs that — minutes of skew never move a date — and it is why there is no
+  visible per-message clock. **The growing window is what sharpens it**: at 24h a transcript
+  spans two days and Today/Yesterday is right essentially always; at a week the same code
+  dates several days for a traveller. Asked for as `server_time` on the init `201` — the same
+  shape as the `idle_hours` request above, for the overlapping reason, so **send them
+  together**. Written up in `docs/proposals/message-timestamps.md`, unsent. Do **not** ask for
+  a top-level `created_at`: contract §Envelope states those three keys are the whole top-level
+  surface and always will be.
 - **A persistent visitor token at init is deliberately NOT asked for yet.** It is the only way
   to answer "same person, cross-device" or "came back after the window", and the only way to
   put the answer in wSuite's own panel rather than in each host's GA4 — but it is a
