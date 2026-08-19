@@ -348,6 +348,27 @@ The realistic test is serving the widget and the host page from **different orig
 what a customer hits. Run a second static server on another port with a page that points its
 `src` at 5501.
 
+### The browser will run your last edit's predecessor
+
+`python -m http.server` sends no `Cache-Control`, so Chromium is free to reuse `nest-chatbot.js`
+from its own cache across ordinary navigations — including the reload you do to check a change.
+The page still boots, still reports the current `VERSION` (which you did not bump for a one-line
+fix), and behaves *almost* right, so the natural conclusion is that the new code is broken. It
+was never loaded. This cost a verification pass here: a freshly added debug line "did not fire"
+because the browser held a 197,501-byte copy while the file on disk was 199,168.
+
+The cheap habit that removes it: **assert the source before trusting the result.**
+
+```js
+// in the page, before you measure anything
+const src = await (await fetch(document.querySelector('script[src*="nest-chatbot"]').src)).text();
+src.indexOf('the string you just added') !== -1;   // must be true
+```
+
+A hard reload works when a human is driving. It is not reliably available to an automation
+harness, so the robust move there is to **serve the repo on a fresh port** — a new origin has no
+cache entries, and no `localStorage` either, which is usually what you wanted anyway.
+
 ## Open items
 
 - **No transport timeout.** `request()` sets no `xhr.timeout`, matching the reference — a
@@ -365,6 +386,15 @@ what a customer hits. Run a second static server on another port with a page tha
   never from the CDN's own domain. `data-fonts="host"` / `"system"` are immune rather than a
   fix: they fetch nothing, so there is nothing left to block. The default path still needs
   the header.
+- **The server reports contract 1.6.2; the vendored packet has no row for it.** So the one-time
+  drift warn fires today, which is correct and harmless (guide §3.1 — warn, never gate; the
+  ignore-unknown rule keeps the widget whole). What the adoption costs **cannot be read from
+  this repo**: `docs/wsuite/` is pinned at 1.6.1 and `grep -rn "1\.6\.2" docs/` returns nothing.
+  The policy says a PATCH is "a wording/clarification fix with no wire effect" and is never
+  breaking, which argues for *bump the constant, change no renderer* — but do not conclude that
+  without reading the row, because **1.6.1 was itself a no-wire-effect patch that still required
+  a code change** ("resolve the suffix per card, not once per rail"). Ask for the
+  `chatbot-contract-v1.6.2` packet and let the normal wholesale sync move `BUILT_AGAINST`.
 - **An element-level `heading` on `quick_replies` is still the live request upstream**
   (`docs/proposals/response-contract-phase2-elements.md`, open point 9): 1.6.1 still gives a
   chip row no way to say what it is asking, so a server welcome row renders as bare chips

@@ -462,6 +462,8 @@
      */
     function boundedRecord(record) {
         var turns = record.turns.slice(-TURNS_MAX);
+        var droppedTurns = record.turns.length - turns.length;   // the turn cap, before any byte work
+        var thinnedActions = 0;
         record.turns = turns;
         var out = JSON.stringify(record);
         while (out.length > STORE_MAX_CHARS && turns.length) {
@@ -470,15 +472,30 @@
                 if (turns[i].a) {
                     turns[i] = { r: turns[i].r, t: turns[i].t, a: null, n: turns[i].n };
                     thinned = true;
+                    thinnedActions += 1;
                     break;
                 }
             }
             if (!thinned) {
-                if (turns.length > 1) { turns.shift(); }
-                else if (turns[0].a) { turns[0] = { r: turns[0].r, t: turns[0].t, a: null, n: turns[0].n }; }
-                else { turns.length = 0; }
+                if (turns.length > 1) { turns.shift(); droppedTurns += 1; }
+                else if (turns[0].a) {
+                    turns[0] = { r: turns[0].r, t: turns[0].t, a: null, n: turns[0].n };
+                    thinnedActions += 1;
+                }
+                else { turns.length = 0; droppedTurns += 1; }
             }
             out = JSON.stringify(record);
+        }
+        // Shedding is invisible by construction — the guest sees the full transcript
+        // on screen either way, and only the NEXT reload shows what the record lost.
+        // The byte cap in particular is unreachable from the mock (the turn cap binds
+        // first, ~37KB at 40 card turns) but reachable on a guest's device, where a
+        // real property_cards rail with long image urls runs several KB a turn. One
+        // line, on the existing data-debug gate: the contract-drift warn stays the
+        // file's only ungated console output.
+        if (thinnedActions || droppedTurns) {
+            log('store bounded', { thinnedActions: thinnedActions, droppedTurns: droppedTurns,
+                                   keptTurns: turns.length, chars: out.length });
         }
         return out;
     }
@@ -2740,6 +2757,13 @@
             if (i === transcript.length - 1) { retireChipRows(); }
             var turn = transcript[i];
             var bubble = turn.t ? addBubble(turn.r, turn.t) : null;
+            // INVARIANT: the replayed greeting is a plain bot bubble and must NOT
+            // wear .nc-greeting. That class is ENTRANCE-ONLY — opacity:0, height:0,
+            // translateX, undone by .nc-visible the intro adds — so a replay
+            // wearing it without running the intro paints an invisible greeting.
+            // Which means .nc-greeting must never gain a PAINTED property (spacing,
+            // an avatar rule, a colour): the day it does, live and replay diverge
+            // and nothing else in this file will explain why.
             if (i === 0 && turn.r === 'bot' && bubble) { greetingWrap = bubble.parentNode; }
             // A fresh per-turn url set, exactly like a live turn's.
             if (turn.a) { renderActions(turn.a, bubble, Object.create(null)); }

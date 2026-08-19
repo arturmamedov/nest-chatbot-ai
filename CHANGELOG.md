@@ -60,7 +60,19 @@ and a fresh greeting. The gap was only ever on our side of the wire.
   cards to a size check on its serialized twin. On quota the record retries once with `turns: []`
   — the uuid must never be the casualty of its own history. Verified by filling the origin's
   storage until a 3KB write throws: the widget's record came back at 477 bytes with the uuid
-  intact and the panel fully usable.
+  intact and the panel fully usable. A `data-debug` line reports any shed — `thinnedActions`,
+  `droppedTurns`, `keptTurns`, `chars` — because shedding is otherwise invisible: the guest sees
+  the whole transcript on screen and only the *next* reload reveals what the record dropped.
+  Observed firing from the 41st entry on, silent below it.
+- **How the 64K limb was actually tested, and what that is worth.** It has never been reached in
+  a browser: the turn cap binds first, at ~37KB for 40 card-heavy turns. So it was exercised by
+  running `boundedRecord`, extracted from this file, against synthetic 4KB / 60KB / 200KB
+  payloads under node. Every case landed under the cap, shed the oldest `a` first, kept the
+  newest turn's `a` longest, never dropped the newest turn itself, and never mutated the live
+  in-memory array. Read that for what it is: **a point-in-time check of copied source, not
+  standing coverage.** There is no test runner here (rule 1), nothing re-runs it, and an edit to
+  `boundedRecord` tomorrow is not covered by it — the debug line above exists because the real
+  signal has to come from production.
 - **The replay is silent.** `addBubble` announces every bot bubble; without a guard, twenty
   stored replies would bury the live region at every page load. A five-turn replay produced no
   announcer mutation at all, and the first live reply after it announced once, as ever. It also
@@ -90,6 +102,23 @@ round-tripped through storage still inert — `<img src=x onerror=…>` as liter
 `javascript:` url dropped, the unknown element type ignored while its sibling still rendered.
 Console clean apart from the known font-CORS errors a plain `python -m http.server` produces
 cross-origin.
+
+**Verified against the real backend**, which is the half the mock cannot answer: conversation
+uuid `4d103506…` byte-identical across a page refresh with `ts` advancing 1787122804144 →
+1787122983145, and the reply *after* the reload referencing content from before it — server-side
+continuity under a replayed uuid, confirmed rather than assumed. `guestTurned: true` restored on
+resume with the welcome block correctly absent; `n` progressive against real turns (greeting
+`null`, then 1, 2, 3, 4…); and the per-key `STORE_KEY` suffixing holding, with
+`nest-chatbot:default` and `nest-chatbot:ws_live_…` coexisting on one origin without collision.
+
+**Two measurements the rest of this entry rests on, run rather than reasoned.** The announcer:
+a MutationObserver attached to the live region *before* the panel opens recorded **zero**
+mutations across a replay of 6 bot turns / 11 messages, zero more through the 3s clear-timer
+window, then exactly **one added node** — the reply text — when a live turn landed. The
+cross-origin embed, host page and script on genuinely different ports: at 120ms every message
+was already painted at full length with no `nc-typing` and the loader hidden, identical at
+520ms, so nothing was revealing; welcome absent, scrolled to the end, uuid stable across the
+reload, and `assetBase` plus the stylesheet resolving to the *script's* origin, not the host's.
 
 ## 2.7.0 — 2026-08-04
 
