@@ -423,6 +423,11 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   bottom, which is exactly the condition that hides ⌄. It is a rule, not a case.
 - Never touch `document.documentElement.lang`, the host's `<body>`, or anything outside
   `#nest-chatbot`. The host page is not ours.
-- Version bumps err small: little changes are a **patch**, even when they touch behaviour.
-  Reserve minor for genuinely new surface (a config attribute, a UI feature, a contract
-  sync), major for breaking the embed contract.
+- Version bumps err small: **patch unless the embed contract changes.** Everything
+  non-breaking is a patch — a bug fix, new UI behaviour, a new `data-*` attribute, a new
+  runtime-API method, a whole new stored surface. Reserve **minor** for a contract sync (a
+  fresh `docs/wsuite/` packet and a `BUILT_AGAINST` move), and **major** for breaking the
+  embed contract: renaming or removing a `data-*` attribute, dropping a `window.NestChatbot`
+  method, or changing what a host's `<script>` tag has to say. Additive is never breaking.
+  Releases through 2.8.0 predate this rule and are **not** renumbered — 2.6.0, 2.7.0 and
+  2.8.0 would each be a patch under it. The next release is **2.8.1** unless it is a sync.
