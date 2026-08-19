@@ -660,6 +660,47 @@
     border-radius: 16px 16px 4px 16px;
 }
 
+/* ---------------------------------------------------------------- day separator */
+
+/* The centred pill marking a change of calendar day (see maybeDaySeparator). It is
+   a flex child of .nc-body exactly like a message row, so align-self centres it,
+   the column's own 15px gap spaces it, and `.nc-body > *` above already covers it
+   for the shrink that box makes normal.
+
+   --nc-surface, NOT --nc-surface-sunken: the sunken tint is what a bot bubble sits
+   on, and a pill wearing it reads as a very small reply rather than as chrome
+   between two of them.
+
+   No font-family here on purpose — #nest-chatbot's own var(--nc-font-body)
+   inherits down to this node. Declaring one would make an eleventh site of a
+   typography seam whose entire value is that there are exactly ten, and
+   data-fonts would quietly stop covering everything. */
+#nest-chatbot .nc-day {
+    align-self: center;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: var(--nc-surface);
+    /* --nc-text, NOT --nc-text-subtle. Subtle is the token for text that is
+       present but not being read — the disclaimer, the try-asking label — and it
+       measures 2.7:1 against this grey, under the 4.5:1 that 11px needs. A day
+       separator is the opposite kind of string: small, but the whole point is
+       that it gets read. This pairing is 11.4:1. */
+    color: var(--nc-text);
+    font-size: 11px;
+    /* 400 or 600 only: 500 has no face shipped and searches DOWNWARDS, so it
+       renders 400 while reading as if it asked for something heavier. */
+    font-weight: 600;
+    line-height: 1.45;
+    letter-spacing: 0.02em;
+    text-align: center;
+    /* Labels are short by construction — "Wednesday 17" at the longest — and
+       .nc-body is overflow-x: hidden, so this can never introduce a sideways
+       scrollbar. No overflow of its own: that would give the node an automatic
+       minimum size of 0 and hand it straight back to the shrink problem. */
+    white-space: nowrap;
+    animation: nc-msg-in 240ms var(--nc-ease);
+}
+
 /* ------------------------------------------------------------- welcome prompts */
 
 /* One wrapper for the whole welcome state — the site's own chip row above the
@@ -1806,6 +1847,7 @@
     #nest-chatbot .nc-dot,
     #nest-chatbot .nc-message:not(.nc-greeting),
     #nest-chatbot .nc-welcome,
+    #nest-chatbot .nc-day,
     #nest-chatbot .nc-text.nc-typing::after {
         animation: none;
     }

@@ -5,6 +5,82 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.8.1 — 2026-08-19
+
+**When the day turns, the transcript says so.** A centred pill lands between two turns whenever
+the calendar day changes — `Today`, `Yesterday`, `Monday, Aug 17` inside the last week, then a
+plain `18/08/2026` — and every bubble carries its full date and time as a `title`. New UI
+behaviour and a new stored field, which is a **patch**: no `data-*` attribute, no
+`window.NestChatbot` method, nothing new for a host's `<script>` tag to say. No transport
+change either, so `BUILT_AGAINST` stays **1.6.1**.
+
+2.8.0 gave a returning guest their conversation back; this is the half that was missing. That
+replay is seamless by design, so the panel could open on yesterday evening's conversation with
+nothing on screen saying any time had passed. The gap grows with the idle window — 24h today,
+heading for a week or more, at which point "some earlier day" stops being the edge case.
+
+- **Nothing in this system records when a message happened.** The response contract carries no
+  time field of any kind, and the record's own `ts` has meant *last activity* since 2.8.0 —
+  rewritten on every turn, so it cannot date one. Entries are stamped client-side instead, as
+  `at` (epoch ms), at the four sites where an entry is born. Two consequences worth stating
+  rather than hiding: a replay shows the **sending** browser's clock, and a guest who crosses a
+  timezone between visits sees the days recomputed in the new zone. Day granularity is what
+  makes that acceptable — minutes of skew never move a date, and only a timezone hop does. It
+  would not survive a visible per-message clock, which is the main reason there isn't one. The
+  stored value would support one tomorrow.
+- **`at`, deliberately not a second `ts`.** The record already has a `ts` one level up meaning
+  something else entirely, and two fields answering to one name across a single nesting level
+  is a trap rather than a convenience.
+- **No pill above the first message, ever.** Pills mark transitions; the day of the first
+  message is set silently. A fresh conversation would otherwise open under a "Today" telling
+  the guest what they already assume. What pays for the omission is the `title` on every
+  bubble — the exact date is on that first one either way, which is why the two shipped
+  together rather than separately.
+- **The weekday tier carries a short month for word ORDER, not for information.** Inside a
+  seven-day tier the month can only be this one or last. But ask `Intl.DateTimeFormat` for
+  weekday+day alone and bare `'en'` resolves to the en-US skeleton, which emits **"17 Monday"**.
+  Every other shipped locale is fine, and so is `en-GB` — which is exactly what makes it easy
+  to ship without noticing. Adding `month: 'short'` makes CLDR compose a real pattern instead:
+  "Monday, Aug 17", "lunes, 17 ago", "lunedì 17 ago", "Montag, 17. Aug.", "lundi 17 août".
+- **A record written before this has no `at`, and paints nothing from it** — no pill, no title,
+  and it does not advance the day being compared against. Inventing a day from the record's
+  last-activity `ts` would put a guest-facing claim on screen with no evidence behind it; the
+  silence costs one pill and heals itself on the next real turn. Same posture 2.8.0 took: old
+  records lack the new field and degrade, there is nothing to migrate.
+- **An async turn keeps the time its interim reply arrived.** `pollResult` replaces that turn's
+  text and actions in place and leaves `at` alone — which is both the zero-code default and the
+  right answer. A poll resolving after midnight would otherwise walk its turn's day forward
+  past a pill already painted above it, and the record would disagree with the screen on the
+  next reload.
+- **The pill is what a send anchors, not the bubble.** When the guest's own message opens a new
+  day, `anchorSend()` takes the separator, so pill and message ride to the top of the panel
+  together — measured at 19px and 57px from the top, against a 506px body. A pill painted and
+  scrolled out of view in the same tick would announce the day to nobody. It costs the reply
+  ~26px of room, once per day, and the transcript still moves exactly once per turn: scrollTop
+  held at 2553 across the whole reveal and every card that followed it.
+- **Three rebuild sites had to learn the field or lose it.** `validTurns()` rebuilds every entry
+  on read — deliberately, so a tampered record cannot smuggle keys back into the next
+  `persist()` — which makes a new field opt-in; miss it and timestamps die on every reload.
+  `boundedRecord()` rebuilds twice more when it sheds an old turn's payload, and missing those
+  loses timestamps only past 64KB, which the mock cannot reach. Both branches verified against
+  the shipped function: 9 turns thinned, `at` intact on all 40 kept.
+- **Date arithmetic through `Date`, never through milliseconds.** Subtracting 86400000 is wrong
+  on both DST days a year and says nothing about month ends; `setDate()` normalises all of it.
+- **`--nc-text` on the pill, not `--nc-text-subtle`.** Subtle is the token for text that is
+  present but not being read — the disclaimer, the try-asking label — and it measures 2.7:1
+  against the grey the pill sits on, under the 4.5:1 that 11px needs. A day separator is the
+  opposite kind of string: small, but the whole point is that it gets read. The shipped pairing
+  is 11.4:1.
+- **`setLocale` repaints pills and titles**, against the same line it already drew: what stays
+  frozen is *payload* — reply text and server chip labels, localized upstream and not ours to
+  touch. These are the widget's own strings derived from a stored epoch, so re-deriving them is
+  the only way they can be right. The epoch rides on the node as `data-nc-at` rather than in a
+  registry there would be nothing to keep in step with.
+- **Accepted gap:** a tab left open across midnight keeps a "Today" pill that now means
+  yesterday. Re-labelling it needs a timer or a third document listener, and `teardown()`'s
+  claim that the widget attaches exactly two outside `#nest-chatbot` is worth more than the
+  edge case — the same trade the carousel arrows and the scroll cue already make on resize.
+
 ## 2.8.0 — 2026-08-18
 
 **The conversation now survives a page change.** The store record grows a display-only

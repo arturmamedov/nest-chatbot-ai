@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.8.0';
+    var VERSION = '2.8.1';
 
     /* =========================================================== config ===== */
 
@@ -172,6 +172,7 @@
             language: 'Change language', languageOf: 'Switch to %s',
             book: 'Book now', open_link: 'Open',
             newChat: 'Start a new chat',
+            dayToday: 'Today', dayYesterday: 'Yesterday',
             call: 'Call %s', whatsapp: 'WhatsApp', email: 'Email %s',
             noAvailability: 'No availability for those dates.',
             error: 'Sorry, something went wrong. Please try again, or reach us directly and we\'ll be glad to help.',
@@ -201,6 +202,7 @@
             language: 'Cambiar idioma', languageOf: 'Cambiar a %s',
             book: 'Reservar ahora', open_link: 'Abrir',
             newChat: 'Empezar un chat nuevo',
+            dayToday: 'Hoy', dayYesterday: 'Ayer',
             call: 'Llamar %s', whatsapp: 'WhatsApp', email: 'Escribir a %s',
             noAvailability: 'No hay disponibilidad para esas fechas.',
             error: 'Lo siento, algo ha ido mal. Inténtalo de nuevo o escríbenos directamente y te ayudamos encantados.',
@@ -232,6 +234,7 @@
             language: 'Cambia lingua', languageOf: 'Passa a %s',
             book: 'Prenota ora', open_link: 'Apri',
             newChat: 'Inizia una nuova chat',
+            dayToday: 'Oggi', dayYesterday: 'Ieri',
             call: 'Chiama %s', whatsapp: 'WhatsApp', email: 'Scrivi a %s',
             noAvailability: 'Nessuna disponibilità per quelle date.',
             error: 'Mi dispiace, qualcosa è andato storto. Riprova o scrivici direttamente, saremo felici di aiutarti.',
@@ -261,6 +264,7 @@
             language: 'Sprache wechseln', languageOf: 'Zu %s wechseln',
             book: 'Jetzt buchen', open_link: 'Öffnen',
             newChat: 'Neuen Chat starten',
+            dayToday: 'Heute', dayYesterday: 'Gestern',
             call: '%s anrufen', whatsapp: 'WhatsApp', email: 'E-Mail an %s',
             noAvailability: 'Keine Verfügbarkeit für diese Daten.',
             error: 'Entschuldigung, da ist etwas schiefgelaufen. Bitte versuche es erneut oder kontaktiere uns direkt.',
@@ -292,6 +296,7 @@
             language: 'Changer de langue', languageOf: 'Passer en %s',
             book: 'Réserver', open_link: 'Ouvrir',
             newChat: 'Commencer un nouveau chat',
+            dayToday: 'Aujourd\'hui', dayYesterday: 'Hier',
             call: 'Appeler %s', whatsapp: 'WhatsApp', email: 'Écrire à %s',
             noAvailability: 'Aucune disponibilité pour ces dates.',
             error: 'Désolé, une erreur est survenue. Réessaie ou contacte-nous directement, nous serons ravis de t\'aider.',
@@ -341,14 +346,21 @@
      * hostile server could already produce — which is the threat model the
      * renderers are written against, not an additional one.
      *
-     * Since 2.8.0 the record also carries the transcript ({r, t, a, n} turns,
-     * oldest first) plus the guestTurned and ended latches. The same argument
-     * covers it: replayed turn text and actions[] go back through the same
-     * renderers, which treat every payload string as untrusted already. `n` is
-     * the server's 1-based turn number, stored UNUSED so a future
+     * Since 2.8.0 the record also carries the transcript ({r, t, a, n, at}
+     * turns, oldest first) plus the guestTurned and ended latches. The same
+     * argument covers it: replayed turn text and actions[] go back through the
+     * same renderers, which treat every payload string as untrusted already.
+     * `n` is the server's 1-based turn number, stored UNUSED so a future
      * ?since={turn} reconciliation endpoint is a drop-in with no stored-data
      * migration. `a` holds paint-only elements — persistableActions() strips
      * anything whose renderer has a side effect (see its comment).
+     *
+     * `at` (2.8.1) is when the entry was CREATED, epoch ms — the day separators
+     * and each bubble's title are computed from it. Not named `ts`: the record
+     * has one of those already and it means something else entirely (last
+     * activity, rewritten every turn), so two fields answering to the same name
+     * across one nesting level would be a trap rather than a convenience.
+     * ~18 chars a turn, ~720 bytes at the 40-turn cap — nothing worth encoding.
      *
      * Accepted cost: welcome elements can be up to IDLE_MS stale. They are site
      * settings rather than conversation state, so the worst case is a returning
@@ -389,7 +401,13 @@
                 r: e.r,
                 t: typeof e.t === 'string' ? e.t : '',
                 a: (Array.isArray(e.a) && e.a.length) ? e.a : null,
-                n: (typeof e.n === 'number' && isFinite(e.n)) ? e.n : null
+                n: (typeof e.n === 'number' && isFinite(e.n)) ? e.n : null,
+                // Same posture as `n`, and it has to be REBUILT here like every
+                // other field: this loop is deliberately opt-in, so a field left
+                // out of it silently vanishes on the next reload. A record
+                // written before 2.8.1 simply has none — null, and the render
+                // side paints neither a day separator nor a title for it.
+                at: (typeof e.at === 'number' && isFinite(e.at)) ? e.at : null
             });
         }
         return out.length ? out : null;
@@ -470,7 +488,7 @@
             var thinned = false;
             for (var i = 0; i < turns.length - 1; i++) {
                 if (turns[i].a) {
-                    turns[i] = { r: turns[i].r, t: turns[i].t, a: null, n: turns[i].n };
+                    turns[i] = { r: turns[i].r, t: turns[i].t, a: null, n: turns[i].n, at: turns[i].at };
                     thinned = true;
                     thinnedActions += 1;
                     break;
@@ -479,7 +497,7 @@
             if (!thinned) {
                 if (turns.length > 1) { turns.shift(); droppedTurns += 1; }
                 else if (turns[0].a) {
-                    turns[0] = { r: turns[0].r, t: turns[0].t, a: null, n: turns[0].n };
+                    turns[0] = { r: turns[0].r, t: turns[0].t, a: null, n: turns[0].n, at: turns[0].at };
                     thinnedActions += 1;
                 }
                 else { turns.length = 0; droppedTurns += 1; }
@@ -1655,6 +1673,163 @@
         }, ANNOUNCE_CLEAR_MS);
     }
 
+    /* ---------------------------------------------------------- day separators */
+    /*
+     * A centred pill between messages whenever the calendar day changes, the way
+     * every phone messenger does it. It exists because of 2.8.0: a returning
+     * guest now replays a stored conversation, so without this the panel opens on
+     * yesterday evening's transcript with nothing on screen saying that any time
+     * passed. The replay is seamless by design, which is exactly the problem —
+     * and the API's idle window, 24h today, is heading for a week or more.
+     *
+     * THE CLOCK IS THIS BROWSER'S. Nothing in the system records when a message
+     * happened: the response contract carries no time field of any kind, and the
+     * record's own `ts` means last activity, rewritten every turn. So an entry is
+     * stamped where it is created, client-side, with two honest consequences — a
+     * replay shows the SENDING browser's clock, and a guest who crosses a
+     * timezone between visits sees these recomputed in the new zone. Day
+     * granularity is what makes that acceptable: minutes of skew never move a
+     * date, and only a timezone hop does. It would not be acceptable under a
+     * visible per-message clock, which is the main reason there isn't one — the
+     * stored value would support one tomorrow, and this comment is why it stays
+     * a tooltip instead.
+     */
+
+    // The day last PAINTED — render state, never stored, never persisted. Held
+    // here rather than recomputed per entry so the live path and
+    // replayTranscript() share ONE comparison; two copies would disagree at
+    // exactly the boundary that matters. restartConversation() resets it.
+    var lastDayKey = null;
+
+    // Local midnight for that instant, as an epoch — the identity of a calendar
+    // day in the guest's own zone. null for anything that is not a real date,
+    // which is also the tampered-store case: `at` reaches here as a finite
+    // number (validTurns guarantees that much) and 1e20 is finite.
+    function dayKey(ms) {
+        var d = new Date(ms);
+        d.setHours(0, 0, 0, 0);
+        return isFinite(d.getTime()) ? d.getTime() : null;
+    }
+
+    /**
+     * Today / Yesterday / a weekday with its day number inside the last week /
+     * a plain date beyond it. The weekday tier is not decoration: at a week-long
+     * idle window "Monday 17" is something a guest can place, where 17/08/2026
+     * makes them count back.
+     *
+     * Date arithmetic through Date, NEVER through milliseconds — subtracting
+     * 86400000 is wrong on both DST days a year and says nothing about month
+     * ends. setDate() normalises all of it.
+     *
+     * Intl in try/catch degrading to NO PILL, exactly as cardPrice() degrades to
+     * no price: a RangeError from a bad locale or an absurd stored date must not
+     * take the reply down, and a wrong day is worse than a missing one. The
+     * formats are locale-ORDERED by construction, which is the other reason not
+     * to hand-roll dd/mm/yyyy — it is wrong in at least one shipped locale.
+     */
+    function dayLabel(key) {
+        var todayKey = dayKey(Date.now());
+        if (todayKey === null) { return null; }
+        // At or past today: a clock reading into the future is skew or a tampered
+        // store, and "today" is the least surprising thing to call it.
+        if (key >= todayKey) { return t('dayToday'); }
+
+        var edge = new Date(todayKey);
+        edge.setDate(edge.getDate() - 1);
+        if (key === edge.getTime()) { return t('dayYesterday'); }
+
+        // Five more days back — today, yesterday and these make one week, so a
+        // weekday name never appears twice in the tier that uses it.
+        edge.setDate(edge.getDate() - 5);
+        var withinWeek = key >= edge.getTime();
+
+        try {
+            return new Intl.DateTimeFormat(locale, withinWeek
+                // The short month is carried for WORD ORDER, not for information —
+                // inside a seven-day tier it can only ever be this month or last.
+                // Ask for weekday+day alone and CLDR resolves bare 'en' to the
+                // en-US skeleton, which puts the number first: "17 Monday". (Every
+                // other shipped locale is fine, and en-GB is fine, which is exactly
+                // what makes it easy to miss.) Adding the month makes CLDR compose
+                // a real pattern instead — "Monday, Aug 17", "lunes, 17 ago",
+                // "Montag, 17. Aug." — correct in all five. Do not simplify it back.
+                ? { weekday: 'long', day: 'numeric', month: 'short' }
+                : { day: '2-digit', month: '2-digit', year: 'numeric' }
+            ).format(new Date(key));
+        } catch (e) {
+            log('day separator dropped — date not formattable', key);
+            return null;
+        }
+    }
+
+    /**
+     * The full moment, for a bubble's title — and the only place the per-message
+     * time surfaces at all. A native tooltip is supplementary by construction:
+     * unreachable on touch, inconsistently announced, never the only channel for
+     * anything. That is the right weight for a detail this precise sitting on a
+     * client clock, and it is what pays for there being no pill above the first
+     * message — the exact date is on that bubble either way.
+     *
+     * A title and NEVER an aria-label on .nc-text: an aria-label would replace
+     * the message text for a screen reader with a date.
+     */
+    function fullStamp(ms) {
+        try {
+            return new Intl.DateTimeFormat(locale, { dateStyle: 'full', timeStyle: 'short' })
+                .format(new Date(ms));
+        } catch (e) { return ''; }
+    }
+
+    // One place that puts the moment on a bubble, so the two hand-built greeting
+    // bubbles carry it identically to every bubble addBubble() makes.
+    function stampBubble(node, at) {
+        if (!node || !at) { return; }
+        var stamp = fullStamp(at);
+        if (!stamp) { return; }
+        node.setAttribute('title', stamp);
+        node.setAttribute('data-nc-at', String(at));   // setLocale re-derives from this
+    }
+
+    /**
+     * Paint the pill if this entry opens a new day, and hand it back, so a caller
+     * that is about to scroll (sendGuestText) can anchor it. Idempotent within a
+     * day — which is what lets that caller run it early and addBubble() run it
+     * again a line later.
+     *
+     * NO SEPARATOR AT THE TOP: lastDayKey is assigned BEFORE the first-paint
+     * return, so the first message defines the day and announces nothing. Delete
+     * that ordering and a fresh conversation opens under a "Today" pill telling
+     * the guest what they already assume. Pills mark transitions; the bubble
+     * titles carry the absolute dates.
+     */
+    function maybeDaySeparator(at) {
+        // A turn stored before 2.8.1 has no time at all. It paints nothing AND
+        // advances nothing: inventing a day for it would be a guest-facing claim
+        // with no evidence behind it, where silence costs one pill and heals
+        // itself on the next real turn.
+        if (!at) { return null; }
+        var key = dayKey(at);
+        if (key === null) { return null; }
+
+        var prev = lastDayKey;
+        lastDayKey = key;
+        if (prev === null || key === prev) { return null; }
+
+        var label = dayLabel(key);
+        if (!label) { return null; }
+
+        // A plain text div, deliberately: .nc-body is role="log" aria-live="off",
+        // so this is silent when it lands and reads in document order for anyone
+        // browsing back — which is the behaviour wanted. role="separator" takes
+        // its accessible name from aria-label and lets some mappings drop the
+        // text content entirely.
+        var pill = el('div', 'nc-day', label);
+        pill.setAttribute('data-nc-at', String(at));
+        els.body.appendChild(pill);
+        afterRender();   // a render path calls this and NEVER a scroll
+        return pill;
+    }
+
     /**
      * True when the bot message about to be appended lands directly on another
      * bot message. One avatar per burst reads as one speaker; repeating it down
@@ -1674,7 +1849,18 @@
         return last.classList.contains('nc-message--bot') && !last.classList.contains('nc-thinking');
     }
 
-    function addBubble(role, text) {
+    function addBubble(role, text, at) {
+        // undefined means a LIVE paint, which is now by definition — that is what
+        // keeps the error, retry and timeout bubbles right without an argument of
+        // their own. null means a stored entry from before 2.8.1 and has to stay
+        // silent; only replayTranscript() ever passes it. The two are not
+        // interchangeable, which is the whole legacy story in one expression.
+        var when = at === undefined ? Date.now() : at;
+        // BEFORE followsBotMessage(): a pill becomes els.body.lastElementChild, so
+        // a bot reply that opens a new day gets its avatar back. A new day is a
+        // new burst — the right reading, and unreachable in practice anyway, since
+        // a day cannot turn between two bot entries with no guest turn between.
+        maybeDaySeparator(when);
         var isBot = role !== 'guest';
         var follow = isBot && followsBotMessage();
         var wrap = el('div', 'nc-message nc-message--' + (isBot ? 'bot' : 'guest') +
@@ -1683,6 +1869,7 @@
             wrap.appendChild(avatarNode());
         }
         var textNode = el('div', 'nc-text', text || '');   // textContent — never innerHTML
+        stampBubble(textNode, when);
         wrap.appendChild(textNode);
         els.body.appendChild(wrap);
         // No forced scroll, for the GUEST's bubble either: sendGuestText() anchors
@@ -2700,6 +2887,13 @@
             var wrap = el('div', 'nc-message nc-message--bot nc-greeting');
             var avatar = avatarNode();
             var text = el('div', 'nc-text');
+            // Stamped but deliberately NOT run through maybeDaySeparator: the
+            // greeting is transcript entry 0 by construction (it is unshifted
+            // below), and no pill is ever painted above the first message. It is
+            // also inserted BEFORE an impatient guest's already-sent bubble, so a
+            // pill computed here would land in the wrong place besides.
+            var greetedAt = Date.now();
+            stampBubble(text, greetedAt);
             wrap.appendChild(avatar);
             wrap.appendChild(text);
 
@@ -2728,7 +2922,7 @@
                 // message and the array must read like the screen. Created
                 // here, where the bubble is, and never in the init callback:
                 // that also fires on the 410 re-init, which paints nothing.
-                transcript.unshift({ r: 'bot', t: intro.greeting, a: null, n: null });
+                transcript.unshift({ r: 'bot', t: intro.greeting, a: null, n: null, at: greetedAt });
                 persist();
                 typeText(text, intro.greeting);
             });
@@ -2756,7 +2950,10 @@
             // (A final guest turn carries no chips, so it needs no case.)
             if (i === transcript.length - 1) { retireChipRows(); }
             var turn = transcript[i];
-            var bubble = turn.t ? addBubble(turn.r, turn.t) : null;
+            // turn.at is null for anything stored before 2.8.1 — that is the
+            // signal for "no day pill, no title", and it is why addBubble
+            // distinguishes null from an omitted argument.
+            var bubble = turn.t ? addBubble(turn.r, turn.t, turn.at) : null;
             // INVARIANT: the replayed greeting is a plain bot bubble and must NOT
             // wear .nc-greeting. That class is ENTRANCE-ONLY — opacity:0, height:0,
             // translateX, undone by .nc-visible the intro adds — so a replay
@@ -3220,17 +3417,27 @@
         // BEFORE the bubble lands, so its own afterRender() cannot ride a follow
         // left armed by the previous reply: every turn starts from a still view.
         followStream = false;
-        var bubble = addBubble('guest', text);        // textContent — a typed <img> stays text
+        // One `now` for the bubble, the pill and the stored entry, so the screen
+        // and the record can never disagree about which day this turn was.
+        var when = Date.now();
+        // Painted HERE rather than left to addBubble, so the anchor below has the
+        // node: when the guest's own message opens a new day, the PILL is what
+        // rides to the top. A pill painted and instantly scrolled out of view
+        // would announce the day to nobody. addBubble's own call is then a no-op
+        // because lastDayKey has already advanced — that idempotence is what
+        // makes calling it twice safe rather than clever.
+        var separator = maybeDaySeparator(when);
+        var bubble = addBubble('guest', text, when);  // textContent — a typed <img> stays text
         // The turn's ONE deliberate move. Both sweeps above SHRANK the transcript,
         // so this has to measure after them, not before. addBubble returns the
         // .nc-text node; its parent is the whole .nc-message row, which is what
         // has to reach the top — anchoring the text alone would cut the avatar.
-        anchorSend(bubble.parentNode);
+        anchorSend(separator || bubble.parentNode);
         // Persisted HERE and never in sendMessage: the 410/404 branch re-enters
         // sendMessage with the same text, and a write point there would store
         // the guest's turn twice. On a first-ever turn the uuid may not exist
         // yet — persist() skips, and init's own persist() carries this entry.
-        transcript.push({ r: 'guest', t: text, a: null, n: null });
+        transcript.push({ r: 'guest', t: text, a: null, n: null, at: when });
         persist();
         ensureConversation(function () { sendMessage(text, false); });
     }
@@ -3281,7 +3488,14 @@
                     r: 'bot',
                     t: body.reply || '',
                     a: persistableActions(body.actions),
-                    n: (typeof body.turn === 'number' && isFinite(body.turn)) ? body.turn : null
+                    n: (typeof body.turn === 'number' && isFinite(body.turn)) ? body.turn : null,
+                    // Arrival, like `t` above — and an async turn KEEPS this when
+                    // its poll resolves (pollResult mutates t/a/n and leaves this
+                    // alone, deliberately). A poll landing after midnight would
+                    // otherwise move its turn's day forward past a pill already
+                    // painted above it, and the record would disagree with the
+                    // screen on the next reload.
+                    at: Date.now()
                 };
                 transcript.push(entry);
                 if (body.actions) {
@@ -3293,7 +3507,7 @@
                     }
                 }
                 persist();
-                var bubble = body.reply ? addBubble('bot', '') : null;
+                var bubble = body.reply ? addBubble('bot', '', entry.at) : null;
                 if (bubble) { typeText(bubble, body.reply); }
                 // A fresh per-turn url set: an async turn's poll actions[] are
                 // additive to what renders now, so the poll must know what this
@@ -3417,6 +3631,8 @@
         transcript = [];                     // a NEW conversation shares no history with the old one
         pollEntries = Object.create(null);   // any orphaned poll handle died with its epoch
         followStream = false;     // a follow armed for the old reply must not ride into the new one
+        lastDayKey = null;        // the wipe below takes every pill with it; a stale day here
+                                  // would swallow the first real separator of the new conversation
         chatEpoch += 1;           // orphan any poll still backing off for the dead conversation
 
         els.input.disabled = false;
@@ -3440,6 +3656,8 @@
             if (removed) { return; }
             var wrap = el('div', 'nc-message nc-message--bot nc-greeting');
             var text = el('div', 'nc-text');
+            var greetedAt = Date.now();   // stamped, never separated — see introMaybeFinish
+            stampBubble(text, greetedAt);
             wrap.appendChild(avatarNode());
             wrap.appendChild(text);
             // After the loader, not appended: the composer is live again, so an
@@ -3450,7 +3668,7 @@
                 wrap.classList.add('nc-visible');
                 if (!removed && !guestTurned) { showWelcome(wrap); }
                 // Same rule as introMaybeFinish: the greeting entry is born with its bubble.
-                transcript.unshift({ r: 'bot', t: intro.greeting, a: null, n: null });
+                transcript.unshift({ r: 'bot', t: intro.greeting, a: null, n: null, at: greetedAt });
                 persist();
                 typeText(text, intro.greeting);
             });
@@ -3518,7 +3736,12 @@
                     // Replace the interim bubble in place — the server overwrote
                     // the same transcript row.
                     if (bubble) { typeText(bubble, body.reply || ''); }
-                    else { typeText(addBubble('bot', ''), body.reply || ''); }
+                    // No interim bubble to replace, so this one is born here — but
+                    // it belongs to the turn that STARTED back when the guest
+                    // asked, and its stored entry already carries that moment. Take
+                    // the entry's time rather than the resolution's, or the title
+                    // this paints and the title a reload paints would disagree.
+                    else { typeText(addBubble('bot', '', pollEntries[path] && pollEntries[path].at), body.reply || ''); }
                     renderActions(body.actions, bubble, rendered);
                     // The server overwrote the same transcript row — so does the
                     // store: the interim's text and (already-stripped) actions
@@ -3645,6 +3868,27 @@
         // The restart button is a live control like the pills, not frozen
         // transcript — its label follows the language switcher.
         if (els.restart) { els.restart.textContent = t('newChat'); }
+        // Day pills and bubble titles follow too, for the same reason and against
+        // the same line: what stays frozen is PAYLOAD — reply text and server chip
+        // labels, already localized upstream and not ours to repaint. These are
+        // the widget's own strings, derived from a stored epoch, so re-deriving
+        // them is the only way they can be right. The epoch travels on the node
+        // itself rather than in a registry there would be nothing to keep in step
+        // with: restartConversation() wipes the body and the bookkeeping with it.
+        var stamped = els.body.querySelectorAll('[data-nc-at]');
+        for (var si = 0; si < stamped.length; si++) {
+            var node = stamped[si];
+            var at = parseInt(node.getAttribute('data-nc-at'), 10);
+            if (!isFinite(at)) { continue; }
+            if (node.classList.contains('nc-day')) {
+                var relabelled = dayLabel(dayKey(at));
+                // Keep the old label rather than blanking a pill the guest can
+                // see, on the same posture as the Intl guard that produced it.
+                if (relabelled) { node.textContent = relabelled; }
+            } else {
+                stampBubble(node, at);
+            }
+        }
         els.panel.setAttribute('aria-label', 'Germán — ' + t('assistantRole'));
         // The one control whose label depends on state, not just on locale: it
         // reads "shrink" while the sheet is out.
