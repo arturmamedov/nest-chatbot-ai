@@ -103,6 +103,7 @@ page rather than in production.
 | `config` | reads `data-*`, derives `assetBase` from `script.src`, resolves the locale |
 | `i18n` | UI strings per locale (`en es it de fr`) |
 | `storage` | `{uuid, ts, actions, turns, guestTurned, ended}` in `localStorage`, 24h idle window — the init `actions[]` and the display-only transcript ride along so a resume replays the conversation, not just the welcome; `ts` is last activity |
+| **`events`** | **the host-page seam** — `emit()`, `snapshot()`, the `wchat:` vocabulary |
 | **`api`** | **the seam** — `init` / `send` / `poll` plus the mock fixtures |
 | `dom` | `el()`, `attrs()`, `svgNode()`, the icon and flag constants, `build()` |
 | `render` | bubbles, thinking dots, `renderAction()`, `safeHttpUrl()` |
@@ -216,7 +217,49 @@ Set on the `<script>` tag. `document.currentScript.dataset` reads them at boot.
 | `data-debug` | `false` | Gates **all** `console` output — sole exception: the one-time contract-drift warn (guide §3.1). |
 | `data-mock` | `false` | Serves replies from the local fixtures instead of the API — the dev harness. The demo page sets it; never a production page. |
 
-Runtime API: `window.NestChatbot` → `{ version, open, close, toggle, destroy, setLocale, locale }`.
+Runtime API: `window.NestChatbot` → `{ version, open, close, toggle, destroy, setLocale, locale,
+state }`.
+
+### The widget never phones home — measurement leaves as host-page events
+
+Since 2.8.2 the widget reports itself through DOM `CustomEvent`s dispatched on `els.root`
+(the `events` section), and that is the **only** channel it will ever have. No analytics
+request of its own, no beacon, no pixel, no third-party script — same reasoning that keeps
+icons inline and fonts self-hosted: a host trusts exactly one extra origin, ours, and only for
+our own assets. The host page decides where the events land. A host that listens to nothing
+pays nothing, which is why there is deliberately **no** `data-*` attribute to disable it.
+
+Four rules the section states and the code has to keep true:
+
+- **Dispatch from `els.root`, never `window`.** Events bubble, so a host listener on `window`
+  or `document` hears them either way, and the widget still touches no node it does not own.
+  `teardown()`'s "exactly two listeners outside `#nest-chatbot`" claim survives — dispatching
+  attaches none.
+- **Counts, enums and booleans. Never guest text, never reply text.** `length` is a character
+  count; `elements[]` lists element *types*. Element urls are the one string that travels
+  (a server-supplied href the guest is navigating to, already in the DOM) — and
+  `contact_channels` is excluded even from that, because its href **is** the property's phone
+  number or email.
+- **`emit()` is a no-op before `build()` and after `teardown()`.** Both guards, deliberately:
+  the second is a consequence of detaching the root, the first is a contract.
+- **Every name is a commitment.** Adding an event is a patch; renaming or removing one is a
+  **major**, exactly like a runtime-API method. Each `emit()` fires twice — `wchat:<name>` and
+  a bare `wchat` carrying `name` — so a host wiring the umbrella once keeps receiving events
+  added later without editing their page.
+
+**The namespace is `wchat:`, not `nest-chatbot:`, on purpose** — see Open items.
+
+**The design record is `docs/proposals/visitor-measurement-and-events.md`**: why route A won,
+what each event can and *cannot* answer, and the upstream ask. `README.md` § Measuring it is
+the host-facing reference — names and payloads. Read the proposal before changing the shape of
+this surface; read README to integrate against it.
+
+A `source` enum reaches `open()` / `close()` / `sendGuestText()`, and **three `wire()`
+listeners and three `window.NestChatbot` methods are wrapped rather than passed by
+reference**: `addEventListener` hands its handler a `MouseEvent` as the first argument, and a
+host is free to write `btn.addEventListener('click', NestChatbot.open)`. Pass any of them bare
+and the source silently becomes an object while everything on screen keeps working. `oneOf()`
+is the second half of that defence and the reason the enum can be trusted.
 
 ### The typography seam is exactly two custom properties
 
@@ -316,6 +359,13 @@ rather than the catch-all reply. Since server chips **replace** the widget's own
 that means the demo never reaches `showPrompts()` or `setLocale`'s pill-repaint branch:
 exercising the fallback means temporarily setting `Mock.init`'s `actions: []`.
 
+The demo page also carries the host-side half of the events seam — one listener on the
+umbrella `wchat` event, logging to the console and to `window.wchatLog`. Driving the table
+above with that open is how the event payloads get checked. It sits **below** the widget's own
+`<script>` and still catches `wchat:ready`, because that tag is `defer` and an ordinary inline
+script runs during parsing: only an async-loaded tag (GTM, a third-party snippet) can miss
+ready, which is what `NestChatbot.state` is for.
+
 ### The panel-size flags will confuse you before they confuse a guest
 
 Three flags decide how the panel is sized. Two of them outlive the tab and only one is ever
@@ -399,6 +449,40 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   (`docs/proposals/response-contract-phase2-elements.md`, open point 9): 1.6.1 still gives a
   chip row no way to say what it is asking, so a server welcome row renders as bare chips
   under a greeting that does not mention them.
+- **Ask for `idle_hours` in the init `201` — the upstream request that matters most now.**
+  `IDLE_MS` (storage section) is a hardcoded 24h whose comment says it "mirrors the API's
+  conversation idle window", and the contract has no field to drive it: `grep -rn
+  "idle_hours" docs/wsuite/` returns nothing. The window is going to a week or more. **The day
+  the server moves and this constant does not, a guest returning at hour 30 loses their
+  transcript and opens a second conversation while the server's original is still live** —
+  still holding the working memory `data-property` seeded. The field costs no privacy, makes
+  the window self-correcting forever, and as a side effect stretches how far back
+  `wchat:ready`'s `returning` can see. Bundle it with the `heading` request above. A spike in
+  `wchat:error {phase:'turn', status:410, retrying:true}` is what this desync looks like from
+  the outside — part of why that event reports the transparent retry at all. Written up in
+  `docs/proposals/visitor-measurement-and-events.md` § The ask upstream, unsent.
+- **A persistent visitor token at init is deliberately NOT asked for yet.** It is the only way
+  to answer "same person, cross-device" or "came back after the window", and the only way to
+  put the answer in wSuite's own panel rather than in each host's GA4 — but it is a
+  cross-session identifier for a person, on EU properties, and needs consent treatment and a
+  retention policy before it can ship. The widget's storage today is functional and
+  short-lived, which is much of why it has been uncontroversial. Extending the idle window
+  answers most of the same question for free; revisit only if a real question survives that.
+  Inferring visitors server-side from IP + user-agent was considered and **rejected**: guide
+  §6 names "a hotel's own wifi" as a case where strangers share one bucket, and our guests are
+  mostly on property wifi — it would merge strangers and split one guest across their phone
+  and the lobby machine.
+- **`wchat` is the destination namespace; the rest of the vocabulary has not moved.** The
+  2.8.2 events are `wchat:*` because this widget should be able to go Nest-independent one
+  day, and they were new surface — free to name, and expensive to rename later (a MAJOR).
+  `window.NestChatbot`, `#nest-chatbot`, the `nc-` prefix, `STORE_KEY` and the file names
+  deliberately did **not** change: that is a **3.0.0** with real host cost — renaming a
+  `window.NestChatbot` method is breaking by this file's own rule, README documents hosts
+  writing `#nest-chatbot { --nc-edge-x: 2rem }` in their own stylesheets, and a `STORE_KEY`
+  change drops every guest's live conversation at deploy. When it happens it should be one
+  deliberate release with a host migration note, and worth designing a read-old/write-new
+  `STORE_KEY` so no guest pays for it. Until then README carries one sentence explaining the
+  mixed vocabulary.
 - **Origin allow-listing shipped platform-side (D-039)** — opt-in per site, default
   allow-all. Once a site configures a list, every embedding origin must be registered
   (guide §7, exact `scheme://host[:port]`) or requests are refused with
@@ -430,4 +514,5 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   embed contract: renaming or removing a `data-*` attribute, dropping a `window.NestChatbot`
   method, or changing what a host's `<script>` tag has to say. Additive is never breaking.
   Releases through 2.8.0 predate this rule and are **not** renumbered — 2.6.0, 2.7.0 and
-  2.8.0 would each be a patch under it. The next release is **2.8.1** unless it is a sync.
+  2.8.0 would each be a patch under it. 2.8.1 and 2.8.2 are the first releases numbered by it;
+  the next is **2.8.3** unless it is a sync.

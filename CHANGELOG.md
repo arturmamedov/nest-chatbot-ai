@@ -5,6 +5,87 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.8.2 — 2026-08-19
+
+**The widget can now be measured, and still never phones home.** Eleven named DOM events on
+the widget's own root — `wchat:ready`, `open`, `close`, `message`, `reply`, `action`, `error`,
+`ended`, `restart`, `locale`, `teaser` — plus `NestChatbot.state`. A host's existing GA4 /
+Plausible / Matomo listens and decides what to keep. Additive, so a **patch**: no `data-*`
+attribute, nothing new for a host's `<script>` tag to say, and a page that listens to nothing
+pays nothing. No transport change, so `BUILT_AGAINST` stays **1.6.1**.
+
+The question was "returning guests vs new ones", and the finding that shaped the answer is
+that **the server cannot tell**. Init takes exactly two optional fields, `locale` and
+`property` (guide §3.1) — there is nowhere to put a visitor identity. The only per-visitor
+signal on the platform is key + client IP (§6), and §6 names "a hotel's own wifi" as a case
+where strangers collapse into one bucket; our guests are mostly on property wifi. A `410`
+re-init creates an unrelated conversation. The platform sees conversations, not people — so
+anything counting people has to start in the browser, which already knew the answer and had
+no way to say it.
+
+- **The returning-guest signal is two facts, not one, and they answer different questions.**
+  `wchat:ready` carries `returning` — this browser arrived with a live conversation — read at
+  boot from its own `readStore()`, so it is true even for a guest who never opens the panel.
+  `wchat:open` carries `resumed`, latched inside `playIntro()`'s replay branch, so it reports
+  the branch **actually taken** and cannot disagree with what the guest saw. Collapsing them
+  would have lost the denominator, which is the half the question was really about.
+- **Nothing the guest or the assistant wrote ever leaves.** Payloads are counts, enums and
+  booleans: `length` is a character count, `elements[]` lists element *types*. Element urls
+  are the one string that travels — a server-supplied href the guest is navigating to,
+  already in the DOM — and `contact_channels` is excluded even from that, because its href
+  **is** the property's phone number or email. Verified against the `!xss` fixture: the
+  hostile reply, the `javascript:` url and the guest's own text appear in no payload.
+- **Two dispatches per event**, `wchat:<name>` and a bare `wchat` carrying `name`. The
+  umbrella is what makes "add an event later" free for a host who wired one listener; a host
+  who wires both counts everything twice, and README says so. Every name is a commitment —
+  adding one is a patch, renaming one is a major, which is why the list was settled before
+  the first one shipped.
+- **The namespace is `wchat:` and the rest of the vocabulary deliberately did not move.**
+  These events are new surface, so they took the vendor-neutral name this widget is heading
+  towards, for free. `window.NestChatbot`, `#nest-chatbot`, `nc-` and `STORE_KEY` stay put:
+  that rename is a 3.0.0 with real host cost — breaking by this repo's own rule, and a
+  `STORE_KEY` change would drop every guest's live conversation at deploy. One sentence in
+  README explains the mixed vocabulary until then.
+- **The trap this change could have shipped silently.** `open()`, `close()` and `toggle()`
+  now take a `source`, and three `wire()` listeners passed them **bare** to
+  `addEventListener` — which hands a handler a `MouseEvent` as its first argument. So does a
+  host writing `btn.addEventListener('click', NestChatbot.open)`. Every source would have
+  reported as an object while everything on screen kept working perfectly. Fixed on both
+  sides: the listeners and the runtime-API methods are wrapped, and `oneOf()` validates
+  against an enum regardless. Tested by doing exactly what a host would do.
+- **`wchat:error` reports what was previously invisible** — 401/403/429/5xx and transport
+  failures, none of which reach the screen as anything but a generic bubble. `retrying: true`
+  marks the `410`/`404` re-init, which is normal and not a guest-visible failure; a *spike* in
+  it is the signal that the server extended its idle window and `IDLE_MS` did not follow. The
+  403 fires **before** `teardown()`, since `emit()` is a no-op once the widget is removed —
+  otherwise the one error a host most needs (a revoked key, an unregistered origin) would be
+  the one they never see. Poll `404`s during backoff emit nothing: that is the backoff
+  working, and reporting each would drown the real errors.
+- **An async turn fires `wchat:reply` twice**, truthfully — the guest saw two answers land.
+  `resolved` separates them and carries the full poll latency, which is the number worth
+  having for gated booking turns.
+- **One delegated click listener, not one closure per anchor.** The four CTA renderers tag
+  their anchor with `data-wchat-el` and `wire()` reads it back from `els.body`; a replayed
+  40-turn transcript can carry dozens of them, re-created on every replay. It lives inside
+  `#nest-chatbot`, so `teardown()`'s two-listener claim is untouched — and dispatching from
+  `els.root` rather than `window` is what keeps that claim honest for the events themselves.
+- **What this cannot answer, recorded rather than discovered later.** Cross-device is
+  permanently two visitors. Cleared storage is invisible. The data lands in each host's
+  analytics, not in wSuite's panel. And "came back after the window" is bounded by `IDLE_MS`
+  — 24h today, and the ask that fixes it is `idle_hours` in the init response, not a
+  persistent visitor token (CLAUDE.md § Open items has both, and why the token is deferred).
+
+The design record — why route A won over an upstream visitor token, what each event can and
+**cannot** answer, and the unsent `idle_hours` ask — is
+`docs/proposals/visitor-measurement-and-events.md`. README carries the host-facing reference.
+
+Verified in headless Chrome on a fresh port with the source asserted first: 78 checks across
+boot, the return path, every `source` enum, the four CTA types, the error branches, the cap
+and restart, the teaser, `!xss`, and `destroy()` silence. The network tab shows no request the
+widget did not already make — and the diff adds no `fetch`, `XMLHttpRequest`, `sendBeacon` or
+`Image` at all, which is the stronger form of that claim. `css/nest-chatbot.css` is not in the
+diff, and the demo page's computed styles are identical with the widget stylesheet on and off.
+
 ## 2.8.1 — 2026-08-19
 
 **When the day turns, the transcript says so.** A centred pill lands between two turns whenever

@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.8.1';
+    var VERSION = '2.8.2';
 
     /* =========================================================== config ===== */
 
@@ -144,6 +144,14 @@
     // backing off for up to 120s, and without this it would type into a detached
     // bubble and render actions into the NEW conversation's transcript.
     var chatEpoch = 0;
+    // The two returning-guest facts, reported through the events section and
+    // NestChatbot.state. They answer DIFFERENT questions and must not be
+    // collapsed: `returning` is "this browser arrived with a live conversation",
+    // read at boot and true even if the guest never opens the panel; `resumed`
+    // is the branch playIntro() ACTUALLY took, so it can never disagree with
+    // what the guest saw on screen.
+    var returning = false;
+    var resumed = false;
     var els = {};
 
     /* ============================================================= i18n ===== */
@@ -559,6 +567,124 @@
     // every reader has to know about.
     function clearFlag(storeName, key) {
         try { window[storeName].removeItem(key); } catch (e) { /* private mode — nothing to clear */ }
+    }
+
+    /* =========================================================== events ===== */
+    /*
+     * THE HOST-PAGE SEAM — how this widget is measured.
+     *
+     * It NEVER phones home. No analytics request of its own, ever: not to Nest,
+     * not to a third party, not a beacon, not an image pixel. Everything the
+     * widget can honestly report leaves through a DOM CustomEvent on our OWN
+     * root, and the host page decides where it lands — their GA4 / Plausible /
+     * Matomo, or nowhere. A host that listens to nothing pays nothing (an event
+     * with no listener is free), which is why there is no data-* attribute to
+     * switch this off.
+     *
+     * Dispatched from els.root, never from window: events bubble, so a host
+     * listener on window or document hears them either way, and the widget still
+     * touches no node it does not own. teardown()'s claim that the widget
+     * attaches exactly two listeners outside #nest-chatbot stays true —
+     * dispatching attaches none.
+     *
+     * TWO dispatches per call: 'wchat:<name>' for a host that wants one thing,
+     * and a bare 'wchat' carrying the same detail plus `name`, so a host who
+     * wires the umbrella once keeps receiving events added in later releases
+     * without touching their code. Listening to both double-counts — README
+     * says so.
+     *
+     * The namespace is 'wchat', not 'nest-chatbot', deliberately. These events
+     * are the only NEW public surface here, so they adopt the destination
+     * convention now, while #nest-chatbot / NestChatbot / nc- / STORE_KEY stay
+     * put until one deliberate 3.0.0 moves them together (CLAUDE.md § Open
+     * items). Renaming an event later would be a MAJOR, exactly like renaming a
+     * runtime-API method — which is why the name is settled before the first one
+     * ships.
+     *
+     * PAYLOAD RULE: counts, enums and booleans. NEVER guest text, NEVER reply
+     * text — the transcript is display-only and stays that way. Element urls are
+     * the one string that travels: they are server-supplied hrefs the guest is
+     * navigating to, already visible in the DOM as an href, and without them the
+     * conversion event cannot say WHICH property was booked.
+     */
+    var EVENT_NS = 'wchat';
+
+    function emit(name, detail) {
+        // Nothing before build() (els.root does not exist yet) and nothing after
+        // destroy() — teardown() sets `removed` and detaches the root, so a
+        // dispatch there would reach no listener anyway. Both guards, because
+        // the second is a consequence and the first is a contract.
+        if (removed || !els.root) { return; }
+        var payload = detail || {};
+        payload.name = name;
+        // ONE object across both dispatches: a host that mutates detail in the
+        // named listener changes what the umbrella listener sees. Copying per
+        // dispatch would cost an allocation on every event to defend against a
+        // host misbehaving inside their own page.
+        try {
+            els.root.dispatchEvent(new CustomEvent(EVENT_NS + ':' + name,
+                { detail: payload, bubbles: true, composed: true }));
+            els.root.dispatchEvent(new CustomEvent(EVENT_NS,
+                { detail: payload, bubbles: true, composed: true }));
+        } catch (e) {
+            // Guards CustomEvent CONSTRUCTION only. A host listener that throws
+            // cannot reach us — the DOM reports listener exceptions to the global
+            // error handler instead of propagating them back to the dispatcher —
+            // so a broken analytics tag can never break a guest's turn.
+        }
+    }
+
+    /*
+     * The same picture the events carry, readable at any moment. A host whose
+     * analytics loaded after boot missed 'wchat:ready', and reading a getter is
+     * simpler than us keeping a replayable event buffer. A fresh object per
+     * read — never a live reference into module state.
+     *
+     * `conversation` is the uuid, and exposing it is deliberate: it makes
+     * support correlation possible ("read me your chat id") and it is not a new
+     * exposure — the uuid already sits in localStorage, which any same-origin
+     * script on the host page can read.
+     */
+    function snapshot() {
+        return {
+            version: VERSION,
+            locale: locale,
+            open: !!els.root && isOpen(),
+            expanded: !!els.root && isExpanded(),
+            started: started,
+            returning: returning,
+            resumed: resumed,
+            turns: transcript.length,
+            guestTurned: guestTurned,
+            ended: ended,
+            destroyed: removed,
+            conversation: conversationUuid
+        };
+    }
+
+    /* An enum, never a passed-through argument. Three of the wire() listeners
+       hand their handler a MouseEvent as the first argument, and a host is free
+       to do `btn.addEventListener('click', NestChatbot.open)` and hand us one
+       too — without this, `source` would log as [object MouseEvent] and the
+       teaser's conversion rate would quietly become unreadable. */
+    /* Element TYPES only, in payload order, and unknown types deliberately
+       included: a type this widget silently ignores (the contract's
+       ignore-unknown rule) is exactly what a host wants to see in their own
+       numbers when the server starts shipping ahead of the widget. */
+    function actionTypes(actions) {
+        var out = [];
+        if (!actions) { return out; }
+        for (var i = 0; i < actions.length; i++) {
+            if (actions[i] && actions[i].type) { out.push(String(actions[i].type)); }
+        }
+        return out;
+    }
+
+    var OPEN_SOURCES = ['toggler', 'teaser', 'auto', 'api'];
+    var CLOSE_SOURCES = ['toggler', 'close', 'escape', 'api'];
+
+    function oneOf(list, value) {
+        return list.indexOf(value) === -1 ? 'api' : value;
     }
 
     /* ============================================================== api ===== */
@@ -1951,11 +2077,19 @@
      * puts on screen is recorded so the poll's additive actions[] can suppress a
      * repeat. Optional — the init/welcome/resume paths render outside any turn.
      */
-    function linkButton(label, url, style, row, rendered) {
+    // `kind` is what the events call this button. It is the CALLER's to say —
+    // four element types share this one renderer, and "a Book button was
+    // clicked" is worth much less than which element put it there.
+    function linkButton(label, url, style, row, rendered, kind) {
         var href = safeHttpUrl(url);
         if (!href) { log('dropped a non-http(s) url', url); return row; }
         var link = el('a', 'nc-action' + (style === 'primary' ? ' nc-action--primary' : ''), label || t('open_link'));
         attrs(link, { href: href, target: '_blank', rel: 'noopener noreferrer' });
+        // Read back by the one delegated click listener in wire() — see the
+        // events section. A data attribute rather than a closure per anchor: a
+        // replayed 40-turn transcript can carry dozens of these.
+        attrs(link, { 'data-wchat-el': kind || 'link_button' });
+        if (style) { attrs(link, { 'data-wchat-style': style }); }
         if (!row) {
             row = el('div', 'nc-action-row');
             els.body.appendChild(row);
@@ -2026,13 +2160,13 @@
             // renders both, which the contract calls redundant, never harmful.
             case 'link_button':
                 if (cardUrls[action.url]) { return row; } // a card in this list carries the same CTA (D-043(c))
-                return linkButton(action.label, action.url, action.style, row, rendered);
+                return linkButton(action.label, action.url, action.style, row, rendered, 'link_button');
 
             case 'booking_link':
                 // Reference parity; cannot co-occur with cards today (one handler
                 // per turn, D-009), so this branch of the check is dormant.
                 if (cardUrls[action.url]) { return row; }
-                return linkButton(t('book'), action.url, 'primary', row, rendered);
+                return linkButton(t('book'), action.url, 'primary', row, rendered, 'booking_link');
 
             case 'availability':
                 return renderAvailability(action, rendered);
@@ -2087,7 +2221,7 @@
         // deduped — the options list is new content and always renders.
         var row = null;
         if (action.url && !(rendered && rendered[action.url])) {
-            row = linkButton(t('book'), action.url, 'primary', null, rendered);
+            row = linkButton(t('book'), action.url, 'primary', null, rendered, 'availability');
         }
         afterRender();
         return row;
@@ -2098,13 +2232,13 @@
         // Every href here is CONSTRUCTED from the channel value — never taken
         // verbatim from the payload.
         if (action.phone) {
-            wrap.appendChild(channelLink(tf('call', action.phone), 'tel:+' + digits(action.phone)));
+            wrap.appendChild(channelLink(tf('call', action.phone), 'tel:+' + digits(action.phone), 'phone'));
         }
         if (action.whatsapp) {
-            wrap.appendChild(channelLink(t('whatsapp'), 'https://wa.me/' + digits(action.whatsapp)));
+            wrap.appendChild(channelLink(t('whatsapp'), 'https://wa.me/' + digits(action.whatsapp), 'whatsapp'));
         }
         if (action.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(action.email)) {
-            wrap.appendChild(channelLink(tf('email', action.email), 'mailto:' + action.email));
+            wrap.appendChild(channelLink(tf('email', action.email), 'mailto:' + action.email, 'email'));
         }
         if (wrap.childNodes.length) {
             els.body.appendChild(wrap);
@@ -2112,9 +2246,16 @@
         }
     }
 
-    function channelLink(label, href) {
+    // `channel` names which of the three this is, for the events. The href
+    // cannot be trusted to say — it is constructed here from a payload value and
+    // the whole point of the events rule is that it never travels.
+    function channelLink(label, href, channel) {
         var link = el('a', 'nc-channel', label);
         attrs(link, { href: href, rel: 'noopener noreferrer' });
+        // No url on this one, ever: the href IS the guest-facing phone number or
+        // email address of the property, and a tel:/mailto: string in an
+        // analytics payload is contact data leaving the page for no gain.
+        attrs(link, { 'data-wchat-el': 'contact_channels', 'data-wchat-channel': channel });
         // Only the wa.me channel navigates — open it in a new tab so the guest
         // keeps the host page (deliberate divergence from the reference, which
         // lets it navigate away). tel:/mailto: hand off to external handlers.
@@ -2177,7 +2318,12 @@
             var label = (typeof item.label === 'string' && item.label) ? item.label : item.message;
             var chip = el('button', 'nc-prompt', label);
             attrs(chip, { type: 'button' });
-            chip.addEventListener('click', makeChipHandler(item.message));
+            // `parent` is passed by showWelcome() and by nothing else (see this
+            // function's header), so it already distinguishes the site's welcome
+            // row from a mid-transcript one — no new argument to thread through
+            // renderAction()'s switch to tell the two apart in the events.
+            chip.addEventListener('click',
+                makeChipHandler(item.message, parent ? 'welcome-chip' : 'chip'));
             row.appendChild(chip);
         }
 
@@ -2220,8 +2366,8 @@
     // A factory, not a closure written inside the loop: `var` is function-scoped,
     // so an inline handler would close over the loop's own `item` and every chip
     // would end up sending the last message.
-    function makeChipHandler(message) {
-        return function () { sendGuestText(message); };
+    function makeChipHandler(message, source) {
+        return function () { sendGuestText(message, source); };
     }
 
     /* --------------------------------------------------- property carousel --- */
@@ -2265,7 +2411,9 @@
         var count = 0;
         for (var i = 0; i < action.items.length && count < CARD_MAX; i++) {
             var item = action.items[i] || {};
-            var card = propertyCard(item);
+            // `count`, not `i`: the position the guest actually sees on the
+            // rail, so a dropped item never leaves a gap in the numbering.
+            var card = propertyCard(item, count);
             if (!card) { continue; }
             track.appendChild(card);
             // Only cards that actually reached the DOM feed the per-turn set —
@@ -2337,7 +2485,7 @@
         var moreUrl = more ? safeHttpUrl(more.url) : null;
         if (moreUrl && typeof more.label === 'string' && more.label) {
             // Label is server-localized — textContent via linkButton, never t().
-            linkButton(more.label, moreUrl, null, null, rendered);
+            linkButton(more.label, moreUrl, null, null, rendered, 'property_cards_more');
         } else if (typeof action.total === 'number' && action.total > count) {
             els.body.appendChild(el('div', 'nc-car-count', tf('showingOf', count, action.total)));
         }
@@ -2355,7 +2503,7 @@
      * platform really does have properties without a location). A missing one
      * renders nothing at all rather than an empty line.
      */
-    function propertyCard(item) {
+    function propertyCard(item, index) {
         // The shared gate — see renderableCardUrl(): the dedupe pre-scan must
         // agree with this drop decision or it suppresses a Book button wrongly.
         var href = renderableCardUrl(item);
@@ -2399,6 +2547,7 @@
         var book = el('a', 'nc-card-book',
             (typeof item.cta_label === 'string' && item.cta_label) ? item.cta_label : t('book'));
         attrs(book, { href: href, target: '_blank', rel: 'noopener noreferrer' });
+        attrs(book, { 'data-wchat-el': 'property_card', 'data-wchat-index': String(index) });
         body.appendChild(book);
 
         card.appendChild(body);
@@ -2728,6 +2877,7 @@
 
         var link = el('a', 'nc-promo-cta', cta.label);
         attrs(link, { href: href, target: '_blank', rel: 'noopener noreferrer' });
+        attrs(link, { 'data-wchat-el': 'promo_card' });
         card.appendChild(link);
 
         els.body.appendChild(card);
@@ -2840,6 +2990,10 @@
         // store between the two reads, and lands on the arrival path.
         var stored = readStore();
         if (stored && stored.turns) {
+            // THE returning-guest signal, latched where the branch is actually
+            // taken rather than re-derived later — 'wchat:open' reports it, and
+            // it is the one value that cannot disagree with what the guest saw.
+            resumed = true;
             intro.animDone = true;   // no animation armed — the join must not wait for one
             startConversation(function () {
                 if (transcript.length) { replayTranscript(); }
@@ -3082,7 +3236,7 @@
         PROMPT_KEYS.forEach(function (key) {
             var button = el('button', 'nc-prompt', t(key));
             attrs(button, { type: 'button' });
-            button.addEventListener('click', function () { sendGuestText(t(key)); });
+            button.addEventListener('click', function () { sendGuestText(t(key), 'prompt'); });
             prompts.appendChild(button);
             buttons.push(button);
         });
@@ -3119,8 +3273,11 @@
 
     function isOpen() { return els.root.classList.contains('nc-open'); }
 
-    function open() {
+    function open(source) {
         if (removed || isOpen()) { return; }
+        // Read BEFORE markOpened() retires the flag — this is the one moment it
+        // still says whether the guest had opened the panel earlier this session.
+        var firstOpen = !readFlag('sessionStorage', FLAG_OPENED);
         els.root.classList.add('nc-open');
         els.toggler.setAttribute('aria-expanded', 'true');
         markOpened();
@@ -3130,6 +3287,16 @@
         // finished below the fold. The closed panel is only visibility: hidden and
         // keeps its box in the layout (see .nc-panel), so this measures true.
         syncScrollCue();
+        // AFTER playIntro(), which is where `resumed` is decided. That branch
+        // runs synchronously — startConversation()'s resume path calls its
+        // callback without touching the network — so the value is settled by
+        // here and the event can never claim a branch the guest did not see.
+        emit('open', {
+            source: oneOf(OPEN_SOURCES, source),
+            firstOpen: firstOpen,
+            resumed: resumed,
+            turns: transcript.length
+        });
         // Re-checked at fire time, like every other timer here: the panel can be
         // closed again inside these 320ms (Escape, a second press of the
         // launcher), and focusing the composer of a CLOSING panel is the fourth
@@ -3154,7 +3321,7 @@
         }
     }
 
-    function close() {
+    function close(source) {
         if (removed || !isOpen()) { return; }
         // Never strand keyboard focus on a node about to vanish. The closed panel
         // is visibility: hidden, so anything focused inside it — the ✕ the guest
@@ -3166,9 +3333,15 @@
         els.root.classList.remove('nc-open');
         els.toggler.setAttribute('aria-expanded', 'false');
         closeLanguageMenu();
+        emit('close', {
+            source: oneOf(CLOSE_SOURCES, source),
+            turns: transcript.length
+        });
     }
 
-    function toggle() { isOpen() ? close() : open(); }
+    // The source rides through to whichever half runs — 'toggler' is legal in
+    // both enums, and anything else a caller invents falls back to 'api' there.
+    function toggle(source) { isOpen() ? close(source) : open(source); }
 
     /* --------------------------------------------------------- expanded ----- */
 
@@ -3295,6 +3468,10 @@
         if (readFlag('localStorage', FLAG_TEASER_DISMISSED)) { return; }
         teaserVisible = true;
         writeFlag('sessionStorage', FLAG_TEASER_SHOWN);
+        // Shown and dismissed only. The auto-hide is a timer expiring, not
+        // something the guest did, and counting it would flatter the dismissal
+        // rate with people who simply looked away.
+        emit('teaser', { action: 'shown' });
         // Re-set rather than just unhide: a role="status" region announces
         // changed content far more reliably than un-hidden content.
         els.teaserBody.textContent = t('teaser');
@@ -3322,6 +3499,7 @@
 
     function dismissTeaserForever() {
         writeFlag('localStorage', FLAG_TEASER_DISMISSED);
+        emit('teaser', { action: 'dismissed' });
         hideTeaser();
     }
 
@@ -3364,7 +3542,12 @@
             log('init', status, body);
             lastInitStatus = status;
 
-            if (status === 403) { teardown(); return; }
+            // Before teardown() — see the same branch in sendMessage() for why.
+            if (status === 403) {
+                emit('error', { phase: 'init', status: 403, retrying: false });
+                teardown();
+                return;
+            }
             if (status === 201 && body && body.conversation && body.conversation.uuid) {
                 conversationUuid = body.conversation.uuid;
                 started = true;
@@ -3385,6 +3568,10 @@
                 // Never strand the guest behind a failed init — greet them anyway
                 // and let the first real turn retry.
                 intro.greeting = t('greeting');
+                // Invisible on screen by design (the guest gets a greeting and no
+                // error), which is exactly why it is worth reporting: a site whose
+                // key is wrong looks fine and answers nothing.
+                emit('error', { phase: 'init', status: status, retrying: false });
             }
             for (var i = 0; i < waiters.length; i++) { waiters[i](); }
         });
@@ -3405,7 +3592,7 @@
      * handlers that have no form event and nothing to do with the composer, so
      * it never touches els.input and never preventDefault()s anything.
      */
-    function sendGuestText(text) {
+    function sendGuestText(text, source) {
         if (busy || removed || ended) { return; }
         guestTurned = true;
         removeWelcome();
@@ -3439,6 +3626,16 @@
         // yet — persist() skips, and init's own persist() carries this entry.
         transcript.push({ r: 'guest', t: text, a: null, n: null, at: when });
         persist();
+        // The LENGTH, never the text. This is the seam every guest turn passes
+        // through — composer, prompt pill, chip — so `source` is the only place
+        // that can say whether the widget's own affordances are earning their
+        // space, and it is measurable nowhere else.
+        emit('message', {
+            source: source || 'composer',
+            length: text.length,
+            turns: transcript.length,
+            locale: locale
+        });
         ensureConversation(function () { sendMessage(text, false); });
     }
 
@@ -3451,7 +3648,7 @@
 
         els.input.value = '';
         adjustInputHeight();
-        sendGuestText(text);
+        sendGuestText(text, 'composer');
     }
 
     function sendMessage(text, isRetry) {
@@ -3459,6 +3656,11 @@
             // A failed re-init lands here; a throttled one deserves "try again
             // shortly", not a hard error.
             addBubble('bot', lastInitStatus === 429 ? t('retry') : t('error'));
+            // Status 0 — no HTTP exchange happened on the TURN endpoint. The
+            // init failure that put us here emitted its own {phase:'init'}
+            // event; this one says it cost the guest a turn, which is the part
+            // that matters and is not derivable from the other.
+            emit('error', { phase: 'turn', status: 0, retrying: false });
             return;
         }
 
@@ -3470,6 +3672,10 @@
         busy = true;
         els.send.disabled = true;
         var thinking = showThinking();
+        // How long the guest waits, which nothing else in this widget records.
+        // Measured around the transport, so the mock reports its own fixture
+        // delay rather than pretending to be instant.
+        var sentAt = Date.now();
 
         API.send(conversationUuid, text, function (status, body) {
             if (removed) { return; }
@@ -3521,6 +3727,19 @@
                 // this turn once).
                 replyCount += 1;
                 maybeAutoExpand();
+                // LAST in the branch, after renderActions has run: `ended` is
+                // flipped by the conversation_ended renderer, so measuring it
+                // any earlier would report false on the very turn that capped.
+                var types = actionTypes(body.actions);
+                emit('reply', {
+                    turn: entry.n,
+                    length: entry.t.length,
+                    elements: types,
+                    async: types.indexOf('async_result') !== -1,
+                    resolved: false,
+                    ended: ended,
+                    latencyMs: Date.now() - sentAt
+                });
                 return;
             }
 
@@ -3542,14 +3761,34 @@
                 for (var ti = 0; ti < transcript.length; ti++) { transcript[ti].n = null; }
                 conversationUuid = null;
                 started = false;
+                // NOT a guest-visible failure — this path is normal and the
+                // guest sees one reply either way. Worth reporting anyway, and
+                // `retrying` is what says so: a SPIKE here means guests are
+                // coming back past the idle window, which is the signal that the
+                // server extended its window and IDLE_MS did not follow.
+                emit('error', { phase: 'turn', status: status, retrying: true });
                 startConversation(function () { sendMessage(text, true); });
                 return;   // the retry's own callback drains the queue
             }
 
-            if (status === 403) { teardown(); return; }
-            if (status === 429) { addBubble('bot', t('retry')); drainSend(); return; }
+            // BEFORE teardown(), which sets `removed` and makes emit() a no-op.
+            // A 403 is the one error a host most needs to see — a revoked key or
+            // an unregistered origin (guide §7) takes the widget off their page
+            // silently, and this event is the only trace on the client.
+            if (status === 403) {
+                emit('error', { phase: 'turn', status: 403, retrying: false });
+                teardown();
+                return;
+            }
+            if (status === 429) {
+                addBubble('bot', t('retry'));
+                emit('error', { phase: 'turn', status: 429, retrying: false });
+                drainSend();
+                return;
+            }
 
             addBubble('bot', t('error'));
+            emit('error', { phase: 'turn', status: status, retrying: false });
             drainSend();
         });
     }
@@ -3608,6 +3847,7 @@
         els.input.disabled = true;
         els.send.disabled = true;
         afterRender();
+        emit('ended', { turns: transcript.length });
     }
 
     /**
@@ -3620,6 +3860,9 @@
      */
     function restartConversation() {
         if (removed) { return; }
+        // BEFORE the wipe below, while transcript.length still says how much
+        // conversation the guest was carrying when they chose to start over.
+        emit('restart', { turns: transcript.length });
         clearStore();
         conversationUuid = null;
         started = false;
@@ -3716,6 +3959,10 @@
             if (removed || epoch !== chatEpoch) { return; }
             if ((Date.now() - startedAt) >= POLL_GIVE_UP_MS) {
                 addBubble('bot', t('timeout'));
+                // Status 0: nothing failed on the wire, we stopped asking. The
+                // interim reply and its fallback links are still on screen, so
+                // this is a delay the guest noticed, never a dead end.
+                emit('error', { phase: 'poll', status: 0, retrying: false });
                 return;
             }
             setTimeout(tick, delay);
@@ -3729,8 +3976,20 @@
                 // restarted, and this callback is the last gate before the DOM.
                 if (removed || epoch !== chatEpoch) { return; }
                 log('poll', status, body);
-                if (status === 403) { teardown(); return; }
-                if (status === 410) { return; }
+                if (status === 403) {
+                    emit('error', { phase: 'poll', status: 403, retrying: false });
+                    teardown();
+                    return;
+                }
+                // Stops the poll and nothing more (guide §5.1) — the interim
+                // reply stays and nothing re-inits. The transient statuses
+                // (pending / 404 / 429 / network) fall through to schedule() and
+                // emit NOTHING: they are the backoff working, not a failure, and
+                // reporting each one would drown the real errors.
+                if (status === 410) {
+                    emit('error', { phase: 'poll', status: 410, retrying: false });
+                    return;
+                }
 
                 if (status === 200 && body && (body.status === 'ready' || body.status === 'failed')) {
                     // Replace the interim bubble in place — the server overwrote
@@ -3755,6 +4014,21 @@
                         if (typeof body.turn === 'number' && isFinite(body.turn)) { final.n = body.turn; }
                         persist();
                     }
+                    // The SECOND 'reply' for this turn, and deliberately so: the
+                    // guest genuinely saw two answers land. `resolved` is what
+                    // separates them — a host counting replies filters on it, and
+                    // one counting async wait times reads latencyMs from here,
+                    // which is the gated-booking number worth having. Measured
+                    // from the poll's start (the interim), not the guest's send.
+                    emit('reply', {
+                        turn: (final && final.n) || (typeof body.turn === 'number' ? body.turn : null),
+                        length: (body.reply || '').length,
+                        elements: actionTypes(body.actions),
+                        async: true,
+                        resolved: true,
+                        ended: ended,
+                        latencyMs: Date.now() - startedAt
+                    });
                     return;
                 }
 
@@ -3836,6 +4110,7 @@
      */
     function setLocale(code) {
         if (SUPPORTED.indexOf(code) === -1 || code === locale) { return; }
+        var from = locale;
         locale = code;
 
         // NOT document.documentElement.lang — the host page's language is theirs,
@@ -3902,20 +4177,60 @@
         SUPPORTED.forEach(function (code2) {
             els.optionButtons[code2].classList.toggle('nc-hidden', code2 === locale);
         });
+
+        // Only ever a real change — the guard at the top already returned for an
+        // unsupported code or a re-selection of the current one, so a host
+        // counting these is counting switches, not clicks.
+        emit('locale', { from: from, to: locale });
     }
 
     /* ============================================================= boot ===== */
 
     function wire() {
-        els.toggler.addEventListener('click', toggle);
-        els.close.addEventListener('click', close);
+        // WRAPPED, not passed by reference. addEventListener hands its handler a
+        // MouseEvent as the first argument, and these three now take a `source`
+        // string — pass the function bare and every open/close event reports its
+        // source as a MouseEvent object, silently, while everything on screen
+        // keeps working. oneOf() is the second half of that defence.
+        els.toggler.addEventListener('click', function () { toggle('toggler'); });
+        els.close.addEventListener('click', function () { close('close'); });
         // Hidden by CSS below 1024px, so this can never fire there.
         els.expand.addEventListener('click', function () {
             isExpanded() ? shrinkPanel(true) : expandPanel();
         });
-        els.teaserBody.addEventListener('click', open);
+        els.teaserBody.addEventListener('click', function () { open('teaser'); });
         els.teaserClose.addEventListener('click', dismissTeaserForever);
         els.form.addEventListener('submit', submit);
+
+        /*
+         * THE CONVERSION EVENT. One delegated listener rather than a closure per
+         * anchor: a replayed 40-turn transcript can carry dozens of CTAs, and
+         * they are re-created on every replay. Every tagged anchor lives inside
+         * els.body, so this covers link_button / booking_link / availability /
+         * property_card / promo_card and any element type that tags one later.
+         *
+         * Inside #nest-chatbot, so teardown()'s two-listener claim is untouched.
+         *
+         * Fires on the click, never on a navigation outcome — a blocked popup or
+         * a guest who backs out still counts as intent, which is what a CTA
+         * measures. `.closest` guarded exactly as the langOptions listener does.
+         */
+        els.body.addEventListener('click', function (e) {
+            var node = e.target && e.target.closest ? e.target.closest('[data-wchat-el]') : null;
+            if (!node) { return; }
+            var index = node.getAttribute('data-wchat-index');
+            emit('action', {
+                element: node.getAttribute('data-wchat-el'),
+                channel: node.getAttribute('data-wchat-channel') || null,
+                style: node.getAttribute('data-wchat-style') || null,
+                index: index === null ? null : Number(index),
+                // Present for http(s) CTAs and deliberately absent for contact
+                // channels, whose href IS the property's phone number or email
+                // (see channelLink) — the tag is set there without a url and
+                // this reads what the node actually carries.
+                url: node.getAttribute('data-wchat-channel') ? null : node.getAttribute('href')
+            });
+        });
 
         els.cue.addEventListener('click', function () {
             // Arming the follow is the whole point of the press mid-reply: without
@@ -3981,7 +4296,7 @@
 
     function onDocumentKeydown(e) {
         if (e.key !== 'Escape') { return; }
-        if (isOpen()) { close(); els.toggler.focus(); return; }
+        if (isOpen()) { close('escape'); els.toggler.focus(); return; }
         // Esc on the teaser means "not now", never "not ever": it hides the nudge
         // for this moment and writes no flag. Dismissing it for good stays the ✕
         // on the teaser itself — a deliberate act, not a reflex keystroke.
@@ -3993,14 +4308,22 @@
         build();
         wire();
 
+        // WRAPPED for the same reason wire() wraps its listeners: a host is free
+        // to write `btn.addEventListener('click', NestChatbot.open)`, which would
+        // hand `source` a MouseEvent. Exposing the wrapper means the ordinary
+        // case reports 'api' instead of relying on oneOf() to catch it.
         window.NestChatbot = {
             version: VERSION,
-            open: open,
-            close: close,
-            toggle: toggle,
+            open: function () { open('api'); },
+            close: function () { close('api'); },
+            toggle: function () { toggle('api'); },
             destroy: teardown,
             setLocale: setLocale,
-            get locale() { return locale; }
+            get locale() { return locale; },
+            // The events' picture, readable at any time — for a host whose
+            // analytics booted after 'wchat:ready' fired, and for poking the
+            // whole surface from the console.
+            get state() { return snapshot(); }
         };
 
         // Before the auto-open check, so an auto-opened panel is already the right
@@ -4014,7 +4337,35 @@
         // truth, free to disagree with the stylesheet.
         if (readFlag('localStorage', FLAG_EXPANDED)) { expandPanel(); }
 
-        if (cfg.autoOpen) { open(); }
+        /*
+         * THE RETURNING-GUEST SIGNAL, and the widget's denominator.
+         *
+         * Its own readStore(), because playIntro()'s is reached only when the
+         * panel OPENS — a returning guest who never opens it would otherwise be
+         * invisible, and "how many arrivals are returning" is the question that
+         * started all of this. `resumed` answers the narrower one, from the
+         * branch playIntro() actually takes.
+         *
+         * Emitted SYNCHRONOUSLY and before the auto-open check, not deferred to
+         * a task: data-auto-open calls open() on this very tick, so a deferred
+         * 'ready' would arrive AFTER its own 'open' and a host reading the stream
+         * in order would see the widget open before it existed. The cost is that
+         * a host <script> placed after ours misses the event — which is what
+         * NestChatbot.state is for, and what any async-loaded tag (GTM, GA4)
+         * would need anyway.
+         */
+        var stored = readStore();
+        returning = !!stored;
+        emit('ready', {
+            version: VERSION,
+            locale: locale,
+            mock: USE_MOCK,
+            returning: returning,
+            storedTurns: (stored && stored.turns) ? stored.turns.length : 0,
+            expanded: isExpanded()
+        });
+
+        if (cfg.autoOpen) { open('auto'); }
         // After the auto-open check: an auto-opened session has already written
         // the opened flag, so the teaser timer never arms.
         scheduleTeaser();

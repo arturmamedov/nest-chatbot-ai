@@ -172,6 +172,24 @@
             data-property="Las Eras Nest Hostel"
             data-debug="true"
             defer></script>
+
+    <!-- What a host page's analytics wiring actually looks like: ONE listener on
+         the umbrella event, which also receives any event a later release adds.
+         Here it logs; on a real site the same three lines push to dataLayer.
+         It catches 'wchat:ready' despite sitting BELOW the widget's tag, and the
+         reason is worth knowing: that tag is `defer`, so it executes after the
+         parser finishes, while this ordinary inline script runs during parsing.
+         Only an async-loaded tag (GTM, a third-party snippet) can miss ready —
+         which is what NestChatbot.state is for. Try both in the console:
+             NestChatbot.state
+             wchatLog                                   -->
+    <script>
+        window.wchatLog = [];
+        document.addEventListener('wchat', function (e) {
+            window.wchatLog.push(e.detail);
+            console.log('[wchat] ' + e.detail.name, e.detail);
+        });
+    </script>
     <!-- ===================================================================== -->
 </body>
 
