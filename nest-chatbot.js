@@ -20,9 +20,9 @@
  *   Element-supplied urls are honoured for http(s) only; tel:/mailto:/wa.me hrefs
  *   are constructed here from channel values, never taken verbatim.
  *
- * Built against response contract 1.6.1 (BUILT_AGAINST, api section), in
- * lockstep with the packet vendored in docs/wsuite/ — release 2.5.0 is the sync
- * that reconciled the two. BUILT_AGAINST records what this code implements, not
+ * Built against response contract 1.6.2 (BUILT_AGAINST, api section), in
+ * lockstep with the packet vendored in docs/wsuite/ — release 2.9.0 is the sync
+ * that adopted it. BUILT_AGAINST records what this code implements, not
  * what the docs say. The server reports its live contract_version at init; the
  * widget warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.8.2';
+    var VERSION = '2.9.0';
 
     /* =========================================================== config ===== */
 
@@ -715,7 +715,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.6.1';
+    var BUILT_AGAINST = '1.6.2';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -926,7 +926,7 @@
                     // temporarily setting this to actions: [] (CLAUDE.md says so
                     // too).
                     actions: [promptChips(), islandChips()],
-                    contract_version: '1.6.1'
+                    contract_version: '1.6.2'
                 }, 700);
             },
 
@@ -2106,11 +2106,20 @@
         // card that WILL render in THIS list, collected before any element renders
         // so a link_button that precedes its card is still suppressed. Local to one
         // actions[] on purpose — the cross-turn case belongs to `rendered`.
-        // CARD_MAX is deliberately NOT applied here: the only payload where the
-        // dedupe can fire is the resolved-property turn, whose card set is always
-        // exactly one (an island carousel never carries a matching link_button),
-        // so the pre-scan and the rendered rail cannot diverge — and the
-        // reference builds its set the same uncapped way.
+        // CARD_MAX is deliberately NOT applied here. Until 1.6.2 the argument was
+        // that the only payload where the dedupe can fire is the resolved-property
+        // turn, whose card set was ALWAYS exactly one, so pre-scan and rendered
+        // rail could not diverge. D-047 ended that: a turn naming several hostels
+        // now emits one card each, so a named-property set can exceed one.
+        //
+        // Still uncapped, but the reason is now a bound rather than an
+        // impossibility — divergence needs a payload carrying MORE THAN CARD_MAX
+        // cards AND a link_button matching one past the cap, i.e. a guest naming
+        // nine hostels in a single message. The other multi-card shape, the island
+        // carousel, never carries a matching link_button at all. Worth re-reading
+        // if a future contract widens what can emit a rail: the day a payload can
+        // hold more than eight cards with a matching button, capping this scan is
+        // the fix. The reference builds its set the same uncapped way.
         // Object.create(null): payload urls must never collide with
         // Object.prototype ('constructor' as a url key would phantom-match).
         var cardUrls = Object.create(null);

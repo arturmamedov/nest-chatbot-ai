@@ -51,7 +51,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.6.1';
+    var BUILT_AGAINST = '1.6.2';
 
     // ---- state ---------------------------------------------------------------
     var conversationUuid = null;
@@ -61,9 +61,26 @@
     var contractWarned = false; // contract-drift warning emitted once (O-40)
     var chipRows = [];     // live quick_replies rows — retired on any send (1.6.0)
     var ended = false;     // conversation_ended received — composer closed (1.6.0)
+    // The welcome the server sent when THIS conversation began. Held in state
+    // because the resume path below never reaches the server and has nowhere
+    // else to get it from — see readStore().
+    var introGreeting = null;
+    var introActions = null;
     var els = {};
 
     // ---- localStorage helpers -----------------------------------------------
+    // Hands back the OBJECT, never a bare uuid. A guest returning inside the idle
+    // window resumes without ever calling the init endpoint, so the greeting and
+    // the site's welcome elements — its configured quick_prompts, its show_at_init
+    // promo — have nowhere else to come from; before this they were simply lost for
+    // the rest of the window, and the panel came back empty. Replaying a stored
+    // payload is safe for the same reason replaying one off the wire is: it goes
+    // back through the same renderers, and those treat every payload string as
+    // untrusted already (textContent, safeHttpUrl, never innerHTML).
+    //
+    // Accepted cost: the welcome can be up to IDLE_MS stale. These are site
+    // settings rather than conversation state, so the worst case is a returning
+    // guest reading yesterday's promo copy until the conversation expires.
     function readStore() {
         try {
             var raw = window.localStorage.getItem(STORE_KEY);
@@ -71,16 +88,30 @@
             var parsed = JSON.parse(raw);
             if (!parsed || !parsed.uuid || !parsed.ts) { return null; }
             if ((Date.now() - parsed.ts) > IDLE_MS) { return null; }
-            return parsed.uuid;
+            // Anything malformed degrades to "no welcome", never throws, and above
+            // all never costs the guest the conversation the record also holds.
+            return {
+                uuid: parsed.uuid,
+                greeting: typeof parsed.greeting === 'string' ? parsed.greeting : null,
+                actions: (Array.isArray(parsed.actions) && parsed.actions.length) ? parsed.actions : null
+            };
         } catch (e) { return null; }
     }
 
+    // `ts` means LAST ACTIVITY, which is what the server's conversation.idle_hours
+    // measures (O-9). Written once at init it would expire a still-active chat
+    // client-side at hour 25 under a conversation the server considers live, so
+    // every turn re-stamps it.
     function writeStore(uuid) {
-        try { window.localStorage.setItem(STORE_KEY, JSON.stringify({ uuid: uuid, ts: Date.now() })); } catch (e) { }
+        try {
+            window.localStorage.setItem(STORE_KEY, JSON.stringify({
+                uuid: uuid, ts: Date.now(), greeting: introGreeting, actions: introActions
+            }));
+        } catch (e) {}
     }
 
     function clearStore() {
-        try { window.localStorage.removeItem(STORE_KEY); } catch (e) { }
+        try { window.localStorage.removeItem(STORE_KEY); } catch (e) {}
     }
 
     // ---- contract-version drift check (O-40) ---------------------------------
@@ -607,7 +638,22 @@
     function ensureConversation(cb) {
         if (started && conversationUuid) { cb(); return; }
         var stored = readStore();
-        if (stored) { conversationUuid = stored; started = true; cb(); return; }
+        if (stored) {
+            conversationUuid = stored.uuid;
+            started = true;
+            introGreeting = stored.greeting;
+            introActions = stored.actions;
+            // Paint the welcome only onto an empty transcript. This branch is
+            // reached from panel-open, but submit() draws the guest bubble BEFORE
+            // it calls us, and a welcome block under a message the guest has
+            // already sent is not a first-contact affordance any more.
+            if (!els.body.firstChild) {
+                if (introGreeting) { addBubble('bot', introGreeting); }
+                renderActions(introActions);
+            }
+            cb();
+            return;
+        }
         startConversation(cb);
     }
 
@@ -627,11 +673,18 @@
 
             conversationUuid = data.conversation.uuid;
             started = true;
+            // Settled BEFORE writeStore, which serializes them: the resume branch is
+            // the only other reader and it needs the same values this load renders.
+            // Stored even when `silent` — the guest is not shown them now, but the
+            // replacement conversation is theirs for the next 24h and its next page
+            // load should open with its welcome, not with nothing.
+            introGreeting = data.greeting || null;
+            introActions = (data.actions && data.actions.length) ? data.actions : null;
             writeStore(conversationUuid);
             checkContractVersion(data.contract_version);
             if (!silent) {
-                if (data.greeting) { addBubble('bot', data.greeting); }
-                renderActions(data.actions); // init actions since 1.5.0 (quick prompts / promo); absent on older servers
+                if (introGreeting) { addBubble('bot', introGreeting); }
+                renderActions(introActions); // init actions since 1.5.0 (quick prompts / promo); absent on older servers
             }
             cb();
         });
@@ -690,6 +743,7 @@
                 if (typing.parentNode) { typing.parentNode.removeChild(typing); }
 
                 if (status === 200 && data) {
+                    writeStore(conversationUuid);   // re-stamp ts — see writeStore()
                     var botBubble = data.reply ? addBubble('bot', data.reply) : null;
                     // Per-turn url set: an async turn's poll actions[] is additive to
                     // what we draw now, so it needs to know what is already on screen.

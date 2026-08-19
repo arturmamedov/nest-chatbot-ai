@@ -1,11 +1,11 @@
 # wChatbot — Message response contract
 
-|              |                                                                                                                                                                                  |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Version**  | 1.6.1 (see [Versioning](#versioning) · [Changelog](#changelog))                                                                                                                  |
-| **Date**     | 2026-07-31                                                                                                                                                                       |
-| **Status**   | Frozen envelope — the shared artifact the in-repo preview widget and the external `nest-chatbot-ai` widget build against. Governed by `docs/decisions.md` (D-020, D-029, D-036). |
-| **Endpoint** | `POST /api/v1/chatbot/conversations/{uuid}/messages` (route `chatbot.v1.conversations.messages.store`)                                                                           |
+| | |
+|---|---|
+| **Version** | 1.6.2 (see [Versioning](#versioning) · [Changelog](#changelog)) |
+| **Date** | 2026-08-07 |
+| **Status** | Frozen envelope — the shared artifact the in-repo preview widget and the external `nest-chatbot-ai` widget build against. Governed by `docs/decisions.md` (D-020, D-029, D-036). |
+| **Endpoint** | `POST /api/v1/chatbot/conversations/{uuid}/messages` (route `chatbot.v1.conversations.messages.store`) |
 
 This is the response shape of a single guest turn. Element **content is deterministic — code-emitted from the DB catalog or tenant-authored site settings, never chosen by the LLM** — so link/contact correctness is independent of the LLM provider (Mistral-switchable by construction). The conversation-start endpoint (`POST /api/v1/chatbot/conversations` → `{conversation:{uuid}, greeting, actions?, contract_version}`) is unaffected by this envelope; it additionally echoes the current `contract_version` (below) so a consumer can detect it is behind. **Since 1.5.0** the init response also carries an optional **`actions`** array of the same element vocabulary (greeting-time quick prompts and, when configured, the promo card) — the server always emits it (`[]` when unconfigured), older servers omit it, and a consumer that never reads it loses nothing. **What can appear there:** content elements only — `promo_card` and `quick_replies` today. `async_result` and `availability` are turn-scoped by construction (both are tied to a turn number), so an init response will not carry them; keep ignoring unknown types rather than hard-coding that list.
 
@@ -13,11 +13,11 @@ This is the response shape of a single guest turn. Element **content is determin
 
 The contract is versioned **`MAJOR.MINOR.PATCH`** (semver):
 
-- **MINOR** — an **additive** element or field (the common case). By the [extension rule](#extension-rule-the-dry-seam) + "ignore unknown types", adding an element or an optional field is **backwards-compatible**: an existing consumer keeps working untouched, so this is never a breaking change. **This also covers an additive optional _request_ field** (e.g. `locale` on the turn endpoint in 1.3.0): a consumer tracks **one** version number for the whole guest API surface, so a new opt-in request field it may want to send bumps the same number. It is likewise backwards-compatible — omitting the field keeps the previous behavior exactly.
+- **MINOR** — an **additive** element or field (the common case). By the [extension rule](#extension-rule-the-dry-seam) + "ignore unknown types", adding an element or an optional field is **backwards-compatible**: an existing consumer keeps working untouched, so this is never a breaking change. **This also covers an additive optional *request* field** (e.g. `locale` on the turn endpoint in 1.3.0): a consumer tracks **one** version number for the whole guest API surface, so a new opt-in request field it may want to send bumps the same number. It is likewise backwards-compatible — omitting the field keeps the previous behavior exactly.
 - **MAJOR** — an **envelope** change (a rename/removal/retype of `reply` / `actions` / `turn`, or a change to how elements are discriminated). This should never happen; the envelope is frozen.
 - **PATCH** — a wording/clarification fix with no wire effect.
 
-**Breaking-change guarantee.** **MINOR and PATCH are never breaking** — a consumer that changes nothing keeps working, by the [extension rule](#extension-rule-the-dry-seam) + "ignore unknown types". **Only MAJOR can break a consumer**, and the envelope is frozen, so it should never be issued. Treat a MINOR bump as _features you may adopt_, never as a migration you must perform. Every [Changelog](#changelog) row states this per version in its **Breaking** column.
+**Breaking-change guarantee.** **MINOR and PATCH are never breaking** — a consumer that changes nothing keeps working, by the [extension rule](#extension-rule-the-dry-seam) + "ignore unknown types". **Only MAJOR can break a consumer**, and the envelope is frozen, so it should never be issued. Treat a MINOR bump as *features you may adopt*, never as a migration you must perform. Every [Changelog](#changelog) row states this per version in its **Breaking** column.
 
 The version is emitted at runtime as `contract_version` on the **init** response (`POST /api/v1/chatbot/conversations`) and mirrored by the `Wsuite\Chatbot\Responses\ResponseContract::VERSION` constant (the single source of truth in code). A consumer records the version it was built against and **warns — never hard-fails — when the server reports a higher one** (forward-compat still holds). Every version bump gets a [Changelog](#changelog) row.
 
@@ -29,27 +29,18 @@ A turn always returns HTTP `200` (the orchestrator degrades provider/budget fail
 {
   "reply": "You have free wifi and a daily breakfast. Ready to book?",
   "actions": [
-    {
-      "type": "link_button",
-      "label": "Book now",
-      "url": "https://book.example/las-eras",
-      "style": "primary"
-    },
-    {
-      "type": "link_button",
-      "label": "Visit our website",
-      "url": "https://laseras.example"
-    }
+    { "type": "link_button", "label": "Book now", "url": "https://book.example/las-eras", "style": "primary" },
+    { "type": "link_button", "label": "Visit our website", "url": "https://laseras.example" }
   ],
   "turn": 3
 }
 ```
 
-| Field     | Type     | Notes                                                                                                                                                                                                                           |
-| --------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `reply`   | `string` | The guest-facing reply text, in the guest's language. **No server-side maximum length** (it is model prose, bounded only by the provider) and it **may contain `\n`** — render with `white-space: pre-wrap`, never collapse it. |
-| `actions` | `array`  | Ordered list of typed **elements** (below). **Always an array — empty `[]`, never `null`.** Render in order.                                                                                                                    |
-| `turn`    | `int`    | The 1-based turn number of this exchange. _(One exception: the turn-cap reply repeats the last completed exchange's number — see [`conversation_ended`](#conversation_ended--this-conversation-accepts-no-further-turns).)_     |
+| Field | Type | Notes |
+|---|---|---|
+| `reply` | `string` | The guest-facing reply text, in the guest's language. **No server-side maximum length** (it is model prose, bounded only by the provider) and it **may contain `\n`** — render with `white-space: pre-wrap`, never collapse it. |
+| `actions` | `array` | Ordered list of typed **elements** (below). **Always an array — empty `[]`, never `null`.** Render in order. |
+| `turn` | `int` | The 1-based turn number of this exchange. *(One exception: the turn-cap reply repeats the last completed exchange's number — see [`conversation_ended`](#conversation_ended--this-conversation-accepts-no-further-turns).)* |
 
 These three keys are the **whole** top-level surface and always will be — additive growth happens
 inside `actions[]` via the [extension rule](#extension-rule-the-dry-seam), never here.
@@ -59,7 +50,7 @@ Each element is an object with a discriminating **`type`** key. Optional fields 
 ### Element conventions (all types)
 
 **`id` — optional element identity (since 1.6.0).** Any element may carry an `id`: a short opaque
-string naming _what this element is_, never displayed. It is **stable across turns and
+string naming *what this element is*, never displayed. It is **stable across turns and
 conversations**, so a consumer can recognise that the block it is about to render is one it has
 rendered before — which is what any client-side frequency capping needs. It is **not** a nonce and
 **not** unique per occurrence. Today the server emits `id` on [`promo_card`](#promo_card--a-tenant-authored-promotional-block)
@@ -88,102 +79,69 @@ contract fixes the order and the grouping, not your layout.
 ## Element types
 
 ### `link_button` — a generic call-to-action link
-
 Emitted deterministically by the information path for a resolved property (a Book button for `booking_url`, a hostel-page button for `website`, and a Get-directions button for `map_url` — D-042(c)), deduped by URL.
 
 ```json
-{
-  "type": "link_button",
-  "label": "Book now",
-  "url": "https://…",
-  "style": "primary"
-}
+{ "type": "link_button", "label": "Book now", "url": "https://…", "style": "primary" }
 ```
 
-| Field   | Type     | Required | Notes                                                                                                                                                 |
-| ------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `label` | `string` | yes      | Display text. Localized server-side to the guest language.                                                                                            |
-| `url`   | `string` | yes      | Authoritative catalog URL (`booking_url` / `website`). Consumers **must** render it as a safe anchor and **must** accept only `http`/`https` schemes. |
-| `style` | `string` | no       | Presentation hint (`primary`). The renderer may honour or ignore it.                                                                                  |
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `label` | `string` | yes | Display text. Localized server-side to the guest language. |
+| `url` | `string` | yes | Authoritative catalog URL (`booking_url` / `website`). Consumers **must** render it as a safe anchor and **must** accept only `http`/`https` schemes. |
+| `style` | `string` | no | Presentation hint (`primary`). The renderer may honour or ignore it. |
 
 ### `contact_channels` — the property's contact channels
-
 Emitted by a human-handoff turn (normalizes the former `handoff_ack`). Each present channel becomes a native link.
 
 ```json
-{
-  "type": "contact_channels",
-  "phone": "+34123456789",
-  "whatsapp": "+34600111222",
-  "email": "hola@laseras.example"
-}
+{ "type": "contact_channels", "phone": "+34123456789", "whatsapp": "+34600111222", "email": "hola@laseras.example" }
 ```
 
-| Field      | Type     | Required | Notes                                 |
-| ---------- | -------- | -------- | ------------------------------------- |
-| `phone`    | `string` | no       | Rendered as `tel:` (digits only).     |
-| `whatsapp` | `string` | no       | Rendered as `https://wa.me/<digits>`. |
-| `email`    | `string` | no       | Rendered as `mailto:`.                |
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `phone` | `string` | no | Rendered as `tel:` (digits only). |
+| `whatsapp` | `string` | no | Rendered as `https://wa.me/<digits>`. |
+| `email` | `string` | no | Rendered as `mailto:`. |
 
 At least one channel is present when the element is emitted; all three are individually optional.
 
 ### `booking_link` — the booking deep-link (MVP fallback)
-
 Emitted by a booking turn at `Ready` when no PMS availability provider is bound (D-018/D-010). Rendered like a `link_button` ("Book now").
 
 ```json
-{
-  "type": "booking_link",
-  "url": "https://book.example/las-eras",
-  "summary": {
-    "property": "Las Eras Nest Hostel",
-    "check_in": "2026-08-01",
-    "check_out": "2026-08-05",
-    "adults": 2
-  }
-}
+{ "type": "booking_link", "url": "https://book.example/las-eras", "summary": { "property": "Las Eras Nest Hostel", "check_in": "2026-08-01", "check_out": "2026-08-05", "adults": 2 } }
 ```
 
-| Field     | Type     | Required | Notes                                                                                              |
-| --------- | -------- | -------- | -------------------------------------------------------------------------------------------------- |
-| `url`     | `string` | yes      | The property's authoritative `booking_url`. Same `http`/`https`-only anchor rule as `link_button`. |
-| `summary` | `object` | no       | The collected stay (`property`, `check_in`, `check_out`, `adults`) for optional display.           |
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `url` | `string` | yes | The property's authoritative `booking_url`. Same `http`/`https`-only anchor rule as `link_button`. |
+| `summary` | `object` | no | The collected stay (`property`, `check_in`, `check_out`, `adults`) for optional display. |
 
 ### `availability` — live availability
-
 Emitted for a bound PMS `AvailabilityProvider` (`Wsuite\Contracts\Availability\AvailabilityProvider`) on a **completed async tool turn** (D-037(g)): when the gated turn's queued job runs the `CheckAvailability` pilot tool and it returns a result, the job attaches one `availability` element to the poll response's `actions[]` — built from the tool's captured typed result, never parsed from the model's reply text. **Nothing binds the provider at MVP (D-036(k))**, so it stays dormant until a PMS connector binds one; when a check fails (`TOOL_ERROR`) no element is emitted and the reply carries the booking link + channels instead. The widget renders its `url` as a booking button.
 
 ```json
-{
-  "type": "availability",
-  "available": true,
-  "options": [{ "room": "Mixed dorm", "price": "25", "currency": "EUR" }],
-  "url": "https://…",
-  "summary": { "…": "…" }
-}
+{ "type": "availability", "available": true, "options": [ { "room": "Mixed dorm", "price": "25", "currency": "EUR" } ], "url": "https://…", "summary": { "…": "…" } }
 ```
 
-| Field       | Type     | Required | Notes                                                      |
-| ----------- | -------- | -------- | ---------------------------------------------------------- |
-| `available` | `bool`   | yes      | Present even when `false`.                                 |
-| `options`   | `array`  | yes      | List of room options (may be empty).                       |
-| `url`       | `string` | no       | Deep-link (falls back to `booking_url`). Same anchor rule. |
-| `summary`   | `object` | no       | The collected stay.                                        |
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `available` | `bool` | yes | Present even when `false`. |
+| `options` | `array` | yes | List of room options (may be empty). |
+| `url` | `string` | no | Deep-link (falls back to `booking_url`). Same anchor rule. |
+| `summary` | `object` | no | The collected stay. |
 
 ### `async_result` — this turn's final reply is being generated asynchronously
-
 Emitted by a **gated booking tool turn** (D-037(f)): a deterministic code gate (never the LLM's choice) hands the tools-capable respond call to a queued job, so the POST returns immediately with a localized **interim** `reply` (written to read as a complete standalone answer), the deterministic `booking_link`/`contact_channels` fallbacks, **and** this element. A consumer that does not recognise `async_result` simply ignores it and keeps the interim reply + fallbacks — fully functional, no polling. A poll-aware consumer fetches `url` until the final reply is ready.
 
 ```json
-{
-  "type": "async_result",
-  "url": "/api/v1/chatbot/conversations/{uuid}/turns/{turn}"
-}
+{ "type": "async_result", "url": "/api/v1/chatbot/conversations/{uuid}/turns/{turn}" }
 ```
 
-| Field | Type     | Required | Notes                                                                                                                                                                                                                                                                                                                    |
-| ----- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `url` | `string` | yes      | The turn-result poll path, **RELATIVE to the API origin** (always begins with `/`). Consumers **must** resolve it against the same origin they POST to and **must** reject a non-relative value — this structurally keeps the Bearer key on the widget's own origin and sidesteps `APP_URL`/proxy/CDN origin mismatches. |
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `url` | `string` | yes | The turn-result poll path, **RELATIVE to the API origin** (always begins with `/`). Consumers **must** resolve it against the same origin they POST to and **must** reject a non-relative value — this structurally keeps the Bearer key on the widget's own origin and sidesteps `APP_URL`/proxy/CDN origin mismatches. |
 
 **Poll endpoint** — `GET /api/v1/chatbot/conversations/{uuid}/turns/{turn}` (route `chatbot.v1.conversations.turns.show`, public-key scope, its own lighter `throttle:chatbot-poll`). Same auth header as the message POST. Content responses are always `200`:
 
@@ -200,11 +158,11 @@ Recommended cadence: poll ~2s → 5s backoff, give up ≈120s (survives one rate
 
 - **`404` is transient here**, terminal on the message endpoint. Keep backing off exactly as for
   `pending` and stop only at your give-up deadline: you cannot distinguish a permanently unknown
-  turn from a row not yet visible to _this_ request (replica lag, a request that raced the write),
+  turn from a row not yet visible to *this* request (replica lag, a request that raced the write),
   and re-initing throws away a live conversation plus an answer still being generated.
 - **`410` stops the poll and nothing more.** Keep the interim reply and its fallbacks — they are a
   complete answer — and **do not re-init from a poll**: the conversation that owns this turn is gone,
-  so its result is no longer worth fetching, and the guest's _next_ message gets its own `410` on
+  so its result is no longer worth fetching, and the guest's *next* message gets its own `410` on
   the message endpoint and re-inits there. Re-initing from the poll would open a conversation the
   guest has not spoken in yet.
 
@@ -212,68 +170,55 @@ See `integration-guide.md` §5.1, which states the message-endpoint side of both
 
 **The poll's `actions[]` is additive to what the turn already rendered**, not a replacement: the
 interim POST's own elements (the deterministic `booking_link` + `contact_channels` fallbacks) stay
-on screen, and only the bubble _text_ is replaced. So a consumer **SHOULD** suppress a final element
+on screen, and only the bubble *text* is replaced. So a consumer **SHOULD** suppress a final element
 whose `url` it already rendered for that turn. Today exactly one case can arise: an
 [`availability`](#availability--live-availability) whose `url` falls back to the property's
 `booking_url` duplicates the interim `booking_link`. It is dormant until a PMS provider binds
 (D-036(k)), which is why it has not been visible.
 
 ### `property_cards` — a carousel of catalog property cards
+Emitted deterministically by the information path (D-043(a)). Every item field comes straight from the tenant's `properties` catalog row (D-020, never RAG, never LLM-composed); a property without a `booking_url` yields no card (the CTA is mandatory).
 
-Emitted deterministically by the information path (D-043(a)): one card for the resolved property, or — when the guest asks by island/area and the island validates against the catalog — one card per matching active property. Every item field comes straight from the tenant's `properties` catalog row (D-020, never RAG, never LLM-composed); a property without a `booking_url` yields no card (the CTA is mandatory).
+**When it is emitted (revised in 1.6.2 — D-047).** A card asserts *this turn is about this hostel*, so the turn must carry a this-turn signal for it. In precedence order:
+
+1. **By island/area** — the guest asked by area and the island validates against the catalog: one card per matching active property.
+2. **Several hostels named** — the guest's own message names more than one catalog property: one card each, in the order the server ranked them. **This is new in 1.6.2**: before, such a turn collapsed to a single arbitrary card.
+3. **One hostel named or referred to** — including a widget conversation seeded with `data-property`, which cards its hostel **once** per conversation: the single card, exactly as before.
+4. **Otherwise, no card.** In particular, a property the server merely *remembers* from an earlier turn no longer produces one. Before 1.6.2 it did, so a guest who mentioned one hostel on turn 4 kept seeing its card under unrelated answers for the rest of the conversation.
+
+A renderer needs no change for any of this — it is strictly *when* the element appears, never its shape.
 
 ```json
-{
-  "type": "property_cards",
-  "items": [
-    {
-      "key": "duque",
-      "name": "Duque Nest",
-      "location": "Costa Adeje, Tenerife",
-      "image": "https://…/duque.jpg",
-      "price_from": {
-        "amount": "25.00",
-        "currency": "EUR",
-        "period": "night",
-        "basis": "per_person"
-      },
-      "badge": "Nest Pass",
-      "cta_label": "Book now",
-      "url": "https://book.example/duque"
-    }
-  ],
-  "total": 14,
-  "more": { "label": "See all our properties", "url": "https://…/hostels" }
-}
+{ "type": "property_cards", "items": [ { "key": "duque", "name": "Duque Nest", "location": "Costa Adeje, Tenerife", "image": "https://…/duque.jpg", "price_from": { "amount": "25.00", "currency": "EUR", "period": "night", "basis": "per_person" }, "badge": "Nest Pass", "cta_label": "Book now", "url": "https://book.example/duque" } ], "total": 14, "more": { "label": "See all our properties", "url": "https://…/hostels" } }
 ```
 
-| Element field | Type     | Required | Notes                                                                                                                                                                                                                                                                                                                       |
-| ------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `items`       | `array`  | yes      | The cards, in order (below). Never empty — the element is not emitted with no items.                                                                                                                                                                                                                                        |
-| `total`       | `int`    | no       | **Since 1.6.0.** Matching active properties **before** the server's cap, so a renderer bounding its own carousel can say "showing 8 of 14" instead of silently losing the rest. Equals `items.length` when nothing was cut.                                                                                                 |
-| `more`        | `object` | no       | **Since 1.6.0.** `{label, url}` — an optional "see all" affordance for the tenant's full property listing. `label` is **localized server-side**; `url` is under the same `http`/`https`-only rule as every element URL. Present only when the tenant has configured a listing URL; a renderer that ignores it is unchanged. |
-| `id`          | `string` | no       | Per the [element conventions](#element-conventions-all-types). Not emitted for this type — items already carry `key`.                                                                                                                                                                                                       |
+| Element field | Type | Required | Notes |
+|---|---|---|---|
+| `items` | `array` | yes | The cards, in order (below). Never empty — the element is not emitted with no items. |
+| `total` | `int` | no | **Since 1.6.0.** Matching active properties **before** the server's cap, so a renderer bounding its own carousel can say "showing 8 of 14" instead of silently losing the rest. Equals `items.length` when nothing was cut. |
+| `more` | `object` | no | **Since 1.6.0.** `{label, url}` — an optional "see all" affordance for the tenant's full property listing. `label` is **localized server-side**; `url` is under the same `http`/`https`-only rule as every element URL. Present only when the tenant has configured a listing URL; a renderer that ignores it is unchanged. |
+| `id` | `string` | no | Per the [element conventions](#element-conventions-all-types). Not emitted for this type — items already carry `key`. |
 
-| Item field   | Type     | Required | Localized | Notes                                                                                                                                                                                                                                                                        |
-| ------------ | -------- | -------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `key`        | `string` | yes      | no        | The property's stable catalog slug — see [using `key`](#using-key) below.                                                                                                                                                                                                    |
-| `name`       | `string` | yes      | **no**    | Display name, the raw catalog value in the tenant's authoring language.                                                                                                                                                                                                      |
-| `location`   | `string` | no       | **no**    | Display label, **composed server-side** as `City, Island` from the catalog locality columns. Not localized and not reordered per locale. Single-line.                                                                                                                        |
-| `image`      | `string` | no       | n/a       | Card image URL — see [card images](#card-images) below. Same `http`/`https`-only rule as every element URL.                                                                                                                                                                  |
-| `image_alt`  | `string` | no       | yes       | **Since 1.6.0. Reserved — not emitted at 1.6.0** (the catalog carries no alt column). See [card images](#card-images) for what to do in its absence, which is the normal case.                                                                                               |
-| `price_from` | `object` | no       | n/a       | An admin-maintained static from-price (D-043(d)) — see the sub-table and [reading `price_from`](#reading-price_from) below.                                                                                                                                                  |
-| `badge`      | `string` | no       | **no**    | Short pill label (e.g. tenant #1's "Nest Pass"), the raw catalog value in the tenant's authoring language. Single-line; keep authoring to ~20 characters, and clamp rather than wrap (see [text lengths](#text-lengths)).                                                    |
-| `cta_label`  | `string` | no       | **yes**   | **Since 1.6.0.** Display text for the card's Book CTA, localized server-side to the guest language — the same string the deterministic Book `link_button` carries. A consumer that does not find it keeps its own default, so this is purely an upgrade from hardcoding one. |
-| `url`        | `string` | yes      | n/a       | The property's authoritative `booking_url` — the card's Book CTA target. Same anchor rule as `link_button`.                                                                                                                                                                  |
+| Item field | Type | Required | Localized | Notes |
+|---|---|---|---|---|
+| `key` | `string` | yes | no | The property's stable catalog slug — see [using `key`](#using-key) below. |
+| `name` | `string` | yes | **no** | Display name, the raw catalog value in the tenant's authoring language. |
+| `location` | `string` | no | **no** | Display label, **composed server-side** as `City, Island` from the catalog locality columns. Not localized and not reordered per locale. Single-line. |
+| `image` | `string` | no | n/a | Card image URL — see [card images](#card-images) below. Same `http`/`https`-only rule as every element URL. |
+| `image_alt` | `string` | no | yes | **Since 1.6.0. Reserved — not emitted at 1.6.0** (the catalog carries no alt column). See [card images](#card-images) for what to do in its absence, which is the normal case. |
+| `price_from` | `object` | no | n/a | An admin-maintained static from-price (D-043(d)) — see the sub-table and [reading `price_from`](#reading-price_from) below. |
+| `badge` | `string` | no | **no** | Short pill label (e.g. tenant #1's "Nest Pass"), the raw catalog value in the tenant's authoring language. Single-line; keep authoring to ~20 characters, and clamp rather than wrap (see [text lengths](#text-lengths)). |
+| `cta_label` | `string` | no | **yes** | **Since 1.6.0.** Display text for the card's Book CTA, localized server-side to the guest language — the same string the deterministic Book `link_button` carries. A consumer that does not find it keeps its own default, so this is purely an upgrade from hardcoding one. |
+| `url` | `string` | yes | n/a | The property's authoritative `booking_url` — the card's Book CTA target. Same anchor rule as `link_button`. |
 
 **`price_from`:**
 
-| Field      | Type     | Required | Notes                                                                                                                               |
-| ---------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `amount`   | `string` | yes      | A decimal **string**, never a number — the renderer formats it.                                                                     |
-| `currency` | `string` | yes      | ISO 4217 alpha-3, uppercase. **Always present when `price_from` is present.**                                                       |
-| `period`   | `string` | no       | **Since 1.6.0.** What the amount buys: `night` \| `stay`.                                                                           |
-| `basis`    | `string` | no       | **Since 1.6.0.** Who it is priced for: `per_person` \| `per_unit` (the bookable unit — a private room, an apartment, a whole dorm). |
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `amount` | `string` | yes | A decimal **string**, never a number — the renderer formats it. |
+| `currency` | `string` | yes | ISO 4217 alpha-3, uppercase. **Always present when `price_from` is present.** |
+| `period` | `string` | no | **Since 1.6.0.** What the amount buys: `night` \| `stay`. |
+| `basis` | `string` | no | **Since 1.6.0.** Who it is priced for: `per_person` \| `per_unit` (the bookable unit — a private room, an apartment, a whole dorm). |
 
 #### Reading `price_from`
 
@@ -285,8 +230,8 @@ Emitted deterministically by the information path (D-043(a)): one card for the r
   `basis: "per_person"`. Map them to a **localized suffix of your own** — the server deliberately
   sends neither pre-localized display text nor a composed string, because you are already formatting
   the number with `Intl.NumberFormat` in the guest's locale and need to compose the whole label.
-- **They are PER ITEM, and two cards in one carousel may differ.** They describe the _cheapest
-  bookable thing_ — which is what a from-price is — not the property as a whole: a hostel selling
+- **They are PER ITEM, and two cards in one carousel may differ.** They describe the *cheapest
+  bookable thing* — which is what a from-price is — not the property as a whole: a hostel selling
   dorm beds and private doubles quotes `per_person` because its from-price is a bed, while a property
   whose cheapest offering is a double room priced for the room quotes `per_unit`. Both can appear
   side by side in the same element, so **resolve the suffix per card** and never lift one item's
@@ -345,42 +290,29 @@ redundant, never harmful. Three things that sentence needs to be safe:
   byte-identical and plain equality is exact. Normalizing (trailing slashes, tracking parameters)
   only risks suppressing a button that was not a duplicate.
 - **A card you dropped suppresses nothing.** Build the comparison set from the items you will
-  _actually render_, after your own gates. Recording the `url` of an item you rejected — because its
+  *actually render*, after your own gates. Recording the `url` of an item you rejected — because its
   scheme failed, or it had no `name` — would silently remove the guest's only Book button.
 - **`availability` and `booking_link` are deliberately out of scope of this rule.** One handler runs
   per turn (D-009), so neither can share an `actions[]` list with `property_cards`. The duplicate that
-  _can_ happen is across the interim→poll boundary and is covered under
+  *can* happen is across the interim→poll boundary and is covered under
   [the poll endpoint](#async_result--this-turns-final-reply-is-being-generated-asynchronously).
 
 ### `promo_card` — a tenant-authored promotional block
-
 Emitted deterministically when configured on the site (`chatbot.promo` setting — D-043(e)) by two **independent** gates: on the init response when `show_at_init` is set, and once per conversation on a booking turn whose collected stay reaches `min_nights` — see [when it repeats](#when-it-repeats). Content is tenant-authored and validated server-side — never LLM text. **Since 1.6.0 it is resolved per guest locale** where the tenant has supplied translations (D-044 amends D-043(e)'s single-language rule).
 
 ```json
-{
-  "type": "promo_card",
-  "id": "promo:6f3a1c2b",
-  "title": "One booking. All Hostels.",
-  "body": "7 nights for €140 at any Nest hostel…",
-  "image": "https://…/nest-pass.jpg",
-  "cta": {
-    "label": "Get Your Nest Pass",
-    "url": "https://nestshostels.com/en/nest-pass/"
-  },
-  "style": "highlight",
-  "locale": "en"
-}
+{ "type": "promo_card", "id": "promo:6f3a1c2b", "title": "One booking. All Hostels.", "body": "7 nights for €140 at any Nest hostel…", "image": "https://…/nest-pass.jpg", "cta": { "label": "Get Your Nest Pass", "url": "https://nestshostels.com/en/nest-pass/" }, "style": "highlight", "locale": "en" }
 ```
 
-| Field    | Type     | Required | Localized         | Notes                                                                                                                                                                                                                                                                                                                                                          |
-| -------- | -------- | -------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`     | `string` | no       | n/a               | **Since 1.6.0.** Content-derived, so it is stable while the offer is and **changes when the tenant rewrites it** — which is exactly what makes client-side frequency capping on it safe. See the [element conventions](#element-conventions-all-types).                                                                                                        |
-| `title`  | `string` | yes      | see below         | Headline. Treat as single-line.                                                                                                                                                                                                                                                                                                                                |
-| `body`   | `string` | yes      | see below         | Supporting text. **May contain `\n`** — render with `white-space: pre-wrap` so a tenant's two-line offer stays two lines.                                                                                                                                                                                                                                      |
-| `image`  | `string` | no       | n/a               | Banner image URL. Same `http`/`https`-only rule. Decorative — the `title` carries the meaning, so set `alt=""`.                                                                                                                                                                                                                                                |
-| `cta`    | `object` | yes      | `label` see below | `{label, url}` — the call-to-action anchor. Same anchor rule as `link_button`.                                                                                                                                                                                                                                                                                 |
-| `style`  | `string` | no       | n/a               | Presentation hint — see [`style`](#the-style-hint) below.                                                                                                                                                                                                                                                                                                      |
-| `locale` | `string` | no       | n/a               | **Since 1.6.0.** The language of this block's displayed text, as a 2-letter primary subtag (`en`, never `en-GB`). **Absent means unknown** — the tenant has declared no language for the content — so do not guess one. Its main use is marking the block up (`lang="es"`) so a screen reader pronounces it correctly, and deciding whether to show it at all. |
+| Field | Type | Required | Localized | Notes |
+|---|---|---|---|---|
+| `id` | `string` | no | n/a | **Since 1.6.0.** Content-derived, so it is stable while the offer is and **changes when the tenant rewrites it** — which is exactly what makes client-side frequency capping on it safe. See the [element conventions](#element-conventions-all-types). |
+| `title` | `string` | yes | see below | Headline. Treat as single-line. |
+| `body` | `string` | yes | see below | Supporting text. **May contain `\n`** — render with `white-space: pre-wrap` so a tenant's two-line offer stays two lines. |
+| `image` | `string` | no | n/a | Banner image URL. Same `http`/`https`-only rule. Decorative — the `title` carries the meaning, so set `alt=""`. |
+| `cta` | `object` | yes | `label` see below | `{label, url}` — the call-to-action anchor. Same anchor rule as `link_button`. |
+| `style` | `string` | no | n/a | Presentation hint — see [`style`](#the-style-hint) below. |
+| `locale` | `string` | no | n/a | **Since 1.6.0.** The language of this block's displayed text, as a 2-letter primary subtag (`en`, never `en-GB`). **Absent means unknown** — the tenant has declared no language for the content — so do not guess one. Its main use is marking the block up (`lang="es"`) so a screen reader pronounces it correctly, and deciding whether to show it at all. |
 
 #### Language
 
@@ -400,7 +332,7 @@ Since 1.6.0 a tenant may supply per-locale copy, and the server then resolves it
 #### The `style` hint
 
 A free-form lowercase-and-hyphen presentation hint (the server enforces that shape, so it is always
-safe to _test_, and never safe to inject raw). **`highlight` is the only value the platform
+safe to *test*, and never safe to inject raw). **`highlight` is the only value the platform
 documents**, and it means "this is the tenant's primary offer — give it more visual weight than an
 ordinary message"; how is entirely yours. Because the value is tenant-supplied, a renderer that maps
 it to a CSS class **must** match against its own known list and **must** degrade an unrecognised
@@ -413,13 +345,13 @@ tenant-authored string. So a renderer **must** tolerate arbitrary length — cla
 scroll, but never break the layout. These are the **advisory authoring bounds** a tenant should aim
 for in a ~420px panel, not guarantees you may rely on:
 
-| Field                         | Aim for     | Also         |
-| ----------------------------- | ----------- | ------------ |
-| `promo_card.title`            | ≤ 60 chars  | single-line  |
-| `promo_card.body`             | ≤ 300 chars | `\n` allowed |
-| `promo_card.cta.label`        | ≤ 24 chars  | single-line  |
-| `property_cards` item `badge` | ≤ 20 chars  | single-line  |
-| `quick_replies` item `label`  | ≤ 28 chars  | single-line  |
+| Field | Aim for | Also |
+|---|---|---|
+| `promo_card.title` | ≤ 60 chars | single-line |
+| `promo_card.body` | ≤ 300 chars | `\n` allowed |
+| `promo_card.cta.label` | ≤ 24 chars | single-line |
+| `property_cards` item `badge` | ≤ 20 chars | single-line |
+| `quick_replies` item `label` | ≤ 28 chars | single-line |
 
 #### When it repeats
 
@@ -428,7 +360,7 @@ for in a ~420px panel, not guarantees you may rely on:
   once-per-conversation, so **a site with both configured can show the promo twice** in one
   conversation — once at the greeting and once when the stay qualifies. That is the current behaviour,
   not an accident of wording; a tenant who wants only one placement configures only one.
-- **A re-init resets it.** A transparent `410`/`404` re-init starts a _new_ conversation for the same
+- **A re-init resets it.** A transparent `410`/`404` re-init starts a *new* conversation for the same
   visitor, so the once-per-conversation gate starts over and the promo can appear again.
 - **The server governs per conversation, never per visitor.** There is no visitor identity to govern
   by — the embed key is shared by every visitor of a site (`integration-guide.md` §6) — so a returning
@@ -438,28 +370,22 @@ for in a ~420px panel, not guarantees you may rely on:
   itself, keyed on `id`; nothing about that is visible to the server.
 
 ### `quick_replies` — tap-to-send question chips
-
 Emitted on the init response from the site's `chatbot.quick_prompts` setting (the "try asking" chips) and by deterministic clarification turns (e.g. island choice — D-043(f)). Tapping a chip sends its `message` as an **ordinary guest turn** through the normal message endpoint — nothing new to implement. **Items never carry URLs** (contract rule): chips are buttons that send text, never anchors, so the URL security surface is unchanged.
 
 ```json
-{
-  "type": "quick_replies",
-  "id": "quick_prompts",
-  "items": [{ "label": "Nest Pass", "message": "What is the Nest Pass?" }],
-  "locale": "en"
-}
+{ "type": "quick_replies", "id": "quick_prompts", "items": [ { "label": "Nest Pass", "message": "What is the Nest Pass?" } ], "locale": "en" }
 ```
 
-| Element field | Type     | Required | Notes                                                                                                                                                                                                                                                              |
-| ------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `items`       | `array`  | yes      | The chips, in order (below). Never empty — the element is not emitted with no chips.                                                                                                                                                                               |
-| `id`          | `string` | no       | **Since 1.6.0.** The row's provenance, and the whole vocabulary is `quick_prompts` (the tenant-authored init row) \| `island_choice` (the deterministic clarification row). This is how you tell tenant text from server text — see [language](#language-1) below. |
-| `locale`      | `string` | no       | **Since 1.6.0.** The language of the chip **labels**, as a 2-letter primary subtag. Absent means unknown or language-neutral; see [language](#language-1).                                                                                                         |
+| Element field | Type | Required | Notes |
+|---|---|---|---|
+| `items` | `array` | yes | The chips, in order (below). Never empty — the element is not emitted with no chips. |
+| `id` | `string` | no | **Since 1.6.0.** The row's provenance, and the whole vocabulary is `quick_prompts` (the tenant-authored init row) \| `island_choice` (the deterministic clarification row). This is how you tell tenant text from server text — see [language](#language-1) below. |
+| `locale` | `string` | no | **Since 1.6.0.** The language of the chip **labels**, as a 2-letter primary subtag. Absent means unknown or language-neutral; see [language](#language-1). |
 
-| Item field | Type     | Required | Localized | Notes                                                                                                                                                                                                                                                                                    |
-| ---------- | -------- | -------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `label`    | `string` | yes      | see below | The chip's display text. Treat as single-line; aim for ≤ 28 characters (advisory — see [text lengths](#text-lengths)).                                                                                                                                                                   |
-| `message`  | `string` | yes      | see below | The guest message to send when tapped. Render the sent text as a normal guest bubble (honest transcript). **Hard limit: it goes through the message endpoint, so a `message` longer than `wsuite.chatbot.message.max_length` (default 2000) is rejected `422` when the chip is tapped.** |
+| Item field | Type | Required | Localized | Notes |
+|---|---|---|---|---|
+| `label` | `string` | yes | see below | The chip's display text. Treat as single-line; aim for ≤ 28 characters (advisory — see [text lengths](#text-lengths)). |
+| `message` | `string` | yes | see below | The guest message to send when tapped. Render the sent text as a normal guest bubble (honest transcript). **Hard limit: it goes through the message endpoint, so a `message` longer than `wsuite.chatbot.message.max_length` (default 2000) is rejected `422` when the chip is tapped.** |
 
 #### Language
 
@@ -501,16 +427,15 @@ the contract, which is why the [breaking-change guarantee](#versioning) holds fo
 against 1.5.0.
 
 ### `conversation_ended` — this conversation accepts no further turns
-
 Emitted on the **turn-cap** reply (D-044): a conversation that reaches `wsuite.chatbot.conversation.max_turns` has its next message refused with a canned localized reply and **no LLM call**, bounding one session's AI spend. The guest must start a new conversation to continue, and this element is how a consumer knows to offer that at the right moment instead of guessing.
 
 ```json
 { "type": "conversation_ended", "reason": "turn_cap" }
 ```
 
-| Field    | Type     | Required | Notes                                                                                                                   |
-| -------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `reason` | `string` | no       | Why it ended. `turn_cap` is the only value emitted today; it stays optional so a later cause needs no new element type. |
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `reason` | `string` | no | Why it ended. `turn_cap` is the only value emitted today; it stays optional so a later cause needs no new element type. |
 
 - **It carries no visual payload.** The `reply` already tells the guest the limit was reached, so a
   renderer that ignores this element loses nothing — it is a signal, not content. It is emitted
@@ -518,20 +443,18 @@ Emitted on the **turn-cap** reply (D-044): a conversation that reaches `wsuite.c
   (that one is the actionable part).
 - **The cap is deployment configuration, not a contract guarantee** — 50 turns by default, `0`
   disables it entirely. Never hardcode the number.
-- **Two honest edges.** The capped reply's `turn` repeats the last _completed_ exchange's number
+- **Two honest edges.** The capped reply's `turn` repeats the last *completed* exchange's number
   (nothing was persisted for the refused message), so every further POST to a capped conversation
-  returns the same `turn`. And the cap is detected on the message _after_ the last allowed one, so a
+  returns the same `turn`. And the cap is detected on the message *after* the last allowed one, so a
   consumer that closes its composer on this element does so having spent one message finding out.
 
 ## Security rule (both widgets)
-
 Guest/LLM strings and element fields are rendered via `textContent` / `setAttribute` / created DOM nodes — **never `innerHTML`** — so a hostile reply cannot inject markup (XSS); this includes the tenant-authored `promo_card`/`quick_replies` strings. Element-supplied `url` **and `image`** fields (`link_button`, `booking_link`, `availability`, `property_cards` items **and its element-level `more.url`**, `promo_card`/its `cta`) are honoured **only for `http`/`https`** schemes; everything else is dropped. `quick_replies` items carry no URLs at all — chips send text, never navigate. `tel:`/`mailto:`/`wa.me` hrefs are constructed by the widget from the channel values, not taken verbatim.
 
 Every URL-bearing field the contract ever adds inherits this rule; it is named here so the list stays
 the single inventory.
 
 ## Accessibility
-
 Guidance, not requirements — but three renderers making three different choices for the same element
 is worse for guests than one convention, so this is what the reference widget does and what a
 consumer is encouraged to match.
@@ -551,12 +474,11 @@ consumer is encouraged to match.
   row retires, do not steal or drop focus; move it somewhere sensible if it was inside the row.
 
 ## Extension rule (the DRY seam)
-
 Adding a new rich type (`image`, `map`, `video`, … — 1.5.0's `property_cards`/`promo_card`/`quick_replies` were added exactly this way) is two code edits plus a version bump — **the envelope never changes**:
 
 1. **Server:** one new value object under `modules/chatbot/src/Responses/Elements/` implementing `Element` (a stable `toArray()` returning `{type, …}`), emitted by the relevant handler.
 2. **Widget:** one new branch in `renderAction(action)` keyed on the new `type`.
-3. **Version:** bump the [version](#versioning) (**MINOR** — additive) and add a [Changelog](#changelog) row **including its Breaking and Consumer action cells**; keep `Wsuite\Chatbot\Responses\ResponseContract::VERSION`, this doc's header, the reference widget's `BUILT_AGAINST` and `integration-guide.md`'s version line in lockstep, then tag the commit `chatbot-contract-v<X.Y.Z>`. The init `contract_version` then signals consumers to adopt it, and `modules/chatbot/docs/consumer-sync.md` records which consumer is still behind. _(Skipping this is the one way an additive change goes unnoticed — guard tests assert every element's `type` appears in the Changelog and that all four version sites agree.)_
+3. **Version:** bump the [version](#versioning) (**MINOR** — additive) and add a [Changelog](#changelog) row **including its Breaking and Consumer action cells**; keep `Wsuite\Chatbot\Responses\ResponseContract::VERSION`, this doc's header, the reference widget's `BUILT_AGAINST` and `integration-guide.md`'s version line in lockstep, then tag the commit `chatbot-contract-v<X.Y.Z>`. The init `contract_version` then signals consumers to adopt it, and `modules/chatbot/docs/consumer-sync.md` records which consumer is still behind. *(Skipping this is the one way an additive change goes unnoticed — guard tests assert every element's `type` appears in the Changelog and that all four version sites agree.)*
 
 Existing consumers ignore the unknown `type` until they add the branch, so the server can ship a new element ahead of any given widget. The in-repo `WidgetPreview` Filament page + `resources/widget/chatbot.js` is the **reference renderer** for this contract; the external `nest-chatbot-ai` repo is versioned separately and consumes this document.
 
@@ -570,14 +492,15 @@ Per [Versioning](#versioning): additive element/field additions are **MINOR** an
 
 Each version is tagged in the platform repo as **`chatbot-contract-v<X.Y.Z>`**, so a consumer can be handed an exact packet snapshot and can diff its own version forward (`git diff chatbot-contract-v1.2.0..chatbot-contract-v1.4.0 -- modules/chatbot/docs/`).
 
-| Version | Date       | Breaking | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Element / field                                                                                                                                                                           | Consumer action                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------- | ---------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `1.6.1` | 2026-07-31 | No       | **Documentation only, no wire effect** (D-044(j)). `price_from.period`/`basis` are stated to be **per item**, so two cards in one carousel may legitimately differ: they describe the _cheapest bookable thing_ a from-price refers to, not the property — a hostel selling dorm beds and private doubles quotes `per_person` (its from-price is a bed) while a property whose cheapest offering is a whole double room quotes `per_unit`. Server-side, the source became finer-grained to match (per-property catalog columns overriding the site-wide declaration), which is invisible on the wire.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | _(none — clarifies)_ `property_cards` `price_from.period`/`basis`                                                                                                                         | **None if you have not adopted `period`/`basis` yet.** If you have: **resolve the suffix per card**, not once per rail — lifting one item's values to the whole carousel will mislabel a mixed catalog. Nothing else changed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `1.6.0` | 2026-07-30 | No       | **The fields a rich card/promo/chip UI needs, from the first consumer to build all three (D-044).** New optional fields: `property_cards` gains element-level `total` (matches before the cap) and `more` (`{label, url}`, localized label), item `cta_label` (server-localized Book text) and `image_alt` (**reserved, not emitted yet**), and `price_from.period`/`basis` (`night`\|`stay` · `per_person`\|`per_unit` — so "from €22" can finally say "/night"); `promo_card` and `quick_replies` gain `locale` and `id`; **`promo_card`/`quick_replies` content is now resolved per guest locale** where the tenant supplies translations (amends D-043(e)). New element **`conversation_ended`** on the turn-cap reply. Documentation, no wire effect: the [missing-required-field policy](#element-conventions-all-types), per-field localization, `price_from` decimal/tax semantics, image and `key` semantics, the `style` value set, advisory text lengths, item caps and order, promo repeat/dismissal semantics, the clarified [Book-button dedupe](#compatibility-and-the-book-button-dedupe-d-043c) and interim→poll duplicate, the precise [one-shot chip rule](#the-one-shot-rule), poll-side `404`/`410`, init `actions[]` composition, element placement, and an [Accessibility](#accessibility) section. | `property_cards` (`total` · `more` · `cta_label` · `image_alt` · `price_from.period`/`basis`) · `promo_card` (`locale` · `id`) · `quick_replies` (`locale` · `id`) · `conversation_ended` | **Optional, and mostly free.** Adoptable fields: render `cta_label` in place of your hardcoded Book text, append a localized period/basis suffix to the from-price (**and keep rendering the bare price when they are absent — never infer "/night"**), use `total`/`more` for an overflow affordance, set `lang` from `locale`, and add a `conversation_ended` branch for a "start a new chat" affordance. Pure documentation, nothing to build: everything in the second half of the Change cell — though **do re-read the dedupe rule** (a card you dropped must not suppress a Book button) and the one-shot rule (it is still a SHOULD; both triggers retire every row). `image_alt` is reserved — a one-line `alt = image_alt \|\| ''` future-proofs you today. Skippable in full: unknown fields and types are ignored and every 1.5.0 flow keeps working. |
-| `1.5.0` | 2026-07-28 | No       | Three rich guest elements (D-043): `property_cards` (a deterministic catalog card carousel — key/name/location/image/price_from/badge/Book-CTA per item), `promo_card` (a tenant-authored promo block from site settings), `quick_replies` (tap-to-send chips `{label, message}`; **no URLs in chips**). The **init** `201` additionally gains an optional `actions` array carrying the same element vocabulary (greeting-time quick prompts / promo; always emitted, `[]` when unconfigured). Existing `link_button`/`booking_link` emission is unchanged — a card-aware renderer dedupes a Book button whose URL equals a card CTA (D-043(c)).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `property_cards` · `promo_card` · `quick_replies` · _(init)_ `actions`                                                                                                                    | **Optional** — add three `renderAction` branches (chips send `message` as a normal turn and the row is one-shot), render init `actions[]` after the greeting when present, and dedupe Book buttons by URL against card CTAs. Skippable: unknown types are ignored and the existing buttons keep every flow functional.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `1.4.1` | 2026-07-27 | No       | **Documentation only, no wire effect** (the first PATCH row — it exercises the lane): the [breaking-change guarantee](#versioning) is stated explicitly, this table gains the **Breaking** column, and each version is now tagged `chatbot-contract-v<X.Y.Z>` so a packet snapshot is reproducible.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | _(none)_                                                                                                                                                                                  | **None** — nothing on the wire changed. Re-vendor at your convenience to pick up the clearer docs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `1.4.0` | 2026-07-27 | No       | The information path now emits a third deterministic **`link_button`** — a "Get directions" button carrying the property's authoritative `map_url` — alongside the existing Book / Website buttons (D-042(c) / KI-007). No new element type: it is a `link_button` like the others, deduped by URL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `link_button`                                                                                                                                                                             | **None** — an existing `link_button` renderer already handles it (label + `url` + optional `style`); it just renders as one more call-to-action.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `1.3.0` | 2026-07-23 | No       | Added the optional **request** field `locale` on the turn endpoint (`POST …/messages`) — an explicit per-turn reply-language override for a consumer that owns a UI language switcher. Stateless: it applies to that turn only, and omitting it keeps per-turn language detection unchanged. See `integration-guide.md` §3.2.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | _(request)_ `locale`                                                                                                                                                                      | **Optional** — send `locale` on every turn **only if** you have a UI language switcher. No renderer change; omit the field and nothing changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `1.2.0` | 2026-07-22 | No       | Added the `availability` element (live PMS availability on a completed async tool turn; dormant until a provider binds — D-037(g)).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `availability`                                                                                                                                                                            | Add an `availability` branch to `renderAction` (render `url` as a booking button; `options`/`available` are display-only). Skippable — it is ignored until then, and dormant at MVP.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `1.1.0` | 2026-07-22 | No       | Added the `async_result` element for gated async tool turns (interim reply + poll `url`; ignorable by non-poll-aware consumers — D-037(f)/(h)).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `async_result`                                                                                                                                                                            | Add an `async_result` branch that polls `url` (relative — resolve against your API base) and replaces the interim bubble. Skippable — the interim reply + fallbacks stand on their own.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `1.0.0` | 2026-07-21 | —        | Initial frozen envelope (`reply` / `actions[]` / `turn`) + the deterministic call-to-action elements.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `link_button` · `contact_channels` · `booking_link`                                                                                                                                       | Baseline — render `reply`, then each element of `actions[]` in order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Version | Date | Breaking | Change | Element / field | Consumer action |
+|---|---|---|---|---|---|
+| `1.6.2` | 2026-08-07 | No | **Emission rule only, no wire effect** (D-047). A `property_cards` element now requires a *this-turn* signal: the guest named the hostel(s), referred to one, asked by island, or is on a `data-property`-seeded page (which cards once). A property the server merely **remembers** from an earlier turn no longer emits one — before this, a hostel named on turn 4 kept its card under every later answer, including questions about other islands, and it also masked the island carousel the guest had asked for. Second change in the same rule: a turn naming **several** hostels now emits **one card each** instead of collapsing to one arbitrary card. Field shapes, ordering, `total`/`more` semantics and the Book-button dedupe are untouched. | *(none — emission)* `property_cards` | **None.** Fewer, more relevant cards arrive; every field you already read is unchanged. One thing to sanity-check if you hardcoded it: a **named-property** turn can now legitimately carry more than one item, so a rail sized for exactly one card should flex (`total` already told you this could happen on by-area turns). |
+| `1.6.1` | 2026-07-31 | No | **Documentation only, no wire effect** (D-044(j)). `price_from.period`/`basis` are stated to be **per item**, so two cards in one carousel may legitimately differ: they describe the *cheapest bookable thing* a from-price refers to, not the property — a hostel selling dorm beds and private doubles quotes `per_person` (its from-price is a bed) while a property whose cheapest offering is a whole double room quotes `per_unit`. Server-side, the source became finer-grained to match (per-property catalog columns overriding the site-wide declaration), which is invisible on the wire. | *(none — clarifies)* `property_cards` `price_from.period`/`basis` | **None if you have not adopted `period`/`basis` yet.** If you have: **resolve the suffix per card**, not once per rail — lifting one item's values to the whole carousel will mislabel a mixed catalog. Nothing else changed. |
+| `1.6.0` | 2026-07-30 | No | **The fields a rich card/promo/chip UI needs, from the first consumer to build all three (D-044).** New optional fields: `property_cards` gains element-level `total` (matches before the cap) and `more` (`{label, url}`, localized label), item `cta_label` (server-localized Book text) and `image_alt` (**reserved, not emitted yet**), and `price_from.period`/`basis` (`night`\|`stay` · `per_person`\|`per_unit` — so "from €22" can finally say "/night"); `promo_card` and `quick_replies` gain `locale` and `id`; **`promo_card`/`quick_replies` content is now resolved per guest locale** where the tenant supplies translations (amends D-043(e)). New element **`conversation_ended`** on the turn-cap reply. Documentation, no wire effect: the [missing-required-field policy](#element-conventions-all-types), per-field localization, `price_from` decimal/tax semantics, image and `key` semantics, the `style` value set, advisory text lengths, item caps and order, promo repeat/dismissal semantics, the clarified [Book-button dedupe](#compatibility-and-the-book-button-dedupe-d-043c) and interim→poll duplicate, the precise [one-shot chip rule](#the-one-shot-rule), poll-side `404`/`410`, init `actions[]` composition, element placement, and an [Accessibility](#accessibility) section. | `property_cards` (`total` · `more` · `cta_label` · `image_alt` · `price_from.period`/`basis`) · `promo_card` (`locale` · `id`) · `quick_replies` (`locale` · `id`) · `conversation_ended` | **Optional, and mostly free.** Adoptable fields: render `cta_label` in place of your hardcoded Book text, append a localized period/basis suffix to the from-price (**and keep rendering the bare price when they are absent — never infer "/night"**), use `total`/`more` for an overflow affordance, set `lang` from `locale`, and add a `conversation_ended` branch for a "start a new chat" affordance. Pure documentation, nothing to build: everything in the second half of the Change cell — though **do re-read the dedupe rule** (a card you dropped must not suppress a Book button) and the one-shot rule (it is still a SHOULD; both triggers retire every row). `image_alt` is reserved — a one-line `alt = image_alt \|\| ''` future-proofs you today. Skippable in full: unknown fields and types are ignored and every 1.5.0 flow keeps working. |
+| `1.5.0` | 2026-07-28 | No | Three rich guest elements (D-043): `property_cards` (a deterministic catalog card carousel — key/name/location/image/price_from/badge/Book-CTA per item), `promo_card` (a tenant-authored promo block from site settings), `quick_replies` (tap-to-send chips `{label, message}`; **no URLs in chips**). The **init** `201` additionally gains an optional `actions` array carrying the same element vocabulary (greeting-time quick prompts / promo; always emitted, `[]` when unconfigured). Existing `link_button`/`booking_link` emission is unchanged — a card-aware renderer dedupes a Book button whose URL equals a card CTA (D-043(c)). | `property_cards` · `promo_card` · `quick_replies` · *(init)* `actions` | **Optional** — add three `renderAction` branches (chips send `message` as a normal turn and the row is one-shot), render init `actions[]` after the greeting when present, and dedupe Book buttons by URL against card CTAs. Skippable: unknown types are ignored and the existing buttons keep every flow functional. |
+| `1.4.1` | 2026-07-27 | No | **Documentation only, no wire effect** (the first PATCH row — it exercises the lane): the [breaking-change guarantee](#versioning) is stated explicitly, this table gains the **Breaking** column, and each version is now tagged `chatbot-contract-v<X.Y.Z>` so a packet snapshot is reproducible. | *(none)* | **None** — nothing on the wire changed. Re-vendor at your convenience to pick up the clearer docs. |
+| `1.4.0` | 2026-07-27 | No | The information path now emits a third deterministic **`link_button`** — a "Get directions" button carrying the property's authoritative `map_url` — alongside the existing Book / Website buttons (D-042(c) / KI-007). No new element type: it is a `link_button` like the others, deduped by URL. | `link_button` | **None** — an existing `link_button` renderer already handles it (label + `url` + optional `style`); it just renders as one more call-to-action. |
+| `1.3.0` | 2026-07-23 | No | Added the optional **request** field `locale` on the turn endpoint (`POST …/messages`) — an explicit per-turn reply-language override for a consumer that owns a UI language switcher. Stateless: it applies to that turn only, and omitting it keeps per-turn language detection unchanged. See `integration-guide.md` §3.2. | *(request)* `locale` | **Optional** — send `locale` on every turn **only if** you have a UI language switcher. No renderer change; omit the field and nothing changes. |
+| `1.2.0` | 2026-07-22 | No | Added the `availability` element (live PMS availability on a completed async tool turn; dormant until a provider binds — D-037(g)). | `availability` | Add an `availability` branch to `renderAction` (render `url` as a booking button; `options`/`available` are display-only). Skippable — it is ignored until then, and dormant at MVP. |
+| `1.1.0` | 2026-07-22 | No | Added the `async_result` element for gated async tool turns (interim reply + poll `url`; ignorable by non-poll-aware consumers — D-037(f)/(h)). | `async_result` | Add an `async_result` branch that polls `url` (relative — resolve against your API base) and replaces the interim bubble. Skippable — the interim reply + fallbacks stand on their own. |
+| `1.0.0` | 2026-07-21 | — | Initial frozen envelope (`reply` / `actions[]` / `turn`) + the deterministic call-to-action elements. | `link_button` · `contact_channels` · `booking_link` | Baseline — render `reply`, then each element of `actions[]` in order. |

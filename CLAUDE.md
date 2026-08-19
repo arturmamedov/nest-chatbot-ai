@@ -124,7 +124,7 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.6.1 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.6.2 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
@@ -135,10 +135,18 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 `BUILT_AGAINST` (api section) moves **only** during a sync — it is a claim about what this
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
-rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-08-02 as
-`docs @ chatbot-contract-v1.6.1 (90f3cfd) · widget @ e66fe4f` — the widget SHA is part of the
+rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-08-19 as
+`docs @ chatbot-contract-v1.6.2 (d01382b) · widget @ 712c2c5` — the widget SHA is part of the
 packet's identity, because the reference renderer legitimately moves between contract tags.
-`BUILT_AGAINST` is `'1.6.1'`, in lockstep since release 2.5.0 closed the sync.
+`BUILT_AGAINST` is `'1.6.2'`, in lockstep since release 2.9.0 adopted D-047.
+
+**The upstream repo drives the sync, and it is local.** The platform is `nest-mind`
+(`modules/chatbot/`). Its `docs/consumer-sync.md` is the operational half: §1 is a registry of
+which consumer sits on which contract — **this repo has a row in it** — §2 records that our
+vendor path is `docs/wsuite/` and that `chatbot.js` is renamed to `chatbot.reference.js` here,
+and §4 carries a ready-rendered sync prompt naming this repo. Read §4 before a sync rather than
+improvising one. Their rule, worth honouring because their own file records it slipping twice:
+**the registry row moves in the same commit as the sync, whichever repo the work happened in.**
 
 Three endpoints: init a conversation, post a turn, poll an async turn.
 
@@ -436,17 +444,8 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   never from the CDN's own domain. `data-fonts="host"` / `"system"` are immune rather than a
   fix: they fetch nothing, so there is nothing left to block. The default path still needs
   the header.
-- **The server reports contract 1.6.2; the vendored packet has no row for it.** So the one-time
-  drift warn fires today, which is correct and harmless (guide §3.1 — warn, never gate; the
-  ignore-unknown rule keeps the widget whole). What the adoption costs **cannot be read from
-  this repo**: `docs/wsuite/` is pinned at 1.6.1 and `grep -rn "1\.6\.2" docs/` returns nothing.
-  The policy says a PATCH is "a wording/clarification fix with no wire effect" and is never
-  breaking, which argues for *bump the constant, change no renderer* — but do not conclude that
-  without reading the row, because **1.6.1 was itself a no-wire-effect patch that still required
-  a code change** ("resolve the suffix per card, not once per rail"). Ask for the
-  `chatbot-contract-v1.6.2` packet and let the normal wholesale sync move `BUILT_AGAINST`.
 - **An element-level `heading` on `quick_replies` is still the live request upstream**
-  (`docs/proposals/response-contract-phase2-elements.md`, open point 9): 1.6.1 still gives a
+  (`docs/proposals/response-contract-phase2-elements.md`, open point 9): 1.6.2 still gives a
   chip row no way to say what it is asking, so a server welcome row renders as bare chips
   under a greeting that does not mention them.
 - **Ask for `idle_hours` in the init `201` — the upstream request that matters most now.**

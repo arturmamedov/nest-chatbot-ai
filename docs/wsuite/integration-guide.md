@@ -1,10 +1,10 @@
 # wChatbot — External integration guide (public API)
 
-|                  |                                                                                                                                                                                                                        |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Version**      | matches `response-contract.md` 1.6.1 (the server reports the live version as `contract_version` — see §3.1)                                                                                                            |
-| **Audience**     | Any external website embedding a **custom** chat UI on top of the wSuite chatbot API — e.g. the branded `nest-chatbot-ai` microsite.                                                                                   |
-| **Scope**        | The **transport + auth** layer: base URL, the three endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS.                                                                            |
+| | |
+|---|---|
+| **Version** | matches `response-contract.md` 1.6.2 (the server reports the live version as `contract_version` — see §3.1) |
+| **Audience** | Any external website embedding a **custom** chat UI on top of the wSuite chatbot API — e.g. the branded `nest-chatbot-ai` microsite. |
+| **Scope** | The **transport + auth** layer: base URL, the three endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS. |
 | **Not in scope** | The **response envelope** (`reply` / typed `actions[]` / element types). That is fully specified in [`response-contract.md`](response-contract.md) — read it alongside this document; do not duplicate its rules here. |
 
 This platform ships its own drop-in bubble widget at [`../resources/widget/chatbot.js`](../resources/widget/chatbot.js). It is the **canonical, security-reviewed reference implementation** of everything below — when in doubt about a detail, read how `chatbot.js` does it. A custom UI (a different form factor: full-page, branded, multi-page) is a first-class alternative consumer of the exact same API and contract; both coexist.
@@ -33,20 +33,20 @@ Authorization: Bearer ws_live_<prefix>.<secret>
 
 - **Key format** — `ws_live_<prefix>.<secret>`. The server stores only a SHA-256 hash of `<secret>`; the plaintext is shown exactly once at creation.
 - **Scope** — keys carry a `scope` of `public` or `full`. Use a **`public`** key in a browser-embedded UI: it is admissible **only** on the chatbot guest routes below and is **public by design** (D-032) — it is meant to be visible in page source. Never ship a `full` key to the browser.
-- **Binding** — a key is bound to exactly **one tenant + one site**. All conversations it opens belong to that site. (The _property_ within the site is chosen per-conversation, see §3.)
+- **Binding** — a key is bound to exactly **one tenant + one site**. All conversations it opens belong to that site. (The *property* within the site is chosen per-conversation, see §3.)
 - **Minting a key** — in the admin panel: **Tenancy → Manage API Keys → Create**, choose the site and **scope = `public`**; copy the plaintext from the one-time notification. (Dev shortcut: the owner-only **Widget Preview** Filament page mints a public key automatically when `WSUITE_CHATBOT_DEV_WIDGET_PREVIEW=true`.)
 
-> **Security posture (be honest with yourself).** A public key is a scope-limited _secret that is meant to be seen_, not a cryptographically distinct "publishable" key. A site can now be locked to an **origin allow-list** (§7) so a copied key is refused from unlisted origins — but `Origin` is **browser-asserted**, so the allow-list narrows a leak's blast radius in real browsers; it is **not authentication**. Your real controls remain the key's `public` scope, the per-key rate limits (§6), and `chatbot.enabled`. Don't treat a public key as per-user or private. Empty allow-list = allow-all (the default), so nothing here changes until you configure it.
+> **Security posture (be honest with yourself).** A public key is a scope-limited *secret that is meant to be seen*, not a cryptographically distinct "publishable" key. A site can now be locked to an **origin allow-list** (§7) so a copied key is refused from unlisted origins — but `Origin` is **browser-asserted**, so the allow-list narrows a leak's blast radius in real browsers; it is **not authentication**. Your real controls remain the key's `public` scope, the per-key rate limits (§6), and `chatbot.enabled`. Don't treat a public key as per-user or private. Empty allow-list = allow-all (the default), so nothing here changes until you configure it.
 
 ---
 
 ## 3. The three endpoints and the turn flow
 
-| Step     | Method + path                                           | Route name                                | Success |
-| -------- | ------------------------------------------------------- | ----------------------------------------- | ------- |
-| **Init** | `POST /api/v1/chatbot/conversations`                    | `chatbot.v1.conversations.store`          | `201`   |
-| **Turn** | `POST /api/v1/chatbot/conversations/{uuid}/messages`    | `chatbot.v1.conversations.messages.store` | `200`   |
-| **Poll** | `GET /api/v1/chatbot/conversations/{uuid}/turns/{turn}` | `chatbot.v1.conversations.turns.show`     | `200`   |
+| Step | Method + path | Route name | Success |
+|---|---|---|---|
+| **Init** | `POST /api/v1/chatbot/conversations` | `chatbot.v1.conversations.store` | `201` |
+| **Turn** | `POST /api/v1/chatbot/conversations/{uuid}/messages` | `chatbot.v1.conversations.messages.store` | `200` |
+| **Poll** | `GET /api/v1/chatbot/conversations/{uuid}/turns/{turn}` | `chatbot.v1.conversations.turns.show` | `200` |
 
 All three require the `Authorization` header from §2. `{uuid}` is the conversation's public identifier (sequential DB ids never leave the API).
 
@@ -60,20 +60,15 @@ Content-Type: application/json
 { "locale": "es-ES", "property": "Las Eras Nest Hostel" }
 ```
 
-| Field      | Type            | Required | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ---------- | --------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `locale`   | `string` (≤5)   | no       | The guest's language hint — send `navigator.language`. Drives the greeting's language, and **since 1.6.0** also selects per-locale tenant content (the init promo card and quick-prompt chips) where the tenant has supplied translations.                                                                                                                                                                                                                                                                  |
-| `property` | `string` (≤255) | no       | A **soft** property-name lookup within the key's tenant. An unknown name is not an error — it simply yields a conversation with no property pre-scoped. No DB `exists` check; the site/tenant always come from the key, never the body. A **matched** name also seeds the conversation's working memory, so answers — from turn 1 — are scoped to that property until the guest names another one; send it whenever your page is about one specific property (the bundled widget does via `data-property`). |
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `locale` | `string` (≤5) | no | The guest's language hint — send `navigator.language`. Drives the greeting's language, and **since 1.6.0** also selects per-locale tenant content (the init promo card and quick-prompt chips) where the tenant has supplied translations. |
+| `property` | `string` (≤255) | no | A **soft** property-name lookup within the key's tenant. An unknown name is not an error — it simply yields a conversation with no property pre-scoped. No DB `exists` check; the site/tenant always come from the key, never the body. A **matched** name also seeds the conversation's working memory, so answers — from turn 1 — are scoped to that property until the guest names another one; send it whenever your page is about one specific property (the bundled widget does via `data-property`). |
 
 **`201` response:**
 
 ```json
-{
-  "conversation": { "uuid": "9b2c…" },
-  "greeting": "Hi! How can I help?",
-  "actions": [],
-  "contract_version": "1.6.1"
-}
+{ "conversation": { "uuid": "9b2c…" }, "greeting": "Hi! How can I help?", "actions": [], "contract_version": "1.6.2" }
 ```
 
 Persist `uuid` (the reference widget keys it to `localStorage` per API key). Render `greeting` as the first bot bubble. **Since 1.5.0** the init response also carries an `actions` array of the same element vocabulary as a turn (greeting-time quick prompts / promo — see [`response-contract.md`](response-contract.md)); render it after the greeting like any turn's `actions[]`, and tolerate its absence on older servers.
@@ -101,10 +96,10 @@ Content-Type: application/json
 { "message": "do you have wifi?", "locale": "es" }
 ```
 
-| Field     | Type          | Required | Notes                                                                        |
-| --------- | ------------- | -------- | ---------------------------------------------------------------------------- |
-| `message` | `string`      | yes      | Max length = `wsuite.chatbot.message.max_length` (default **2000**).         |
-| `locale`  | `string` (≤5) | no       | **Since 1.3.0.** An explicit reply-language override for **this turn only**. |
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `message` | `string` | yes | Max length = `wsuite.chatbot.message.max_length` (default **2000**). |
+| `locale` | `string` (≤5) | no | **Since 1.3.0.** An explicit reply-language override for **this turn only**. |
 
 #### `locale` — override vs. detection
 
@@ -152,20 +147,20 @@ The element types (`link_button`, `contact_channels`, `booking_link`, `availabil
 
 1. **Ignore unknown `type`s.** New element types ship server-side ahead of any given UI. Skip a type you don't render; never break on it.
 2. **`async_result.url` must be treated as relative.** It always begins with `/`. Resolve it against `{API_BASE}` (§1) and **reject any non-relative value.** This structurally keeps the Bearer key on your own origin.
-3. **Render as text, links and images only for `http(s)`.** Put all guest/LLM/element strings into the DOM via `textContent` / `setAttribute` / created nodes — **never `innerHTML`** (XSS). Honor element **`url` _and_ `image`** fields only for `http`/`https` schemes — that means `link_button`, `booking_link`, `availability`, `property_cards` items (`url` **and** `image`) and its element-level `more.url`, and `promo_card` (`image` **and** `cta.url`, which is tenant-authored). Anything else is dropped. Construct `tel:` / `mailto:` / `https://wa.me/<digits>` yourself from `contact_channels` values, never verbatim. `quick_replies` items carry no URLs at all. The authoritative inventory is [`response-contract.md`](response-contract.md)'s security rule — every URL-bearing field it adds inherits this.
+3. **Render as text, links and images only for `http(s)`.** Put all guest/LLM/element strings into the DOM via `textContent` / `setAttribute` / created nodes — **never `innerHTML`** (XSS). Honor element **`url` *and* `image`** fields only for `http`/`https` schemes — that means `link_button`, `booking_link`, `availability`, `property_cards` items (`url` **and** `image`) and its element-level `more.url`, and `promo_card` (`image` **and** `cta.url`, which is tenant-authored). Anything else is dropped. Construct `tel:` / `mailto:` / `https://wa.me/<digits>` yourself from `contact_channels` values, never verbatim. `quick_replies` items carry no URLs at all. The authoritative inventory is [`response-contract.md`](response-contract.md)'s security rule — every URL-bearing field it adds inherits this.
 
 ---
 
 ## 5. Errors
 
-| Status | When                                                                                                                                                                               | Consumer action                                                                                                                                                                                                        |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `401`  | Missing/invalid/revoked key, or token not prefixed `ws_live_`.                                                                                                                     | Fatal — bad key. Stop.                                                                                                                                                                                                 |
-| `403`  | Init: `chatbot.enabled` is off for the site. Or: key scope not admitted. Or: the request `Origin` is not on the site's allow-list (§7) — body `{"message":"Origin not allowed."}`. | Hide the widget silently (register your origin — §7 — if the allow-list is the cause).                                                                                                                                 |
-| `404`  | **Endpoint-specific — see below.** Turn: unknown/foreign `uuid`. Poll: the turn row is not visible to this request (or is not an async turn).                                      | Turn: treat the conversation as gone → **re-init** (as for `410`). Poll: treat as **transient** → keep backing off until give-up.                                                                                      |
-| `410`  | Conversation idled out (24h since last activity). **Endpoint-specific — see below.**                                                                                               | Turn: **re-init transparently** (open a new conversation, optionally resend the last message once) — the reference widget does this automatically. Poll: **stop polling and do not re-init** — keep the interim reply. |
-| `422`  | Init: no site resolved for the key.                                                                                                                                                | Configuration error.                                                                                                                                                                                                   |
-| `429`  | Rate limit exceeded (§6).                                                                                                                                                          | Back off; show a soft "one moment" message and retry.                                                                                                                                                                  |
+| Status | When | Consumer action |
+|---|---|---|
+| `401` | Missing/invalid/revoked key, or token not prefixed `ws_live_`. | Fatal — bad key. Stop. |
+| `403` | Init: `chatbot.enabled` is off for the site. Or: key scope not admitted. Or: the request `Origin` is not on the site's allow-list (§7) — body `{"message":"Origin not allowed."}`. | Hide the widget silently (register your origin — §7 — if the allow-list is the cause). |
+| `404` | **Endpoint-specific — see below.** Turn: unknown/foreign `uuid`. Poll: the turn row is not visible to this request (or is not an async turn). | Turn: treat the conversation as gone → **re-init** (as for `410`). Poll: treat as **transient** → keep backing off until give-up. |
+| `410` | Conversation idled out (24h since last activity). **Endpoint-specific — see below.** | Turn: **re-init transparently** (open a new conversation, optionally resend the last message once) — the reference widget does this automatically. Poll: **stop polling and do not re-init** — keep the interim reply. |
+| `422` | Init: no site resolved for the key. | Configuration error. |
+| `429` | Rate limit exceeded (§6). | Back off; show a soft "one moment" message and retry. |
 
 Note: turn/poll **content** is always `200`; the non-200s above are resolution/auth failures only.
 
@@ -174,9 +169,9 @@ Note: turn/poll **content** is always `200`; the non-200s above are resolution/a
 These are the two errors whose handling is **not** uniform — get either wrong and you can wedge a browser, abandon a live answer, or open a conversation the guest never spoke in.
 
 - **Turn `404`** (`POST …/messages`) — the stored `uuid` no longer resolves for your key. It is **terminal for that conversation**: clear the stored uuid, re-init, and resend the message once (exactly your `410` path). If you instead show a generic error **without clearing your stored uuid**, that browser retries the same dead uuid on every message until your retention window expires — up to 24h of a permanently broken widget for that visitor.
-- **Poll `404`** (`GET …/turns/{turn}`) — **transient**: keep backing off exactly as for `pending`, and stop only at your give-up deadline (~120s). You cannot tell a permanently unknown turn from a row that is simply not visible to _this_ request yet (replica lag, a request that raced the write), and the costs are asymmetric — backing off just ends at give-up, whereas re-initing throws away a conversation that is perfectly alive and abandons an answer that is still being generated.
+- **Poll `404`** (`GET …/turns/{turn}`) — **transient**: keep backing off exactly as for `pending`, and stop only at your give-up deadline (~120s). You cannot tell a permanently unknown turn from a row that is simply not visible to *this* request yet (replica lag, a request that raced the write), and the costs are asymmetric — backing off just ends at give-up, whereas re-initing throws away a conversation that is perfectly alive and abandons an answer that is still being generated.
 - **Turn `410`** — re-init transparently, as the error table says.
-- **Poll `410`** — **stop polling, and re-init nothing.** The conversation that owns this turn is gone, so its result is no longer worth fetching; keep the interim reply and its fallbacks, which are already a complete answer. The guest's _next_ message hits the turn endpoint, gets its own `410`, and re-inits there — where a fresh conversation actually has a message to carry. Re-initing from a poll opens a conversation the guest has not spoken in yet.
+- **Poll `410`** — **stop polling, and re-init nothing.** The conversation that owns this turn is gone, so its result is no longer worth fetching; keep the interim reply and its fallbacks, which are already a complete answer. The guest's *next* message hits the turn endpoint, gets its own `410`, and re-inits there — where a fresh conversation actually has a message to carry. Re-initing from a poll opens a conversation the guest has not spoken in yet.
 
 The reference widget implements all four: `sendMessage` treats `404` like `410` (clear, re-init, resend once); `pollResult` folds `404` into its transient/back-off branch and returns silently on `410`.
 
@@ -186,10 +181,10 @@ The reference widget implements all four: `sendMessage` treats `404` like `410` 
 
 Two independent buckets (turns and polls never eat each other's budget). **Each enforces two limits per request** — a **per-visitor** budget and a **per-key site ceiling** — and a `429` means whichever one tripped:
 
-| Bucket          | Per visitor (key + IP) | Per key (whole site) | Route       |
-| --------------- | ---------------------- | -------------------- | ----------- |
-| `chatbot-guest` | **20 / min**           | **300 / min**        | init + turn |
-| `chatbot-poll`  | **60 / min**           | **900 / min**        | poll        |
+| Bucket | Per visitor (key + IP) | Per key (whole site) | Route |
+|---|---|---|---|
+| `chatbot-guest` | **20 / min** | **300 / min** | init + turn |
+| `chatbot-poll` | **60 / min** | **900 / min** | poll |
 
 Tunable per deployment via `WSUITE_CHATBOT_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_POLL_PER_MINUTE` and `WSUITE_CHATBOT_SITE_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_SITE_POLL_PER_MINUTE`. These HTTP throttles are the abuse layer; the real per-provider AI cost limiting lives inside the platform gateway and is invisible to consumers.
 
@@ -197,7 +192,7 @@ Tunable per deployment via `WSUITE_CHATBOT_THROTTLE_PER_MINUTE` / `WSUITE_CHATBO
 
 - Visitors sharing an egress IP (corporate NAT, a hotel's own wifi, a mobile carrier CGNAT, a proxy) share **one** bucket. On a site whose guests are mostly on the property's wifi, budget for that.
 - A client that rotates IPs gets a fresh bucket each time — which is exactly why the **per-key site ceiling** exists as the backstop, and why it also caps the AI spend a copied key can drive.
-- **Per-site _configurable_ limits are not available**, by construction: the throttle runs before the API key is resolved, so no site is known yet. The numbers above are deployment-wide config, not per-site settings. (Per-_key_ isolation you do get — a separate key gets a separate ceiling, which is the argument for a separate staging key in §7.)
+- **Per-site *configurable* limits are not available**, by construction: the throttle runs before the API key is resolved, so no site is known yet. The numbers above are deployment-wide config, not per-site settings. (Per-*key* isolation you do get — a separate key gets a separate ceiling, which is the argument for a separate staging key in §7.)
 
 ---
 
@@ -237,42 +232,28 @@ Illustrative only — [`../resources/widget/chatbot.js`](../resources/widget/cha
 
 ```js
 const BASE = "https://nest-mind.test";
-const KEY = "ws_live_xxxxxxxxxxxx.xxxxxxxx…"; // public-scoped
-const H = {
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${KEY}`,
-};
+const KEY  = "ws_live_xxxxxxxxxxxx.xxxxxxxx…";      // public-scoped
+const H    = { "Content-Type": "application/json", "Authorization": `Bearer ${KEY}` };
 
 // 1. init
 let r = await fetch(`${BASE}/api/v1/chatbot/conversations`, {
-  method: "POST",
-  headers: H,
-  body: JSON.stringify({
-    locale: navigator.language,
-    property: "Las Eras Nest Hostel",
-  }),
+  method: "POST", headers: H,
+  body: JSON.stringify({ locale: navigator.language, property: "Las Eras Nest Hostel" }),
 });
-const {
-  conversation: { uuid },
-  greeting,
-} = await r.json();
+const { conversation: { uuid }, greeting } = await r.json();
 
 // 2. turn
 r = await fetch(`${BASE}/api/v1/chatbot/conversations/${uuid}/messages`, {
-  method: "POST",
-  headers: H,
-  body: JSON.stringify({ message: "do you have wifi?" }),
+  method: "POST", headers: H, body: JSON.stringify({ message: "do you have wifi?" }),
 });
-if (r.status === 410 || r.status === 404) {
-  /* conversation gone: clear uuid, re-init, resend once (§5.1) */
-}
-const turn = await r.json(); // { reply, actions, turn }
+if (r.status === 410 || r.status === 404) { /* conversation gone: clear uuid, re-init, resend once (§5.1) */ }
+const turn = await r.json();               // { reply, actions, turn }
 
 // 3. poll (only if an async_result element is present)
-const async = turn.actions.find((a) => a.type === "async_result");
+const async = turn.actions.find(a => a.type === "async_result");
 if (async && async.url.startsWith("/")) {
-  const res = await fetch(BASE + async.url, { headers: H }); // resolve relative → BASE
-  const final = await res.json(); // { status, reply?, actions?, turn }
+  const res = await fetch(BASE + async.url, { headers: H });   // resolve relative → BASE
+  const final = await res.json();          // { status, reply?, actions?, turn }
 }
 ```
 

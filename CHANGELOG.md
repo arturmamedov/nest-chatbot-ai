@@ -5,6 +5,44 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.9.0 — 2026-08-19
+
+**Contract sync: `BUILT_AGAINST` 1.6.1 → 1.6.2 (D-047).** A **MINOR**, and the only case
+reserved for one: a fresh `docs/wsuite/` packet and a `BUILT_AGAINST` move. Packet:
+`docs @ chatbot-contract-v1.6.2 (d01382b) · widget @ 712c2c5`.
+
+**No renderer changed, and that is the correct outcome.** 1.6.2 is a PATCH with **no wire
+effect** — no new element, no new field, no new request parameter. What changed is *when the
+server emits* `property_cards`: a card now requires a **this-turn** signal (the guest named the
+hostel, referred to one, asked by island, or is on a `data-property`-seeded page). A property
+the server merely *remembered* from an earlier turn no longer emits one — which is the bug it
+fixes: a hostel named on turn 4 kept its card under every later answer, including questions
+about other islands, masking the island carousel the guest had actually asked for.
+
+- **The one thing the sync did change is a comment, and it was worth the sync on its own.**
+  `renderActions()`'s dedupe pre-scan deliberately ignores `CARD_MAX`, and its stated reason was
+  that "the only payload where the dedupe can fire is the resolved-property turn, whose card set
+  is **always exactly one**". D-047's second half ends that: a turn naming several hostels now
+  emits one card each. The code is unchanged and still correct, but its justification is now a
+  **bound rather than an impossibility** — divergence needs a payload with more than `CARD_MAX`
+  cards *and* a `link_button` matching one past the cap, i.e. a guest naming nine hostels in one
+  message. Stated in the comment, including what would make it real, because the next contract
+  that widens what can emit a rail is the one that has to cap that scan.
+- **The rail itself needed nothing**, confirmed rather than assumed. `renderPropertyCards()`
+  loops to `CARD_MAX` and gates the dots on `count > 1`; the CSS is `display: flex` with
+  `flex-shrink: 0` cards and carries no `:only-child` or nth-child rule. A named-property turn
+  carrying two cards renders as a two-card rail with two dots, which is what it should do.
+- **The mock now reports `contract_version: '1.6.2'`**, mirroring a real server rather than
+  freezing at the version the fixtures were written against.
+
+Verified: the drift `console.warn` no longer fires — and, because absence proves nothing on its
+own, a **positive control** confirmed the detector still works, emitting "server response
+contract 1.6.3 is newer than this widget (built against 1.6.2)" when the mock was temporarily
+made to report ahead. The 2.8.2 event suite re-ran green (78 checks) against 2.9.0, so the sync
+disturbed nothing. **Not verified here:** the four emission-behaviour checks in the upstream
+sync prompt's Step 2 need a live server — the local fixtures cannot exercise a server-side
+emission rule, by definition.
+
 ## 2.8.2 — 2026-08-19
 
 **The widget can now be measured, and still never phones home.** Eleven named DOM events on
