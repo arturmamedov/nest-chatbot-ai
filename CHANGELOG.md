@@ -5,6 +5,77 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.10.1 — 2026-08-23
+
+**The close-out of the 1.7.0 sync.** No contract surface moved: `BUILT_AGAINST` stays `1.7.0`
+(it moves only during a sync), the vendored packet is untouched, and the eleven `wchat:*` events
+and `window.NestChatbot`'s methods are byte-identical. A patch by the rule in CLAUDE.md
+§ Conventions.
+
+### Documentation 2.10.0 falsified and did not update
+
+A release that changes what is true has to change everything that says otherwise. 2.10.0 updated
+CLAUDE.md, this file and `message-timestamps.md`, and missed three places:
+
+- **The day-separators banner in `nest-chatbot.js` still said the opposite of the code.** It
+  asserted *"THE CLOCK IS THIS BROWSER'S"*, that *"the response contract carries no time field
+  of any kind"*, and that *"a replay shows the SENDING browser's clock"* — all three falsified by
+  the same commit that vendored `server_time` and routed every stamp through `nowMs()`. It sat
+  ~1450 lines below `nowMs()`'s own header, which says the reverse, and it is the first thing
+  read before touching day separators. Rewritten to state what survives: not device-clock skew,
+  which `server_time` removed, but the **timezone** case alone — `dayKey()` takes local midnight
+  in the device's zone, and `server_time` corrects the instant, never the zone.
+- **`CLAUDE.md` dated the 1.7.0 packet to the 1.6.2 sync.** *"Current packet: synced
+  2026-08-19"* survived as context while the SHA pair beside it moved. A packet whose contract
+  header reads 2026-08-21 cannot have been synced on 08-19.
+- **`visitor-measurement-and-events.md` § The ask upstream still opened** *"Neither item below is
+  implemented; both are requests"* — two lines above a heading reading **SENT, AND GRANTED**.
+
+Also: the `410`/`404` re-init comment still measured the wedge it warns about in a fixed 24h
+(the record's own window now, so a week on the current deployment); a paragraph break lost in
+CLAUDE.md's demo section had welded the `?nc-idle` note onto an unrelated sentence; and the
+`?nc-idle` worked example disagreed with CLAUDE.md's (`0.0005`/2 s vs `0.005`/18 s — now 18 s in
+both).
+
+### Two hardening fixes
+
+- **`restartConversation()` carried the dead conversation's clock offset into the new one.** It
+  resets an explicitly-enumerated list of per-conversation state and `serverOffset` was not on
+  it. `serverIdleHours` self-heals because init reassigns it unconditionally; the offset does
+  not, because it is only written when a `201` actually carries `server_time` — so a restart
+  whose re-init omits the field, or fails outright, kept stamping on the old correction. That
+  contradicted 2.10.0's own "one offset per conversation". One line, in the reset block where it
+  belongs.
+- **A whitespace-only `quick_replies.heading` is now read as absent.** `"   "` is truthy, so it
+  painted a blank full-width row *and* — the part that matters — became the chip group's
+  `aria-label`, replacing a meaningful generic accessible name with an empty one. The reference
+  renderer has the same hole; a tenant-authored string is exactly where a stray space arrives.
+  Guarded with `.trim()`, which fixes both in one place.
+
+### Verified
+
+**Mock**, on a fresh port with the served source asserted first (the cache trap in CLAUDE.md
+has already cost this repo a pass). The headed welcome row carries the heading as a **child**
+at `flex-basis: 100%`, `aria-hidden` on the visible copy and the heading string as the row's
+`aria-label`; the unheaded row keeps the generic name. Tapping a chip took **both** rows and
+the heading with them — zero `.nc-chip-head` left anywhere in the document — and focus landed
+on the composer, never `<body>`. A whitespace-only heading now renders **no** head node and
+leaves the generic `aria-label` intact; a heading with zero valid chips mounts **nothing**.
+The stored-window rule was exercised three ways through the replay path: 30 h old with a
+stored 168 h window **resumes** (the exact case 2.9.0 got wrong), the *same* age with no
+stored window **drops** on the 24 h fallback, and 200 h old against a stored 168 h window
+**drops**. Restart still wipes cleanly, re-inits, and writes a fresh offset.
+
+**Live**, against the wSuite deployment — and the finding matters more than the checks:
+**the server is still on `contract_version: 1.6.2` and sends neither `idle_hours` nor
+`server_time`.** So this release's absent-tolerance is what actually got exercised, and it is
+exact: a real conversation, a real turn and a real reply, with `idleHours: null` and
+`clockOffset: 0` written at init and **still** null/0 after a turn on a resumed session —
+pre-1.7.0 behaviour byte-for-byte, with no drift `console.warn` (correctly: a server *behind*
+the widget is not a drift condition, guide §3.1). A positive control built outside the repo,
+with `BUILT_AGAINST` forced to `1.5.0`, fired the warn on cue. **`idle_hours` cannot be
+confirmed on the wire until the platform deploys 1.7.0** — see CLAUDE.md § Open items.
+
 ## 2.10.0 — 2026-08-22
 
 **Contract sync: `BUILT_AGAINST` 1.6.2 → 1.7.0 (D-050).** A **MINOR**, the case reserved for

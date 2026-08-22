@@ -135,7 +135,7 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 `BUILT_AGAINST` (api section) moves **only** during a sync — it is a claim about what this
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
-rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-08-19 as
+rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-08-22 as
 `docs @ chatbot-contract-v1.7.0 (2b9da82) · widget @ 2b9da82` — the widget SHA is part of the
 packet's identity, because the reference renderer legitimately moves between contract tags.
 `BUILT_AGAINST` is `'1.7.0'`, in lockstep since release 2.10.0 adopted D-050.
@@ -383,14 +383,14 @@ are shaped exactly like the real envelope. Drive them from the composer:
 island chips — mirroring a real welcome payload; both prompt messages chain into the table above
 rather than the catch-all reply. Only the island row carries a `heading`, on purpose: one page
 load then shows a headed row and a bare one side by side. It also serves the 1.7.0 init pair,
-`idle_hours` and `server_time`.
+`idle_hours` and `server_time`. Since server chips **replace** the widget's own pack block, that
+means the demo never reaches `showPrompts()` or `setLocale`'s pill-repaint branch: exercising
+the fallback means temporarily setting `Mock.init`'s `actions: []`.
 
 **`?nc-idle=<hours>` on the demo URL overrides the fixture's `idle_hours`** — the only way to
 get a window short enough to actually cross (`?nc-idle=0.005` is 18 seconds, where a real
 server's smallest step is an hour). A harness knob and only ever that: the whole `Mock` object
-is unreachable without `data-mock`, which a production page never sets. Since server chips **replace** the widget's own pack block,
-that means the demo never reaches `showPrompts()` or `setLocale`'s pill-repaint branch:
-exercising the fallback means temporarily setting `Mock.init`'s `actions: []`.
+is unreachable without `data-mock`, which a production page never sets.
 
 The demo page also carries the host-side half of the events seam — one listener on the
 umbrella `wchat` event, logging to the console and to `window.wchatLog`. Driving the table
@@ -483,14 +483,20 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   - **`heading`** closed open point 9 of `docs/proposals/response-contract-phase2-elements.md`.
     A chip row can say what it asks; absent still means bare, and substituting our own label
     is still wrong.
-- **The window is already wider than 24h, and shipping 2.10.0 is what makes that safe.**
-  `nest-mind`'s own env carries `WSUITE_CHATBOT_IDLE_HOURS=168`, and the live init `201`
-  returns `idle_hours: 168` — a **seven-day** window. Every widget still on 2.9.0 or earlier
-  expires its record at hour 24 against a server conversation that stays live for another six
-  days: the guest loses their transcript on screen and opens a second conversation, still
-  holding the working memory `data-property` seeded. **Deploying 2.10.0 is the fix**, and it
-  is the more urgent half of this release. A spike in `wchat:error {phase:'turn', status:410,
-  retrying:true}` is what that desync looks like from the outside.
+- **The widget half is shipped; the desync is still live because the SERVER half is not
+  deployed.** `nest-mind`'s env carries `WSUITE_CHATBOT_IDLE_HOURS=168` — a **seven-day**
+  window — so a record expiring at hour 24 costs the guest their transcript and opens a second
+  conversation against one the server still holds live, working memory `data-property` and all.
+  2.10.0 removed the widget's hardcoded 24h and 2.10.1 verified it. **But measured against the
+  live deployment on 2026-08-23, `nest-mind.laravel.cloud` still reports
+  `contract_version: 1.6.2` and sends no `idle_hours` and no `server_time` at all.** So
+  2.10.x cannot learn the window yet: it degrades exactly as designed — `idleHours: null`,
+  `clockOffset: 0`, the 24h fallback — which is correct behaviour and *not* a fix. **The fix
+  is inert until the platform deploys 1.7.0**; that deploy, not this release, is what closes
+  the gap. Verify by re-reading `contract_version` on the init `201` before assuming
+  otherwise, and do not re-derive the window from `nest-mind`'s env: that is the *local*
+  repo's config, not the deployed instance's. A spike in `wchat:error {phase:'turn',
+  status:410, retrying:true}` is what the desync looks like from the outside.
 - **A persistent visitor token at init is deliberately NOT asked for yet.** It is the only way
   to answer "same person, cross-device" or "came back after the window", and the only way to
   put the answer in wSuite's own panel rather than in each host's GA4 — but it is a
@@ -547,4 +553,6 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   Releases through 2.8.0 predate this rule and are **not** renumbered — 2.6.0, 2.7.0 and
   2.8.0 would each be a patch under it.
   2.8.1 and 2.8.2 are the first releases numbered by it, and 2.9.0 / 2.10.0 are both syncs.
-  The next is **2.10.1** unless it is a sync.
+  2.10.1 is the close-out patch that followed the 1.7.0 sync — documentation the sync had
+  falsified, plus two hardening fixes, and **no** `BUILT_AGAINST` move (it moves only during a
+  sync). The next is **2.10.2** unless it is a sync.

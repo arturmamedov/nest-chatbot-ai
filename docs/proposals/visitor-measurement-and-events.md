@@ -198,7 +198,9 @@ Recorded so it is not rediscovered as a surprise:
 
 ## The ask upstream
 
-**For: the wSuite platform team.** Neither item below is implemented; both are requests.
+**For: the wSuite platform team.** Item 1 was sent, granted and adopted — it is kept here as
+the record of what was asked and why, not as a live request. Item 2 remains deliberately
+unasked; the reasoning under it is why.
 
 ### 1. `idle_hours` in the init `201` — **SENT, AND GRANTED**
 

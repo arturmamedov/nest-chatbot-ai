@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.10.0';
+    var VERSION = '2.10.1';
 
     /* =========================================================== config ===== */
 
@@ -937,9 +937,9 @@
          * The idle window this fixture claims (1.7.0). 24 by default, matching
          * the platform default — but `?nc-idle=<hours>` on the demo page URL
          * overrides it, because the one thing the expiry rule needs to be tested
-         * against is a window short enough to actually cross: ?nc-idle=0.0005 is
-         * under two seconds. A real server cannot offer that without a config
-         * round trip, and the assertion is identical either way.
+         * against is a window short enough to actually cross: ?nc-idle=0.005 is
+         * 18 seconds. A real server's smallest step is an hour, and the
+         * assertion is identical either way.
          *
          * A harness knob, and it can only ever be one: this whole object is
          * unreachable unless data-mock is set, which a production page never does.
@@ -1933,19 +1933,30 @@
      * guest now replays a stored conversation, so without this the panel opens on
      * yesterday evening's transcript with nothing on screen saying that any time
      * passed. The replay is seamless by design, which is exactly the problem —
-     * and the API's idle window, 24h today, is heading for a week or more.
+     * and the window it spans is now the server's whenever it sends one, which
+     * the platform config puts at a week — so a replay can cross several days
+     * rather than one midnight. Until a deployment actually reports it, the 24h
+     * fallback still applies and a transcript spans two days at most.
      *
-     * THE CLOCK IS THIS BROWSER'S. Nothing in the system records when a message
-     * happened: the response contract carries no time field of any kind, and the
-     * record's own `ts` means last activity, rewritten every turn. So an entry is
-     * stamped where it is created, client-side, with two honest consequences — a
-     * replay shows the SENDING browser's clock, and a guest who crosses a
-     * timezone between visits sees these recomputed in the new zone. Day
-     * granularity is what makes that acceptable: minutes of skew never move a
-     * date, and only a timezone hop does. It would not be acceptable under a
-     * visible per-message clock, which is the main reason there isn't one — the
-     * stored value would support one tomorrow, and this comment is why it stays
-     * a tooltip instead.
+     * WHOSE CLOCK, AFTER 1.7.0. The contract still dates no MESSAGE — `turn` is
+     * an order, not an instant, and the record's own `ts` means last activity,
+     * rewritten every turn — so an entry is still stamped where it is created.
+     * What changed is the clock that stamps it: `server_time` on the init 201
+     * gives one offset per conversation, and every stamp here goes through
+     * nowMs() rather than Date.now(). See its header for the rule that keeps
+     * that coherent (corrected for dates, raw for durations) and for the two
+     * narrow first-visit cases where the offset is legitimately still 0.
+     *
+     * So device-clock skew is no longer an error source, and ONE consequence
+     * survives: a guest who crosses a timezone between visits sees these
+     * recomputed in the new zone, because dayKey() takes local midnight in the
+     * DEVICE's zone and server_time corrects the instant, never the zone — which
+     * is the right call, since the guest's own zone is what "today" means to
+     * them. Day granularity is what keeps that acceptable: only a timezone hop
+     * moves a date. It would not be acceptable under a visible per-message
+     * clock, which is still the main reason there isn't one — the stored value
+     * would support one tomorrow, and this comment is why it stays a tooltip
+     * instead. docs/proposals/message-timestamps.md is the design record.
      */
 
     // The day last PAINTED — render state, never stored, never persisted. Held
@@ -2442,8 +2453,14 @@
          * thing to try asking, when it is the answer to a question. That was the
          * 2.4.2 decision and this field is what replaces the gap, not what
          * licenses filling it.
+         *
+         * TRIMMED, so whitespace-only reads as absent. A "   " is truthy, and
+         * untrimmed it would both paint a blank full-width line and — worse —
+         * become the row's aria-label, replacing a meaningful generic name with
+         * an empty one. The reference has the same hole; a tenant-authored
+         * string is exactly where a stray space arrives.
          */
-        var heading = (typeof action.heading === 'string' && action.heading) ? action.heading : null;
+        var heading = (typeof action.heading === 'string' && action.heading.trim()) ? action.heading.trim() : null;
         // A group with an accessible name (contract → Accessibility): the chips
         // are real buttons, and the name says what they are before they are read
         // out one by one. When the server supplies a heading, that string IS the
@@ -3944,7 +3961,10 @@
             // Idled out (410) or unknown uuid (404). On the TURN endpoint both
             // mean "this stored uuid is dead" (guide §5.1): re-init transparently
             // and resend once — without clearing the store, a stale uuid would
-            // wedge this browser for the full 24h retention window. The guest
+            // wedge this browser for the whole of the record's own idle window
+            // — since 2.10.0 the server's when it sends one, the 24h fallback
+            // when it does not, rather than the fixed day this used to assume.
+            // The guest
             // sees one reply, never a duplicate and never an error. (On the POLL
             // endpoint a 404 is transient instead — see pollResult.)
             if ((status === 410 || status === 404) && !isRetry) {
@@ -4079,6 +4099,12 @@
         lastDayKey = null;        // the wipe below takes every pill with it; a stale day here
                                   // would swallow the first real separator of the new conversation
         chatEpoch += 1;           // orphan any poll still backing off for the dead conversation
+        // One offset per CONVERSATION, and this starts a new one. Unlike
+        // serverIdleHours — which the init below reassigns unconditionally, so it
+        // cannot survive — the offset is only written when a 201 actually carries
+        // server_time, so a re-init that omits it (older server) or fails outright
+        // would otherwise stamp the new conversation on the old one's correction.
+        serverOffset = 0;
 
         els.input.disabled = false;
         els.send.disabled = false;
