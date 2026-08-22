@@ -35,7 +35,11 @@
     var property = cfg.property || null;
 
     var STORE_KEY = 'wsuite-chatbot:' + apiKey;
-    var IDLE_MS = 24 * 60 * 60 * 1000; // O-9 — mirrors conversation.idle_hours
+    // O-9 — the FALLBACK idle window, used only until a server tells us otherwise.
+    // Since contract 1.7.0 the init 201 carries `idle_hours` (O-45), so this
+    // constant no longer has to stay in step with the deployment's config by hand;
+    // it is what an older server, or a record written by one, degrades to.
+    var IDLE_MS = 24 * 60 * 60 * 1000;
 
     // Async tool-turn poll cadence (D-037(f)) — hardcoded JS: a static, no-build,
     // ETag'd asset cannot read PHP config, and async_result carries only {type,url}.
@@ -51,7 +55,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.6.2';
+    var BUILT_AGAINST = '1.7.0';
 
     // ---- state ---------------------------------------------------------------
     var conversationUuid = null;
@@ -66,6 +70,10 @@
     // else to get it from — see readStore().
     var introGreeting = null;
     var introActions = null;
+    // The server's own idle window in hours (1.7.0 — O-45), or null against a
+    // server that does not send it. Persisted with the record, because the resume
+    // path never reaches the server to ask again — see storedIdleMs().
+    var serverIdleHours = null;
     var els = {};
 
     // ---- localStorage helpers -----------------------------------------------
@@ -81,21 +89,47 @@
     // Accepted cost: the welcome can be up to IDLE_MS stale. These are site
     // settings rather than conversation state, so the worst case is a returning
     // guest reading yesterday's promo copy until the conversation expires.
+    //
+    // The window this checks against is the RECORD's, not the constant's — see
+    // storedIdleMs() below.
     function readStore() {
         try {
             var raw = window.localStorage.getItem(STORE_KEY);
             if (!raw) { return null; }
             var parsed = JSON.parse(raw);
             if (!parsed || !parsed.uuid || !parsed.ts) { return null; }
-            if ((Date.now() - parsed.ts) > IDLE_MS) { return null; }
+            if ((Date.now() - parsed.ts) > storedIdleMs(parsed)) { return null; }
             // Anything malformed degrades to "no welcome", never throws, and above
             // all never costs the guest the conversation the record also holds.
             return {
                 uuid: parsed.uuid,
                 greeting: typeof parsed.greeting === 'string' ? parsed.greeting : null,
-                actions: (Array.isArray(parsed.actions) && parsed.actions.length) ? parsed.actions : null
+                actions: (Array.isArray(parsed.actions) && parsed.actions.length) ? parsed.actions : null,
+                // Handed back so the resume branch can restore it into state. Every
+                // turn re-stamps the record, and writeStore() serializes whatever is
+                // in `serverIdleHours` — so a resumed session that did not restore it
+                // would write `null` on its first turn and silently drop the window
+                // back to the 24h fallback on the NEXT boot.
+                idleHours: (typeof parsed.idleHours === 'number' && parsed.idleHours > 0) ? parsed.idleHours : null
             };
         } catch (e) { return null; }
+    }
+
+    // The idle window to judge a STORED record by (contract 1.7.0 — O-45).
+    //
+    // Reading `idle_hours` off the init response is not enough on its own, and a
+    // half-implementation looks correct: readStore() runs at BOOT, and a guest
+    // inside the window resumes without ever calling init — so the one visit that
+    // needs the server's number is the visit that never receives it. The record
+    // therefore carries the window it was written under, and this reads it back.
+    //
+    // Absence is normal in both directions: an older server sends no idle_hours,
+    // an older record has no field, and both fall back to the 24h constant.
+    function storedIdleMs(parsed) {
+        var hours = parsed && parsed.idleHours;
+        return (typeof hours === 'number' && isFinite(hours) && hours > 0)
+            ? hours * 60 * 60 * 1000
+            : IDLE_MS;
     }
 
     // `ts` means LAST ACTIVITY, which is what the server's conversation.idle_hours
@@ -105,7 +139,8 @@
     function writeStore(uuid) {
         try {
             window.localStorage.setItem(STORE_KEY, JSON.stringify({
-                uuid: uuid, ts: Date.now(), greeting: introGreeting, actions: introActions
+                uuid: uuid, ts: Date.now(), greeting: introGreeting, actions: introActions,
+                idleHours: serverIdleHours
             }));
         } catch (e) {}
     }
@@ -221,6 +256,10 @@
             '.wsc-card-price{font-size:13px;font-weight:600;color:#1f2430;margin-top:4px}',
             '.wsc-card-cta{display:block;text-align:center;margin-top:8px}',
             '.wsc-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}',
+            // 1.7.0 quick_replies heading. `flex:0 0 100%` is what lets it live
+            // INSIDE the flex row (so it retires with the chips) while still
+            // occupying its own line above them.
+            '.wsc-chips-head{flex:0 0 100%;margin:0;font-size:13px;font-weight:600;color:#1f2430}',
             '.wsc-chip{padding:7px 12px;border-radius:999px;border:1px solid ' + color + ';background:none;',
             'color:' + color + ';font-size:13px;cursor:pointer;font-family:inherit}',
             '.wsc-promo{background:#fff;border:1px solid #e6e8ec;border-radius:12px;overflow:hidden;margin:6px 0;max-width:88%}',
@@ -576,17 +615,32 @@
     // quick_replies (contract 1.5.0): tap-to-send chips. A chip carries NO url —
     // tapping sends its `message` down the exact normal-turn path (the sent text
     // shows as a guest bubble: honest transcript).
+    //
+    // `heading` (1.7.0 — O-47) renders INSIDE the row, not as a sibling above it.
+    // That is load-bearing: retireChipRows() removes the row element and nothing
+    // else, so a sibling heading would outlive the chips it labels and sit over
+    // the transcript forever. Being a full-width flex child costs one CSS rule.
     function quickReplies(action) {
         if (!action.items || !action.items.length) { return; }
         var row = el('div', 'wsc-chips');
         row.setAttribute('role', 'group');
-        row.setAttribute('aria-label', 'Suggested questions');
+        var heading = (typeof action.heading === 'string' && action.heading) ? action.heading : null;
+        // The heading IS the group's accessible name when there is one — that is the
+        // whole point of the field. The visible copy is then aria-hidden so it is not
+        // announced twice.
+        row.setAttribute('aria-label', heading || 'Suggested questions');
         row.setAttribute('aria-live', 'off'); // announced by the reply, not by itself
         // Tenant-authored labels may be in the tenant's language, not the guest's;
         // the island_choice row omits `locale` because its labels are proper nouns.
         if (typeof action.locale === 'string' && /^[a-z]{2}$/.test(action.locale)) {
             row.setAttribute('lang', action.locale);
         }
+        if (heading) {
+            var head = el('div', 'wsc-chips-head', heading);
+            head.setAttribute('aria-hidden', 'true');
+            row.appendChild(head);
+        }
+        var chips = 0;
         for (var i = 0; i < action.items.length; i++) {
             (function (item) {
                 if (!item || typeof item.label !== 'string' || !item.label
@@ -600,9 +654,13 @@
                     ensureConversation(function () { sendMessage(item.message, false); });
                 });
                 row.appendChild(chip);
+                chips++;
             })(action.items[i]);
         }
-        if (row.firstChild) { els.body.appendChild(row); chipRows.push(row); scrollDown(); }
+        // Counted, NOT `row.firstChild`: since 1.7.0 the heading is itself a child,
+        // so a row whose every item failed validation would otherwise mount as a
+        // lone question with nothing to tap.
+        if (chips) { els.body.appendChild(row); chipRows.push(row); scrollDown(); }
     }
 
     function linkButton(label, url, rendered) {
@@ -643,6 +701,10 @@
             started = true;
             introGreeting = stored.greeting;
             introActions = stored.actions;
+            // Restored, not defaulted — see readStore(). This branch never reaches
+            // the server, so the record is the only source for the window, and the
+            // first turn of this session is about to write the record back.
+            serverIdleHours = stored.idleHours;
             // Paint the welcome only onto an empty transcript. This branch is
             // reached from panel-open, but submit() draws the guest bubble BEFORE
             // it calls us, and a welcome block under a message the guest has
@@ -676,10 +738,15 @@
             // Settled BEFORE writeStore, which serializes them: the resume branch is
             // the only other reader and it needs the same values this load renders.
             // Stored even when `silent` — the guest is not shown them now, but the
-            // replacement conversation is theirs for the next 24h and its next page
-            // load should open with its welcome, not with nothing.
+            // replacement conversation is theirs for the rest of the idle window
+            // and its next page load should open with its welcome, not with nothing.
             introGreeting = data.greeting || null;
             introActions = (data.actions && data.actions.length) ? data.actions : null;
+            // 1.7.0 (O-45). Absent on an older server, which leaves it null and
+            // falls the record back to IDLE_MS — the pre-1.7.0 behaviour exactly.
+            serverIdleHours = (typeof data.idle_hours === 'number' && isFinite(data.idle_hours) && data.idle_hours > 0)
+                ? data.idle_hours
+                : null;
             writeStore(conversationUuid);
             checkContractVersion(data.contract_version);
             if (!silent) {

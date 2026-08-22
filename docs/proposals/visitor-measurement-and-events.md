@@ -14,11 +14,13 @@ before changing the shape of it.
 
 Shipped in **2.8.2** as a patch — additive, no `data-*` attribute, nothing new for a host's
 `<script>` tag to say. `BUILT_AGAINST` was `1.6.1` at that release and no transport changed;
-the packet has since moved to **1.6.2** in `2.9.0` (D-047, an emission rule), which touches
-nothing described here.
+the packet has since moved to **1.6.2** in `2.9.0` (D-047, an emission rule) and to **1.7.0**
+in `2.10.0` (D-050), neither of which changes the event surface — no name moved, no payload
+lost a field.
 
-The upstream ask at the foot of this document (`idle_hours` in the init response) is **open**
-and has not been sent.
+**The upstream ask at the foot of this document was sent, and granted.** `idle_hours` landed in
+contract 1.7.0 and the widget adopted it in 2.10.0, which changes one thing described here for
+the better: see [What route A cannot answer](#what-route-a-cannot-answer-at-any-idle-window-length).
 
 ---
 
@@ -55,11 +57,12 @@ the destination already exists.
 The only route that answers "came back next week", "same person, different device", or that
 puts the answer in wSuite's own panel rather than in each host's GA4.
 
-It is deferred because **the returning-guest ceiling is the idle window, and the window is
-moving**. `IDLE_MS` mirrors the API's conversation idle window — 24h today, heading for a week
-or more. When it extends, "came back next week" becomes answerable from route A alone. Building
-a cross-session identifier to answer a question that is about to answer itself is the wrong
-order.
+It is deferred because **the returning-guest ceiling is the idle window, and the window has now
+moved**. That was written when `IDLE_MS` was a hardcoded 24h and the widening was a plan; the
+server's window is now **168h — seven days** and, since 2.10.0, the widget reads it from the
+init response instead of guessing. "Came back next week" is answerable from route A alone
+today. Building a cross-session identifier to answer a question that has just answered itself
+is the wrong order, and the argument for deferring is stronger than when it was written.
 
 It also carries a real decision that should be made deliberately rather than discovered at
 review: a persistent visitor id is **categorically different** from a 24h conversation uuid. It
@@ -186,7 +189,10 @@ Recorded so it is not rediscovered as a surprise:
   the question to settle before the ask below is sent.
 - **Consent-gated guests.** The events fire regardless, but a host CMP that blocks GA4 before
   consent records nothing. The numbers are "consented guests", not all guests.
-- **Anything after the window expires**, however long it becomes.
+- **Anything after the window expires** — but the window is no longer this widget's guess.
+  Since 2.10.0 it comes from the init `201` (`idle_hours`) and rides the stored record, so
+  `ready.returning` automatically sees as far back as the deployment allows. At the current
+  seven days that is most of what route B was wanted for.
 
 ---
 
@@ -194,7 +200,16 @@ Recorded so it is not rediscovered as a surprise:
 
 **For: the wSuite platform team.** Neither item below is implemented; both are requests.
 
-### 1. `idle_hours` (or `conversation.expires_at`) in the init `201`
+### 1. `idle_hours` in the init `201` — **SENT, AND GRANTED**
+
+Delivered as **D-050(a)** in contract 1.7.0 and adopted in widget **2.10.0**, in the shape asked
+for below: a duration rather than an `expires_at` instant (the expiry advances every turn while
+init fires once), optional, absence normal. One thing the ask did not foresee and the adoption
+had to solve: reading it at init is **not enough**, because the resume path never calls init —
+so the window is persisted into the stored record and restored on resume. The section below is
+kept as the reasoning it was granted on.
+
+*(as written)*
 
 The widget's `IDLE_MS` is a hardcoded 24h whose comment says it "mirrors the API's conversation
 idle window". The contract has no field to drive it — `grep -rn "idle_hours" docs/wsuite/`
@@ -215,7 +230,7 @@ is good: contract 1.6.0 exists because of this widget's own conformance report.
 Design it so absence is normal — the widget must keep working against a server that never sends
 it.
 
-### 2. An opaque visitor token at init — **not requested yet, stated for the record**
+### 2. An opaque visitor token at init — **still not requested, and now less needed**
 
 The shape would be: the widget generates a random token, stores it, sends it at init; the
 platform correlates conversations by it. It is the only route to cross-device, to "came back

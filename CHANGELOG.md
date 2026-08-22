@@ -5,6 +5,94 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.10.0 — 2026-08-22
+
+**Contract sync: `BUILT_AGAINST` 1.6.2 → 1.7.0 (D-050).** A **MINOR**, the case reserved for
+one: a fresh `docs/wsuite/` packet and a `BUILT_AGAINST` move. Packet:
+`docs @ chatbot-contract-v1.7.0 (2b9da82) · widget @ 2b9da82`.
+
+**All three fields this repo asked for upstream, delivered in one contract release** — and
+unlike 2.9.0 this one is not a constant move. Two of the three change behaviour, and one was a
+**live defect**.
+
+### `idle_hours` — the widget stops guessing the window
+
+`IDLE_MS` was a hardcoded 24h whose comment claimed it "mirrors the API's conversation idle
+window". It mirrored nothing: it was a constant that had to be moved by hand every time a
+deployment changed its config, and it could not see that happen. **It was already wrong.**
+`nest-mind` carries `WSUITE_CHATBOT_IDLE_HOURS=168`, and the live init `201` returns
+`idle_hours: 168` — a seven-day window. Under 2.9.0 a guest returning at hour 30 lost their
+transcript on screen **and opened a second conversation while the server's original was still
+live**, still holding the working memory `data-property` seeded. Nothing errored; the widget
+answered as a stranger.
+
+- **The window now comes from the server and rides the stored record.** Reading it at init is
+  not enough and the half-fix looks finished: `readStore()` runs at **boot**, and a guest inside
+  the window resumes *without ever calling init* — so the one visit that needs the server's
+  number is the visit that never receives it. `storedIdleMs()` judges each record by the window
+  it was written under.
+- **The resume branch restores it into state, and that is load-bearing.** `persist()` is the
+  single writer and serializes current state with no arguments, so a resumed session that did
+  not restore the window would write `null` over it on its **first turn** — reverting to 24h on
+  the next boot, the same defect one turn later.
+- **Absence stays normal in both directions.** An older server sends no `idle_hours`; a record
+  written before this release has no field. Both fall back to `IDLE_MS`, which survives as the
+  fallback and nothing else.
+
+### `server_time` — one clock correction per conversation
+
+The day separators (2.8.1) stamp each entry client-side because nothing in the guest API dates
+a message. `server_time` gives one offset per conversation, `Date.parse(server_time) -
+Date.now()`, applied through a new `nowMs()`.
+
+- **The offset is persisted too**, for the identical reason as the window: without it a resumed
+  session writes *uncorrected* stamps into a transcript whose earlier entries are corrected,
+  which is worse than being consistently skewed.
+- **Corrected time for dates, raw time for durations.** `nowMs()` stamps the transcript's `at`,
+  the day separators and `dayLabel()`'s "today". `latencyMs`, the poll give-up deadline, the
+  teaser timers and the record's own `ts` stay on raw `Date.now()` — they measure one device
+  against itself, where skew cancels.
+- **What it does not fix, unchanged:** the timezone case (a guest who changes zone still sees
+  days recomputed) and the absence of a per-turn timestamp. `docs/proposals/message-timestamps.md`
+  is now the design record for what the widget does rather than an open request.
+
+### `quick_replies.heading` — open point 9, delivered
+
+A chip row can finally say what it is asking. Rendered via `textContent`, like every payload
+string.
+
+- **Inside the row, never a sibling**, and that is structural rather than tidy:
+  `retireChipRows()` removes the row element and nothing else, so a detached heading would
+  outlive its chips and strand a question over a transcript that has moved on. One CSS rule
+  (`flex: 0 0 100%` on `.nc-chip-head`) buys it its own line inside the flex row.
+- **The empty-row guard had to change with it.** `row.childNodes.length` stopped meaning "has
+  chips" the moment the heading became a child — a row whose every item was malformed would
+  have mounted as a lone question with nothing to tap. Chips are counted now.
+- **The heading is the row's accessible name** when present; the visible copy is `aria-hidden`
+  so it is not announced twice. Absent still means bare, and substituting a label of our own is
+  still wrong — the 2.4.2 decision stands, and this field is what replaces the gap rather than
+  what licenses filling it.
+
+### Fixtures
+
+`Mock.init` now serves `idle_hours`, `server_time` and `contract_version: '1.7.0'`, and the
+island-chips fixture carries a heading — shared by the welcome row and the `hostel` reply, so
+one fixture exercises both mount paths. **`?nc-idle=<hours>` on the demo URL overrides the
+fixture's window**, which is the only way to get one short enough to cross on purpose: a real
+server's smallest step is an hour.
+
+Verified — mock, 106 checks across seven suites, zero failures, including the eleven `wchat:*`
+event names and payloads (untouched by this release) and the demo-page CSS-scoping check. The
+drift `console.warn` stays silent at 1.7.0, and a **positive control** confirmed the detector
+still fires when the mock was temporarily made to report 1.7.1.
+
+Verified — **live**, against the wSuite app on the real API, 21 checks, zero failures: the init
+`201` carries `idle_hours: 168` and `server_time`; the record stores both; a real turn and then
+a **resumed** session's turn both leave the window intact; the server's own `heading` renders
+inside the row with the right accessible name. And the bug itself, three ways: a record last
+touched **30 hours ago survives** on the server's window, **is dropped** when the stored window
+is removed (the 24h fallback, intact), and **is dropped at hour 200**, past the server's.
+
 ## 2.9.0 — 2026-08-19
 
 **Contract sync: `BUILT_AGAINST` 1.6.1 → 1.6.2 (D-047).** A **MINOR**, and the only case

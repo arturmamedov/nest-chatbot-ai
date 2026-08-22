@@ -20,8 +20,8 @@
  *   Element-supplied urls are honoured for http(s) only; tel:/mailto:/wa.me hrefs
  *   are constructed here from channel values, never taken verbatim.
  *
- * Built against response contract 1.6.2 (BUILT_AGAINST, api section), in
- * lockstep with the packet vendored in docs/wsuite/ — release 2.9.0 is the sync
+ * Built against response contract 1.7.0 (BUILT_AGAINST, api section), in
+ * lockstep with the packet vendored in docs/wsuite/ — release 2.10.0 is the sync
  * that adopted it. BUILT_AGAINST records what this code implements, not
  * what the docs say. The server reports its live contract_version at init; the
  * widget warns once — never fails — when the server is ahead. The reference
@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.9.0';
+    var VERSION = '2.10.0';
 
     /* =========================================================== config ===== */
 
@@ -334,12 +334,30 @@
     /* ========================================================== storage ===== */
 
     var STORE_KEY = 'nest-chatbot:' + (cfg.key || cfg.apiBase || 'default');
-    var IDLE_MS = 24 * 60 * 60 * 1000;   // mirrors the API's conversation idle window
+    /*
+     * The FALLBACK idle window, not a mirror any more. Until contract 1.7.0 there
+     * was no way to learn the server's own `conversation.idle_hours`, so this
+     * constant hand-mirrored a deployment config it could not see change — the
+     * defect 2.10.0 removes. It is now only what an older server, or a record
+     * written by one, degrades to. Keep it at the platform default so that
+     * degrading changes nothing.
+     */
+    var IDLE_MS = 24 * 60 * 60 * 1000;
     var TURNS_MAX = 40;                  // safety rail — observed mean is ~1.3 turns/conversation
     var STORE_MAX_CHARS = 64 * 1024;     // JSON.stringify().length — UTF-16 units, what quota charges
 
     /*
-     * The record is {uuid, ts, actions} and readStore() hands back the OBJECT,
+     * The server's own idle window in hours (1.7.0), and its clock offset in ms.
+     * Both are settled at init, both are PERSISTED with the record, and both are
+     * restored on the resume branch — see storedIdleMs() and nowMs() for why
+     * reading them at init alone is a half-fix that looks finished.
+     */
+    var serverIdleHours = null;   // null against a server that does not send it
+    var serverOffset = 0;         // Date.parse(server_time) - Date.now(), once
+
+    /*
+     * The record is {uuid, ts, actions, turns, guestTurned, ended, idleHours,
+     * clockOffset} and readStore() hands back the OBJECT,
      * never a bare uuid: a returning guest inside the idle window resumes without
      * ever calling API.init, so the site's welcome elements — its configured
      * quick_prompts, its show_at_init promo — have nowhere else to come from. Up
@@ -370,9 +388,14 @@
      * across one nesting level would be a trap rather than a convenience.
      * ~18 chars a turn, ~720 bytes at the 40-turn cap — nothing worth encoding.
      *
-     * Accepted cost: welcome elements can be up to IDLE_MS stale. They are site
-     * settings rather than conversation state, so the worst case is a returning
-     * guest reading yesterday's promo copy until the conversation expires.
+     * `idleHours` and `clockOffset` (2.10.0) are the server's two 1.7.0 answers,
+     * carried here because the resume branch never reaches the server to ask
+     * again — see storedIdleMs() and nowMs().
+     *
+     * Accepted cost: welcome elements can be up to one idle window stale. They
+     * are site settings rather than conversation state, so the worst case is a
+     * returning guest reading yesterday's promo copy until the conversation
+     * expires.
      */
     function readStore() {
         try {
@@ -380,7 +403,8 @@
             if (!raw) { return null; }
             var parsed = JSON.parse(raw);
             if (!parsed || !parsed.uuid || !parsed.ts) { return null; }
-            if ((Date.now() - parsed.ts) > IDLE_MS) { return null; }
+            // The RECORD's window, not the constant's — see storedIdleMs().
+            if ((Date.now() - parsed.ts) > storedIdleMs(parsed)) { return null; }
             // Anything but a non-empty array is dropped rather than handed on: a
             // malformed store must degrade to "no welcome elements", never throw,
             // and above all never cost the guest the conversation it also holds.
@@ -389,9 +413,70 @@
                 actions: (Array.isArray(parsed.actions) && parsed.actions.length) ? parsed.actions : null,
                 turns: validTurns(parsed.turns),
                 guestTurned: parsed.guestTurned === true,
-                ended: parsed.ended === true
+                ended: parsed.ended === true,
+                // Handed back so the resume branch can RESTORE them into state.
+                // This object is rebuilt field by field, so a field left out of
+                // it silently vanishes — the same opt-in note validTurns() carries.
+                idleHours: positiveHours(parsed.idleHours),
+                clockOffset: (typeof parsed.clockOffset === 'number' && isFinite(parsed.clockOffset))
+                    ? parsed.clockOffset : 0
             };
         } catch (e) { return null; }
+    }
+
+    // One validator, two callers (the record and the init body): "hours" means a
+    // finite number above zero, and anything else means the field is not there.
+    function positiveHours(value) {
+        return (typeof value === 'number' && isFinite(value) && value > 0) ? value : null;
+    }
+
+    /*
+     * The idle window to judge a STORED record by (contract 1.7.0).
+     *
+     * Reading `idle_hours` off the init response is not enough on its own, and
+     * the half-implementation looks correct: readStore() runs at BOOT, and a
+     * guest inside the window resumes WITHOUT ever calling init — so the one
+     * visit that needs the server's number is the visit that never receives it.
+     * The record therefore carries the window it was written under, and this
+     * reads it back.
+     *
+     * Absence is normal in both directions: an older server sends no idle_hours,
+     * a record written before 2.10.0 has no field, and both fall back to IDLE_MS.
+     */
+    function storedIdleMs(parsed) {
+        var hours = positiveHours(parsed && parsed.idleHours);
+        return hours === null ? IDLE_MS : hours * 60 * 60 * 1000;
+    }
+
+    /*
+     * NOW, corrected by the server's clock (contract 1.7.0) — for CALENDAR
+     * stamps only. Nothing in the guest API dates a message, so the day
+     * separators and bubble titles are stamped here; a device whose clock is
+     * days out was writing those wrong, and a replay showed it.
+     *
+     * The rule that keeps this coherent, and the easy thing to get wrong:
+     * corrected time for anything that becomes a DATE, raw Date.now() for
+     * anything that measures a DURATION. So latencyMs, the poll's give-up
+     * deadline, the teaser timers and the record's own `ts` all stay raw —
+     * they are two readings of one device's clock, where skew cancels.
+     *
+     * dayKey() still takes local midnight in the DEVICE's timezone: server_time
+     * corrects the instant, never the zone, and the guest's own zone is the
+     * right one for "today". A guest who changes timezone between visits still
+     * sees their days recomputed — see docs/proposals/message-timestamps.md.
+     *
+     * Two places the offset is legitimately 0 on a broken clock, both narrow and
+     * both first-visit only, recorded rather than papered over:
+     *   - a guest who types faster than init returns. The composer is live all
+     *     through the intro, so their first bubble can be stamped before the
+     *     201 lands. Everything after it, greeting included, is corrected.
+     *   - entries stored before 2.10.0, which hold device time. They are read
+     *     back against a corrected "today" — the same legacy class as the
+     *     pre-2.8.1 entries that carry no `at` at all, and it ages out with the
+     *     idle window.
+     */
+    function nowMs() {
+        return Date.now() + serverOffset;
     }
 
     // Per-ENTRY defence, same posture as `actions` above: a malformed entry is
@@ -461,8 +546,17 @@
         // in-memory transcript keeps the turn; init's own persist() writes it.
         if (!conversationUuid) { return; }
         var record = {
+            // `ts` stays on the RAW clock: it is compared against Date.now() in
+            // readStore(), so both readings come from one device and any skew
+            // cancels. Correcting it would import the server offset into a
+            // duration measurement that never needed it.
             uuid: conversationUuid, ts: Date.now(), actions: intro.actions || null,
-            turns: transcript, guestTurned: guestTurned, ended: ended
+            turns: transcript, guestTurned: guestTurned, ended: ended,
+            // The 1.7.0 pair. Serialized from CURRENT state with no arguments,
+            // which is what makes restoring them on the resume branch load-bearing:
+            // a resumed session that did not restore them would write null/0 here
+            // on its first turn and silently drop both back to the fallback.
+            idleHours: serverIdleHours, clockOffset: serverOffset
         };
         try {
             window.localStorage.setItem(STORE_KEY, boundedRecord(record));
@@ -715,7 +809,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.6.2';
+    var BUILT_AGAINST = '1.7.0';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -839,6 +933,23 @@
             setTimeout(function () { done(status, body); }, delay == null ? 550 : delay);
         }
 
+        /*
+         * The idle window this fixture claims (1.7.0). 24 by default, matching
+         * the platform default — but `?nc-idle=<hours>` on the demo page URL
+         * overrides it, because the one thing the expiry rule needs to be tested
+         * against is a window short enough to actually cross: ?nc-idle=0.0005 is
+         * under two seconds. A real server cannot offer that without a config
+         * round trip, and the assertion is identical either way.
+         *
+         * A harness knob, and it can only ever be one: this whole object is
+         * unreachable unless data-mock is set, which a production page never does.
+         */
+        function mockIdleHours() {
+            var m = /[?&]nc-idle=([0-9.]+)/.exec(window.location.search);
+            var hours = m ? parseFloat(m[1]) : NaN;
+            return (isFinite(hours) && hours > 0) ? hours : 24;
+        }
+
         // Two fixtures serve the same promo — the island answer and the
         // "pass"/"offer" answer — and the renderer has to see byte-identical
         // payloads from both. A factory, not a shared literal: each reply gets its
@@ -875,6 +986,15 @@
             return {
                 type: 'quick_replies',
                 id: 'island_choice',
+                // heading (1.7.0), and the contract's own motivating example: at
+                // init there is nowhere else for this line to go, so before the
+                // field these chips arrived as three bare island names under a
+                // greeting that never mentioned them. Sharing the factory means
+                // one fixture exercises BOTH mount paths — the welcome row on
+                // Mock.init and the mid-transcript row the "hostel" keyword
+                // returns — so a heading that retires correctly in one and
+                // strands itself in the other cannot hide.
+                heading: 'Which island are you going to?',
                 items: [
                     { label: 'Tenerife', message: 'Tenerife' },
                     { label: 'Gran Canaria', message: 'Gran Canaria' },
@@ -926,7 +1046,14 @@
                     // temporarily setting this to actions: [] (CLAUDE.md says so
                     // too).
                     actions: [promptChips(), islandChips()],
-                    contract_version: '1.6.2'
+                    // The 1.7.0 pair. `server_time` is built from this machine's
+                    // own clock on purpose — a fixture that faked a skew would
+                    // make every mock run render dates the demo page cannot
+                    // explain. The offset it produces is ~0, which is exactly
+                    // what a correct client clock should compute.
+                    idle_hours: mockIdleHours(),
+                    server_time: new Date().toISOString(),
+                    contract_version: '1.7.0'
                 }, 700);
             },
 
@@ -1854,7 +1981,7 @@
      * to hand-roll dd/mm/yyyy — it is wrong in at least one shipped locale.
      */
     function dayLabel(key) {
-        var todayKey = dayKey(Date.now());
+        var todayKey = dayKey(nowMs());
         if (todayKey === null) { return null; }
         // At or past today: a clock reading into the future is skew or a tampered
         // store, and "today" is the least surprising thing to call it.
@@ -1981,7 +2108,7 @@
         // their own. null means a stored entry from before 2.8.1 and has to stay
         // silent; only replayTranscript() ever passes it. The two are not
         // interchangeable, which is the whole legacy story in one expression.
-        var when = at === undefined ? Date.now() : at;
+        var when = at === undefined ? nowMs() : at;
         // BEFORE followsBotMessage(): a pill becomes els.body.lastElementChild, so
         // a bot reply that opens a new day gets its avatar back. A new day is a
         // new burst — the right reading, and unreachable in practice anyway, since
@@ -2304,16 +2431,51 @@
         if (!action.items || !action.items.length) { return; }
 
         var row = el('div', 'nc-chip-row');
+        /*
+         * `heading` (contract 1.7.0) is the row saying what it ASKS — tenant
+         * authored, server-localized, and the answer to this file's own open
+         * point 9. Typed like every other payload string, and it reaches the DOM
+         * through el()'s textContent, never innerHTML.
+         *
+         * Absent means render NONE. Never substitute one of our own: a label
+         * reading "try asking" over "Tenerife" asserts that an island name is a
+         * thing to try asking, when it is the answer to a question. That was the
+         * 2.4.2 decision and this field is what replaces the gap, not what
+         * licenses filling it.
+         */
+        var heading = (typeof action.heading === 'string' && action.heading) ? action.heading : null;
         // A group with an accessible name (contract → Accessibility): the chips
         // are real buttons, and the name says what they are before they are read
-        // out one by one. The visible row stays BARE by the owner's decision —
-        // this label is for screen readers, not a rendered heading.
-        attrs(row, { role: 'group', 'aria-label': t('quickReplies') });
+        // out one by one. When the server supplies a heading, that string IS the
+        // row's accessible name — the whole point of the field — and t() falls
+        // back to a generic one only when it does not.
+        attrs(row, { role: 'group', 'aria-label': heading || t('quickReplies') });
         // Same rule as the promo: locale (1.6.0) marks the labels' language when
         // the server declares one; absent means unknown — set nothing.
         if (typeof action.locale === 'string' && /^[a-z]{2}$/.test(action.locale)) {
             attrs(row, { lang: action.locale });
         }
+        if (heading) {
+            /*
+             * INSIDE the row, never a sibling above it, and that is load-bearing
+             * rather than tidy: retireChipRows() removes the row element and
+             * nothing else, so a detached heading would outlive the chips it
+             * labels and strand a question over a transcript that has moved on.
+             * The same holds for the welcome path, where removeWelcome() sweeps
+             * the wrapper. Being a full-width flex child costs one CSS rule.
+             *
+             * aria-hidden because the row already carries this exact string as
+             * its accessible name — without it a screen reader announces the
+             * question twice. Not focusable, so the file's focus rule (anything
+             * that hides a node checks document.activeElement first) is
+             * unaffected: retireChipRows() samples the ROW, which still contains
+             * every focusable thing it did before.
+             */
+            var head = el('div', 'nc-chip-head', heading);
+            attrs(head, { 'aria-hidden': 'true' });
+            row.appendChild(head);
+        }
+        var chips = 0;
         for (var i = 0; i < action.items.length; i++) {
             var item = action.items[i] || {};
             // The message IS the chip: without one there is nothing to send, so a
@@ -2334,11 +2496,15 @@
             chip.addEventListener('click',
                 makeChipHandler(item.message, parent ? 'welcome-chip' : 'chip'));
             row.appendChild(chip);
+            chips++;
         }
 
         // Every item skipped ⇒ no row: an empty flex box would still eat its gap
-        // and leave a phantom indent under the bubble.
-        if (!row.childNodes.length) { return; }
+        // and leave a phantom indent under the bubble. COUNTED, not
+        // row.childNodes.length: since 1.7.0 the heading is itself a child, so
+        // the old test would mount a row whose every item was malformed as a
+        // lone question with nothing to tap.
+        if (!chips) { return; }
         (parent || els.body).appendChild(row);
         // Only mid-transcript rows register for the one-shot retirement (1.6.0):
         // a welcome row already retires with the wrapper removeWelcome() sweeps,
@@ -3055,7 +3221,7 @@
             // below), and no pill is ever painted above the first message. It is
             // also inserted BEFORE an impatient guest's already-sent bubble, so a
             // pill computed here would land in the wrong place besides.
-            var greetedAt = Date.now();
+            var greetedAt = nowMs();
             stampBubble(text, greetedAt);
             wrap.appendChild(avatar);
             wrap.appendChild(text);
@@ -3212,12 +3378,14 @@
             }
         }
 
-        // Rows render BARE — no "TRY ASKING" label borrowed from the pack above
+        // Rows still take no "TRY ASKING" label borrowed from the pack above
         // them. A label reading "try asking" over "Tenerife" would assert an
         // island name is a thing to try asking, when it is the answer to a
-        // question. 1.5.0 gives a row no way to say what it is asking; an
-        // optional element-level `heading` is the open request upstream
-        // (docs/proposals/response-contract-phase2-elements.md, open point 9).
+        // question — and that reasoning is what keeps us from inventing one now
+        // that a row CAN be headed. Contract 1.7.0 gives the row an optional
+        // `heading` of its own (open point 9, delivered): the tenant writes it,
+        // the server localizes it, renderQuickReplies() renders it inside the
+        // row, and absent still means bare.
         if (!chipped) { showPrompts(welcome); }
 
         after.parentNode.insertBefore(welcome, after.nextSibling);
@@ -3524,6 +3692,15 @@
             // it a returning guest gets the fallback pills and nothing the site
             // configured — see readStore().
             if (intro.actions === null) { intro.actions = stored.actions; }
+            // RESTORED, not defaulted — and this is the half of 1.7.0 that looks
+            // finished when it isn't. This branch never reaches the server, so
+            // the record is the only source for both values, and the first turn
+            // of this session is about to write the record back through
+            // persist(), which serializes whatever is in these two variables.
+            // Skip this and the window silently reverts to the 24h fallback one
+            // turn later — the exact defect 2.10.0 exists to remove.
+            serverIdleHours = stored.idleHours;
+            serverOffset = stored.clockOffset;
             // The transcript and its latches ride the same record. `ended` is
             // handed to replayTranscript via intro rather than restored here:
             // endConversation() uses `ended` as its idempotence guard and must
@@ -3568,6 +3745,18 @@
                 // cases simply contribute nothing and the widget's own prompt block
                 // stands in.
                 intro.actions = (body.actions && body.actions.length) ? body.actions : null;
+                // The 1.7.0 pair, settled BEFORE the persist() below serializes
+                // them. Absent on an older server, which leaves the window null
+                // and the offset 0 — the pre-1.7.0 behaviour exactly.
+                serverIdleHours = positiveHours(body.idle_hours);
+                // Parsed once per conversation, and only when it parses: a
+                // malformed date must not throw the offset to NaN and date every
+                // stamp we write to the Invalid Date. Measured against the raw
+                // clock on purpose — this IS the raw clock's correction.
+                if (typeof body.server_time === 'string') {
+                    var serverMs = Date.parse(body.server_time);
+                    if (isFinite(serverMs)) { serverOffset = serverMs - Date.now(); }
+                }
                 // Stored WITH the uuid, after intro.actions is settled: the resume
                 // branch above is the only other reader and it needs the same value
                 // this load is about to render. persist() also carries any
@@ -3615,7 +3804,7 @@
         followStream = false;
         // One `now` for the bubble, the pill and the stored entry, so the screen
         // and the record can never disagree about which day this turn was.
-        var when = Date.now();
+        var when = nowMs();
         // Painted HERE rather than left to addBubble, so the anchor below has the
         // node: when the guest's own message opens a new day, the PILL is what
         // rides to the top. A pill painted and instantly scrolled out of view
@@ -3710,7 +3899,7 @@
                     // otherwise move its turn's day forward past a pill already
                     // painted above it, and the record would disagree with the
                     // screen on the next reload.
-                    at: Date.now()
+                    at: nowMs()
                 };
                 transcript.push(entry);
                 if (body.actions) {
@@ -3773,8 +3962,12 @@
                 // NOT a guest-visible failure — this path is normal and the
                 // guest sees one reply either way. Worth reporting anyway, and
                 // `retrying` is what says so: a SPIKE here means guests are
-                // coming back past the idle window, which is the signal that the
-                // server extended its window and IDLE_MS did not follow.
+                // coming back past the idle window while this browser still
+                // thinks they are inside it. Since 2.10.0 the window comes from
+                // the server, so a spike no longer means "the deployment moved
+                // and we did not" — it means these browsers are judging by the
+                // IDLE_MS fallback: an older server that sends no idle_hours, or
+                // records written by one that have not been rewritten since.
                 emit('error', { phase: 'turn', status: status, retrying: true });
                 startConversation(function () { sendMessage(text, true); });
                 return;   // the retry's own callback drains the queue
@@ -3908,7 +4101,7 @@
             if (removed) { return; }
             var wrap = el('div', 'nc-message nc-message--bot nc-greeting');
             var text = el('div', 'nc-text');
-            var greetedAt = Date.now();   // stamped, never separated — see introMaybeFinish
+            var greetedAt = nowMs();   // stamped, never separated — see introMaybeFinish
             stampBubble(text, greetedAt);
             wrap.appendChild(avatarNode());
             wrap.appendChild(text);

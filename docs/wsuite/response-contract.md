@@ -2,12 +2,12 @@
 
 | | |
 |---|---|
-| **Version** | 1.6.2 (see [Versioning](#versioning) · [Changelog](#changelog)) |
-| **Date** | 2026-08-07 |
+| **Version** | 1.7.0 (see [Versioning](#versioning) · [Changelog](#changelog)) |
+| **Date** | 2026-08-21 |
 | **Status** | Frozen envelope — the shared artifact the in-repo preview widget and the external `nest-chatbot-ai` widget build against. Governed by `docs/decisions.md` (D-020, D-029, D-036). |
 | **Endpoint** | `POST /api/v1/chatbot/conversations/{uuid}/messages` (route `chatbot.v1.conversations.messages.store`) |
 
-This is the response shape of a single guest turn. Element **content is deterministic — code-emitted from the DB catalog or tenant-authored site settings, never chosen by the LLM** — so link/contact correctness is independent of the LLM provider (Mistral-switchable by construction). The conversation-start endpoint (`POST /api/v1/chatbot/conversations` → `{conversation:{uuid}, greeting, actions?, contract_version}`) is unaffected by this envelope; it additionally echoes the current `contract_version` (below) so a consumer can detect it is behind. **Since 1.5.0** the init response also carries an optional **`actions`** array of the same element vocabulary (greeting-time quick prompts and, when configured, the promo card) — the server always emits it (`[]` when unconfigured), older servers omit it, and a consumer that never reads it loses nothing. **What can appear there:** content elements only — `promo_card` and `quick_replies` today. `async_result` and `availability` are turn-scoped by construction (both are tied to a turn number), so an init response will not carry them; keep ignoring unknown types rather than hard-coding that list.
+This is the response shape of a single guest turn. Element **content is deterministic — code-emitted from the DB catalog or tenant-authored site settings, never chosen by the LLM** — so link/contact correctness is independent of the LLM provider (Mistral-switchable by construction). The conversation-start endpoint (`POST /api/v1/chatbot/conversations` → `{conversation:{uuid}, greeting, actions?, idle_hours?, server_time?, contract_version}`) is unaffected by this envelope; it additionally echoes the current `contract_version` (below) so a consumer can detect it is behind. **Since 1.7.0** it also reports **`idle_hours`** (the conversation idle window as a duration — stop mirroring it as a client-side constant) and **`server_time`** (ISO-8601, for a one-off client-clock offset); both are documented in [`integration-guide.md`](integration-guide.md) §3.1, and both may be absent. **Since 1.5.0** the init response also carries an optional **`actions`** array of the same element vocabulary (greeting-time quick prompts and, when configured, the promo card) — the server always emits it (`[]` when unconfigured), older servers omit it, and a consumer that never reads it loses nothing. **What can appear there:** content elements only — `promo_card` and `quick_replies` today. `async_result` and `availability` are turn-scoped by construction (both are tied to a turn number), so an init response will not carry them; keep ignoring unknown types rather than hard-coding that list.
 
 ## Versioning
 
@@ -207,7 +207,7 @@ A renderer needs no change for any of this — it is strictly *when* the element
 | `image` | `string` | no | n/a | Card image URL — see [card images](#card-images) below. Same `http`/`https`-only rule as every element URL. |
 | `image_alt` | `string` | no | yes | **Since 1.6.0. Reserved — not emitted at 1.6.0** (the catalog carries no alt column). See [card images](#card-images) for what to do in its absence, which is the normal case. |
 | `price_from` | `object` | no | n/a | An admin-maintained static from-price (D-043(d)) — see the sub-table and [reading `price_from`](#reading-price_from) below. |
-| `badge` | `string` | no | **no** | Short pill label (e.g. tenant #1's "Nest Pass"), the raw catalog value in the tenant's authoring language. Single-line; keep authoring to ~20 characters, and clamp rather than wrap (see [text lengths](#text-lengths)). |
+| `badge` | `string` | no | **no** | Short pill label (e.g. tenant #2's "Nest Pass"), the raw catalog value in the tenant's authoring language. Single-line; keep authoring to ~20 characters, and clamp rather than wrap (see [text lengths](#text-lengths)). |
 | `cta_label` | `string` | no | **yes** | **Since 1.6.0.** Display text for the card's Book CTA, localized server-side to the guest language — the same string the deterministic Book `link_button` carries. A consumer that does not find it keeps its own default, so this is purely an upgrade from hardcoding one. |
 | `url` | `string` | yes | n/a | The property's authoritative `booking_url` — the card's Book CTA target. Same anchor rule as `link_button`. |
 
@@ -352,6 +352,7 @@ for in a ~420px panel, not guarantees you may rely on:
 | `promo_card.cta.label` | ≤ 24 chars | single-line |
 | `property_cards` item `badge` | ≤ 20 chars | single-line |
 | `quick_replies` item `label` | ≤ 28 chars | single-line |
+| `quick_replies` `heading` | ≤ 60 chars | single-line |
 
 #### When it repeats
 
@@ -373,14 +374,37 @@ for in a ~420px panel, not guarantees you may rely on:
 Emitted on the init response from the site's `chatbot.quick_prompts` setting (the "try asking" chips) and by deterministic clarification turns (e.g. island choice — D-043(f)). Tapping a chip sends its `message` as an **ordinary guest turn** through the normal message endpoint — nothing new to implement. **Items never carry URLs** (contract rule): chips are buttons that send text, never anchors, so the URL security surface is unchanged.
 
 ```json
-{ "type": "quick_replies", "id": "quick_prompts", "items": [ { "label": "Nest Pass", "message": "What is the Nest Pass?" } ], "locale": "en" }
+{ "type": "quick_replies", "id": "quick_prompts", "heading": "Which island are you going to?", "items": [ { "label": "Nest Pass", "message": "What is the Nest Pass?" } ], "locale": "en" }
 ```
 
 | Element field | Type | Required | Notes |
 |---|---|---|---|
 | `items` | `array` | yes | The chips, in order (below). Never empty — the element is not emitted with no chips. |
 | `id` | `string` | no | **Since 1.6.0.** The row's provenance, and the whole vocabulary is `quick_prompts` (the tenant-authored init row) \| `island_choice` (the deterministic clarification row). This is how you tell tenant text from server text — see [language](#language-1) below. |
+| `heading` | `string` | no | **Since 1.7.0.** A short line saying **what the row is asking**, rendered above the chips. Tenant-authored and server-localized like every other payload string — put it in the DOM via `textContent`. Absent is normal and means render no heading; it is **never** a cue to substitute your own label (see below). |
 | `locale` | `string` | no | **Since 1.6.0.** The language of the chip **labels**, as a 2-letter primary subtag. Absent means unknown or language-neutral; see [language](#language-1). |
+
+#### `heading` — why it exists, and where it matters
+
+On a **turn**, the `reply` string already introduces the row for free, so a heading is rarely needed
+there. At **init** there is nowhere else for that line to go: the envelope carries only `greeting` and
+`actions[]`, there is no text element type, and the greeting is already spent introducing the
+assistant — so a site's island chips arrived as bare chips under a greeting that never mentioned them.
+
+Two rules for a consumer:
+
+- **Do not invent one.** A widget that substitutes its own label ("Try asking…") over a server row
+  will assert something false — "Tenerife" is the *answer to a question*, not a thing to try asking.
+  No heading means no heading.
+- **Retire it with the row.** The heading belongs to its chips: whatever the [one-shot
+  rule](#the-one-shot-rule) does to a row must take its heading too. Rendering it as a detached
+  sibling above the row is the easy way to get this wrong — it outlives the chips and strands a
+  question over a transcript that has moved on. The reference widget renders it *inside* the row
+  element for exactly this reason.
+
+Accessibility: when a row has a heading, that string is the row's accessible name — the reference
+widget sets it as the group's `aria-label` and marks the visible copy `aria-hidden` so it is not
+announced twice.
 
 | Item field | Type | Required | Localized | Notes |
 |---|---|---|---|---|
@@ -494,6 +518,7 @@ Each version is tagged in the platform repo as **`chatbot-contract-v<X.Y.Z>`**, 
 
 | Version | Date | Breaking | Change | Element / field | Consumer action |
 |---|---|---|---|---|---|
+| `1.7.0` | 2026-08-21 | No | **Three additive fields, one release** (O-45 · O-46 · O-47). **(a) `idle_hours` on the init `201`** — the conversation idle window, in hours. Every renderer so far hardcoded a 24h mirror of this server config and had no way to see it change, so the day a deployment widened its window, a guest returning after hour 24 would lose their transcript on screen **and open a second conversation while the server's original was still live**. It is sent as a **duration, not an `expires_at` instant**, deliberately: the expiry advances on every turn while init fires once, so a cached instant would be wrong from turn 1. **(b) `server_time` on the init `201`** — ISO-8601. Nothing in the guest API records *when* a message happened (`turn` is an order, not an instant), so a consumer that dates its own stored transcript is using the sending device's clock; this lets it compute a server offset once per conversation. **(c) `quick_replies.heading`** — an optional tenant-authored, server-localized line rendered above a chip row, saying what the row asks. At init there was previously nowhere to put that question, so a site's island chips rendered bare under a greeting that did not mention them. Nothing was removed, retyped or renamed. | *(init)* `idle_hours` · `server_time` · `quick_replies` (`heading`) | **Optional, and independently adoptable.** **(a)** is the one worth taking: drive your stored-conversation expiry from `idle_hours` instead of a constant, **and persist it with the record** — your resume path never calls init, so a widget that only reads it at init still expires early on exactly the visit that matters. **(b)** compute `serverOffset = Date.parse(server_time) - Date.now()` once and apply it to your own stamps. **(c)** render `heading` above the row via `textContent`, **retire it with the row** (a detached sibling outlives its chips), and never substitute a label of your own when it is absent. All three are absent on an older server and must stay absent-tolerant. |
 | `1.6.2` | 2026-08-07 | No | **Emission rule only, no wire effect** (D-047). A `property_cards` element now requires a *this-turn* signal: the guest named the hostel(s), referred to one, asked by island, or is on a `data-property`-seeded page (which cards once). A property the server merely **remembers** from an earlier turn no longer emits one — before this, a hostel named on turn 4 kept its card under every later answer, including questions about other islands, and it also masked the island carousel the guest had asked for. Second change in the same rule: a turn naming **several** hostels now emits **one card each** instead of collapsing to one arbitrary card. Field shapes, ordering, `total`/`more` semantics and the Book-button dedupe are untouched. | *(none — emission)* `property_cards` | **None.** Fewer, more relevant cards arrive; every field you already read is unchanged. One thing to sanity-check if you hardcoded it: a **named-property** turn can now legitimately carry more than one item, so a rail sized for exactly one card should flex (`total` already told you this could happen on by-area turns). |
 | `1.6.1` | 2026-07-31 | No | **Documentation only, no wire effect** (D-044(j)). `price_from.period`/`basis` are stated to be **per item**, so two cards in one carousel may legitimately differ: they describe the *cheapest bookable thing* a from-price refers to, not the property — a hostel selling dorm beds and private doubles quotes `per_person` (its from-price is a bed) while a property whose cheapest offering is a whole double room quotes `per_unit`. Server-side, the source became finer-grained to match (per-property catalog columns overriding the site-wide declaration), which is invisible on the wire. | *(none — clarifies)* `property_cards` `price_from.period`/`basis` | **None if you have not adopted `period`/`basis` yet.** If you have: **resolve the suffix per card**, not once per rail — lifting one item's values to the whole carousel will mislabel a mixed catalog. Nothing else changed. |
 | `1.6.0` | 2026-07-30 | No | **The fields a rich card/promo/chip UI needs, from the first consumer to build all three (D-044).** New optional fields: `property_cards` gains element-level `total` (matches before the cap) and `more` (`{label, url}`, localized label), item `cta_label` (server-localized Book text) and `image_alt` (**reserved, not emitted yet**), and `price_from.period`/`basis` (`night`\|`stay` · `per_person`\|`per_unit` — so "from €22" can finally say "/night"); `promo_card` and `quick_replies` gain `locale` and `id`; **`promo_card`/`quick_replies` content is now resolved per guest locale** where the tenant supplies translations (amends D-043(e)). New element **`conversation_ended`** on the turn-cap reply. Documentation, no wire effect: the [missing-required-field policy](#element-conventions-all-types), per-field localization, `price_from` decimal/tax semantics, image and `key` semantics, the `style` value set, advisory text lengths, item caps and order, promo repeat/dismissal semantics, the clarified [Book-button dedupe](#compatibility-and-the-book-button-dedupe-d-043c) and interim→poll duplicate, the precise [one-shot chip rule](#the-one-shot-rule), poll-side `404`/`410`, init `actions[]` composition, element placement, and an [Accessibility](#accessibility) section. | `property_cards` (`total` · `more` · `cta_label` · `image_alt` · `price_from.period`/`basis`) · `promo_card` (`locale` · `id`) · `quick_replies` (`locale` · `id`) · `conversation_ended` | **Optional, and mostly free.** Adoptable fields: render `cta_label` in place of your hardcoded Book text, append a localized period/basis suffix to the from-price (**and keep rendering the bare price when they are absent — never infer "/night"**), use `total`/`more` for an overflow affordance, set `lang` from `locale`, and add a `conversation_ended` branch for a "start a new chat" affordance. Pure documentation, nothing to build: everything in the second half of the Change cell — though **do re-read the dedupe rule** (a card you dropped must not suppress a Book button) and the one-shot rule (it is still a SHOULD; both triggers retire every row). `image_alt` is reserved — a one-line `alt = image_alt \|\| ''` future-proofs you today. Skippable in full: unknown fields and types are ignored and every 1.5.0 flow keeps working. |

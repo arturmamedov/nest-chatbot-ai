@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | matches `response-contract.md` 1.6.2 (the server reports the live version as `contract_version` — see §3.1) |
+| **Version** | matches `response-contract.md` 1.7.0 (the server reports the live version as `contract_version` — see §3.1) |
 | **Audience** | Any external website embedding a **custom** chat UI on top of the wSuite chatbot API — e.g. the branded `nest-chatbot-ai` microsite. |
 | **Scope** | The **transport + auth** layer: base URL, the three endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS. |
 | **Not in scope** | The **response envelope** (`reply` / typed `actions[]` / element types). That is fully specified in [`response-contract.md`](response-contract.md) — read it alongside this document; do not duplicate its rules here. |
@@ -68,10 +68,36 @@ Content-Type: application/json
 **`201` response:**
 
 ```json
-{ "conversation": { "uuid": "9b2c…" }, "greeting": "Hi! How can I help?", "actions": [], "contract_version": "1.6.2" }
+{ "conversation": { "uuid": "9b2c…" }, "greeting": "Hi! How can I help?", "actions": [], "idle_hours": 24, "server_time": "2026-08-21T09:46:12+00:00", "contract_version": "1.7.0" }
 ```
 
-Persist `uuid` (the reference widget keys it to `localStorage` per API key). Render `greeting` as the first bot bubble. **Since 1.5.0** the init response also carries an `actions` array of the same element vocabulary as a turn (greeting-time quick prompts / promo — see [`response-contract.md`](response-contract.md)); render it after the greeting like any turn's `actions[]`, and tolerate its absence on older servers.
+| Response field | Type | Since | Notes |
+|---|---|---|---|
+| `conversation.uuid` | `string` | 1.0.0 | The conversation's only public identifier. Persist it. |
+| `greeting` | `string` | 1.0.0 | Render as the first bot bubble. |
+| `actions` | `array` | 1.5.0 | The same element vocabulary as a turn (greeting-time quick prompts / promo). Render after the greeting like any turn's `actions[]`; always sent (`[]` when unconfigured), absent on pre-1.5.0 servers. |
+| `idle_hours` | `int` | **1.7.0** | The conversation idle window (§5, `410`). **Drive your stored-conversation expiry from this**, not from a constant — see below. |
+| `server_time` | `string` | **1.7.0** | ISO-8601 with offset, at the instant the conversation was created. For a one-off client-clock correction — see below. |
+| `contract_version` | `string` | 1.2.0 | The live contract version; also in the `X-Chatbot-Contract` header. |
+
+Persist `uuid` (the reference widget keys it to `localStorage` per API key). Render `greeting` as the first bot bubble.
+
+You **may** also persist the transcript and replay it when you resume, instead of re-greeting. Worth knowing what the minimal version costs: a consumer that stores only the uuid keeps the conversation alive across a page change but shows none of it, and — because the resume path never calls init — silently replaces the *server's* greeting and welcome elements with its own fallback for the rest of the window. Store `greeting` and `actions` alongside the uuid if you want the resume to look like the visit it continues.
+
+#### `idle_hours` — stop mirroring the window as a constant
+
+**Since 1.7.0.** A conversation `410`s after this many hours of inactivity (§5). Before 1.7.0 there was no way to learn it, so every renderer hardcoded 24 — which is correct only until a deployment changes its config. When that happens, a widget still expiring at hour 24 drops the guest's transcript **and opens a second conversation while the server's original is still live**, still holding whatever `property` seeded. It looks fine and answers as a stranger.
+
+Two rules:
+
+- **Persist it with the conversation record, not just in memory.** Your resume path does not call init, so a value read only at init is not available on the one visit that needs it.
+- **Absence is normal** — an older server sends nothing and an older stored record has no field. Fall back to your existing constant in both cases.
+
+It is sent as a **duration, not an expiry instant**, on purpose: the expiry moves forward on every turn while init happens once, so a cached `expires_at` would be wrong from turn 1.
+
+#### `server_time` — one clock correction per conversation
+
+**Since 1.7.0.** ISO-8601. Nothing in the guest API dates a message — `turn` is an ordering, not an instant — so a consumer that timestamps its own stored transcript is recording the *sending device's* clock, skew included. Compute `offset = Date.parse(server_time) - Date.now()` once at init and apply it to the stamps you write. It does not address a guest who changes timezone between visits, and it is not a per-turn timestamp. Absent on older servers.
 
 #### `contract_version` — detecting you're behind
 

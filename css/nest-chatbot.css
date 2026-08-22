@@ -790,6 +790,31 @@
     padding-left: 41px;
 }
 
+/* The row's own question (contract 1.7.0 `heading`).
+
+   `flex: 0 0 100%` is the whole rule: it is what lets the heading live INSIDE
+   the flex row — so retireChipRows() and removeWelcome() take it away with the
+   chips it labels — while still occupying its own line above them. Rendered as
+   a sibling it would look identical and outlive the row.
+
+   Sentence case, NOT the uppercase .nc-prompts-label treatment above. That one
+   labels a category ("Try asking"); this one is a question the tenant wrote, and
+   "WHICH ISLAND ARE YOU GOING TO?" is a different sentence. Deliberately not
+   clamped either — a truncated question is worse than a two-line one, and the
+   contract's 60 characters are advisory.
+
+   No font-family: a div inherits from #nest-chatbot, so this adds no eleventh
+   site to the two-custom-property typography seam. 600, not 500 — only 400 and
+   600 faces ship. */
+#nest-chatbot .nc-chip-head {
+    flex: 0 0 100%;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--nc-text);
+    overflow-wrap: break-word;
+}
+
 /* thinking dots */
 
 #nest-chatbot .nc-dots {

@@ -102,7 +102,7 @@ page rather than in production.
 |---|---|
 | `config` | reads `data-*`, derives `assetBase` from `script.src`, resolves the locale |
 | `i18n` | UI strings per locale (`en es it de fr`) |
-| `storage` | `{uuid, ts, actions, turns, guestTurned, ended}` in `localStorage`, 24h idle window — the init `actions[]` and the display-only transcript ride along so a resume replays the conversation, not just the welcome; `ts` is last activity |
+| `storage` | `{uuid, ts, actions, turns, guestTurned, ended, idleHours, clockOffset}` in `localStorage` — the init `actions[]` and the display-only transcript ride along so a resume replays the conversation, not just the welcome; `ts` is last activity. Since 2.10.0 the idle window and the server clock offset are the **server's**, carried in the record because the resume path never calls init; `IDLE_MS` is only the fallback |
 | **`events`** | **the host-page seam** — `emit()`, `snapshot()`, the `wchat:` vocabulary |
 | **`api`** | **the seam** — `init` / `send` / `poll` plus the mock fixtures |
 | `dom` | `el()`, `attrs()`, `svgNode()`, the icon and flag constants, `build()` |
@@ -124,7 +124,7 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.6.2 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.7.0 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
@@ -136,9 +136,9 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
 rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-08-19 as
-`docs @ chatbot-contract-v1.6.2 (d01382b) · widget @ 712c2c5` — the widget SHA is part of the
+`docs @ chatbot-contract-v1.7.0 (2b9da82) · widget @ 2b9da82` — the widget SHA is part of the
 packet's identity, because the reference renderer legitimately moves between contract tags.
-`BUILT_AGAINST` is `'1.6.2'`, in lockstep since release 2.9.0 adopted D-047.
+`BUILT_AGAINST` is `'1.7.0'`, in lockstep since release 2.10.0 adopted D-050.
 
 **The upstream repo drives the sync, and it is local.** The platform is `nest-mind`
 (`modules/chatbot/`). Its `docs/consumer-sync.md` is the operational half: §1 is a registry of
@@ -164,15 +164,33 @@ GET  {apiBase}{async_result.url}                          → 200 {status, reply
   failures only: `401` bad key, `403` disabled/revoked or the request `Origin` is not on the
   site's allow-list (body `{"message":"Origin not allowed."}` — guide §7), `404` unknown uuid,
   `410` idled out, `422` config, `429` throttled.
-- **`410` is normal.** Conversations idle out after 24h. Re-init transparently and resend the
-  message once — the guest should never see it happen. Already implemented in `sendMessage`.
+- **`410` is normal.** Conversations idle out after the server's window — **not a constant
+  any more**: since 2.10.0 the init `201` reports `idle_hours` and the widget stores it with
+  the record (see the persist trap below). Re-init transparently and resend the message once —
+  the guest should never see it happen. Already implemented in `sendMessage`.
   On the **turn** endpoint a `404` rides the same branch (guide §5.1: the stored uuid is
-  dead — re-init, or this browser retries it for the full 24h retention window). On the
+  dead — re-init, or this browser retries it for the full retention window). On the
   **poll** endpoint a `404` is **transient** instead: back off exactly as for `pending` and
   stop only at the give-up deadline — re-initing there would abandon an answer still being
   generated. A poll **`410`** stops the poll and nothing more (guide §5.1): keep the interim
   reply, re-init **nothing** — the guest's next message re-inits on the turn endpoint, where
   a fresh conversation actually has a message to carry.
+- **The 1.7.0 init fields are read at init and *persisted* — and the second half is what looks
+  finished when it isn't.** `readStore()` runs at **boot**, and a guest inside the window
+  resumes **without ever calling init**, so the one visit that needs the server's numbers is
+  the visit that never receives them. Both `idle_hours` and the `server_time` offset therefore
+  live in the stored record, judged by `storedIdleMs()`. And because `persist()` is the single
+  writer and serializes **current state with no arguments**, the resume branch in
+  `startConversation()` must **restore** them into `serverIdleHours` / `serverOffset`: skip
+  that and the first turn of a resumed session writes `null` over the window, reverting to 24h
+  on the next boot — the same defect, one turn later. Absence stays normal in both directions
+  (an older server, an older record) and falls back to `IDLE_MS`.
+- **Corrected clock for dates, raw clock for durations.** `nowMs()` (`Date.now() +
+  serverOffset`) stamps anything that becomes a **date** — the transcript's `at`, the day
+  separators, `dayLabel()`'s "today". Anything measuring a **duration** stays on raw
+  `Date.now()`: `latencyMs`, the poll give-up deadline, the teaser timers, and the record's own
+  `ts` (compared against `Date.now()` in `readStore()`, so device skew cancels). Mixing the two
+  is how this goes wrong quietly.
 - **Never infer a price period.** `price_from.period`/`basis` are optional and **per item** —
   two cards in one rail may differ, so `cardPrice()` resolves the suffix per card and renders
   the **bare** price when they are absent. An invented "/night" on a per-stay figure is a
@@ -353,7 +371,7 @@ are shaped exactly like the real envelope. Drive them from the composer:
 | `rooms` | `availability` with room options |
 | `link` | three `link_button`s (book / website / directions), one with `style: primary` |
 | `available` | `async_result` — interim reply, then the poll replaces it in place; the final is an `availability` sharing the interim url, so the per-turn dedupe must leave exactly **one** Book button |
-| `hostel` | `quick_replies` — the three island chips (also matches suggested prompt 1); any send retires every row (one-shot) |
+| `hostel` | `quick_replies` — the three island chips, carrying the 1.7.0 `heading` (also matches suggested prompt 1); any send retires every row **and its heading** (one-shot) |
 | `tenerife` `canaria` `ibiza` | `property_cards` carousel + `promo_card` + the CTA trio — and the 1.6.x showcase: per-card `period`/`basis` (two different suffixes in one rail), a `cta_label`, the D-043(c) isolator (name-less card sharing the website button's url — card dropped, button survives), a Book button matching a rendered card's url (suppressed), and `total`/`more` (ibiza: `total` only → count line; the others: both → `more` wins) |
 | `pass` `offer` | `promo_card` alone (`pass` is word-bounded: "compass" falls through) — Spanish copy with `locale: 'es'` (→ `lang`) and a `\n` in the body (pre-wrap) |
 | `!cap` | the turn-cap reply: `contact_channels` + `conversation_ended` last — composer closes, "start a new chat" appears |
@@ -363,7 +381,14 @@ are shaped exactly like the real envelope. Drive them from the composer:
 
 `Mock.init` returns **two** `quick_replies` rows — the tenant's "try asking" prompts and the
 island chips — mirroring a real welcome payload; both prompt messages chain into the table above
-rather than the catch-all reply. Since server chips **replace** the widget's own pack block,
+rather than the catch-all reply. Only the island row carries a `heading`, on purpose: one page
+load then shows a headed row and a bare one side by side. It also serves the 1.7.0 init pair,
+`idle_hours` and `server_time`.
+
+**`?nc-idle=<hours>` on the demo URL overrides the fixture's `idle_hours`** — the only way to
+get a window short enough to actually cross (`?nc-idle=0.005` is 18 seconds, where a real
+server's smallest step is an hour). A harness knob and only ever that: the whole `Mock` object
+is unreachable without `data-mock`, which a production page never sets. Since server chips **replace** the widget's own pack block,
 that means the demo never reaches `showPrompts()` or `setLocale`'s pill-repaint branch:
 exercising the fallback means temporarily setting `Mock.init`'s `actions: []`.
 
@@ -444,43 +469,36 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   never from the CDN's own domain. `data-fonts="host"` / `"system"` are immune rather than a
   fix: they fetch nothing, so there is nothing left to block. The default path still needs
   the header.
-- **An element-level `heading` on `quick_replies` is still the live request upstream**
-  (`docs/proposals/response-contract-phase2-elements.md`, open point 9): 1.6.2 still gives a
-  chip row no way to say what it is asking, so a server welcome row renders as bare chips
-  under a greeting that does not mention them.
-- **Ask for `idle_hours` in the init `201` — the upstream request that matters most now.**
-  `IDLE_MS` (storage section) is a hardcoded 24h whose comment says it "mirrors the API's
-  conversation idle window", and the contract has no field to drive it: `grep -rn
-  "idle_hours" docs/wsuite/` returns nothing. The window is going to a week or more. **The day
-  the server moves and this constant does not, a guest returning at hour 30 loses their
-  transcript and opens a second conversation while the server's original is still live** —
-  still holding the working memory `data-property` seeded. The field costs no privacy, makes
-  the window self-correcting forever, and as a side effect stretches how far back
-  `wchat:ready`'s `returning` can see. Bundle it with the `heading` request above. A spike in
-  `wchat:error {phase:'turn', status:410, retrying:true}` is what this desync looks like from
-  the outside — part of why that event reports the transparent retry at all. Written up in
-  `docs/proposals/visitor-measurement-and-events.md` § The ask upstream, unsent.
-- **Nothing records *when* a message happened, so the widget's clock is the guest's.** The
-  contract has no time field anywhere — not on the envelope, not on an element, not on the
-  init `201` (`timestamp`, `created_at`, `sent_at`, `server_time` all return nothing across
-  `docs/wsuite/`); `turn` is an order, not an instant. So 2.8.1's day separators date entries
-  from `at`, stamped client-side, which means a replay shows the **sending** browser's clock
-  and a guest who changes timezone between visits sees the days recomputed in the new zone.
-  Day granularity absorbs that — minutes of skew never move a date — and it is why there is no
-  visible per-message clock. **The growing window is what sharpens it**: at 24h a transcript
-  spans two days and Today/Yesterday is right essentially always; at a week the same code
-  dates several days for a traveller. Asked for as `server_time` on the init `201` — the same
-  shape as the `idle_hours` request above, for the overlapping reason, so **send them
-  together**. Written up in `docs/proposals/message-timestamps.md`, unsent. Do **not** ask for
-  a top-level `created_at`: contract §Envelope states those three keys are the whole top-level
-  surface and always will be.
+- **All three upstream asks were delivered in contract 1.7.0 (D-050) and adopted in 2.10.0** —
+  `idle_hours`, `server_time` and `quick_replies.heading`. What is left of each:
+  - **`idle_hours`** closed the one that mattered. The window now comes from the server on
+    every init and rides the stored record. `IDLE_MS` survives only as the fallback for an
+    older server or an older record — **do not go back to treating it as the number**.
+  - **`server_time`** fixes device-clock *skew*, not the *timezone* case: a guest who changes
+    zone between visits still sees their days recomputed, and there is still no per-turn
+    timestamp. Both remain correctly described in `docs/proposals/message-timestamps.md`,
+    which is now the design record for what the widget does rather than a request. Do **not**
+    ask for a top-level `created_at`: contract §Envelope states those three keys are the whole
+    top-level surface and always will be.
+  - **`heading`** closed open point 9 of `docs/proposals/response-contract-phase2-elements.md`.
+    A chip row can say what it asks; absent still means bare, and substituting our own label
+    is still wrong.
+- **The window is already wider than 24h, and shipping 2.10.0 is what makes that safe.**
+  `nest-mind`'s own env carries `WSUITE_CHATBOT_IDLE_HOURS=168`, and the live init `201`
+  returns `idle_hours: 168` — a **seven-day** window. Every widget still on 2.9.0 or earlier
+  expires its record at hour 24 against a server conversation that stays live for another six
+  days: the guest loses their transcript on screen and opens a second conversation, still
+  holding the working memory `data-property` seeded. **Deploying 2.10.0 is the fix**, and it
+  is the more urgent half of this release. A spike in `wchat:error {phase:'turn', status:410,
+  retrying:true}` is what that desync looks like from the outside.
 - **A persistent visitor token at init is deliberately NOT asked for yet.** It is the only way
   to answer "same person, cross-device" or "came back after the window", and the only way to
   put the answer in wSuite's own panel rather than in each host's GA4 — but it is a
   cross-session identifier for a person, on EU properties, and needs consent treatment and a
   retention policy before it can ship. The widget's storage today is functional and
-  short-lived, which is much of why it has been uncontroversial. Extending the idle window
-  answers most of the same question for free; revisit only if a real question survives that.
+  short-lived, which is much of why it has been uncontroversial. The idle window has now
+  extended (to a week — see above), which answers most of the same question for free; revisit
+  only if a real question survives that.
   Inferring visitors server-side from IP + user-agent was considered and **rejected**: guide
   §6 names "a hotel's own wifi" as a case where strangers share one bucket, and our guests are
   mostly on property wifi — it would merge strangers and split one guest across their phone
@@ -527,5 +545,6 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   embed contract: renaming or removing a `data-*` attribute, dropping a `window.NestChatbot`
   method, or changing what a host's `<script>` tag has to say. Additive is never breaking.
   Releases through 2.8.0 predate this rule and are **not** renumbered — 2.6.0, 2.7.0 and
-  2.8.0 would each be a patch under it. 2.8.1 and 2.8.2 are the first releases numbered by it;
-  the next is **2.8.3** unless it is a sync.
+  2.8.0 would each be a patch under it.
+  2.8.1 and 2.8.2 are the first releases numbered by it, and 2.9.0 / 2.10.0 are both syncs.
+  The next is **2.10.1** unless it is a sync.

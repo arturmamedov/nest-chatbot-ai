@@ -13,24 +13,42 @@ degrades safely; adopting any of this would be a feature we may take, never a mi
 perform. It is filed now because the reasoning is cheap to write while it is fresh and
 expensive to reconstruct later.
 
-**It is the third open ask, not a separate errand.** Send it with the other two rather than on
-its own — see [Requested](#requested).
-
 ## Status
 
-Current release **2.9.0**; the surface described here landed in **2.8.1**. `BUILT_AGAINST` is
-**1.6.2** since the 2.9.0 sync, and **no transport changed** — the turn body is still `{message, locale}` and
-init is still `{locale, property}`. The widget's stored transcript is display-only, lives in
-`localStorage`, and never enters a request body. Nothing in 2.8.1 needs anything from the
-platform in order to work.
+**The ask was granted.** Contract **1.7.0** (D-050(b)) added `server_time` to the init `201`,
+and the widget adopted it in **2.10.0**: `serverOffset = Date.parse(server_time) - Date.now()`,
+computed once per conversation, persisted with the record because the resume path never calls
+init, and applied through `nowMs()` to everything that becomes a date. **This document is now
+the design record for what the widget does**, not a request — with two things below still
+correctly open.
 
-## The gap
+**What `server_time` fixed:** device-clock *skew*. A phone whose clock is days out now dates its
+own transcript by the server's instant rather than its own.
 
-There is **no time field anywhere in the guest API surface** — not on the turn envelope, not on
-an element, not on the init response. `timestamp`, `created_at`, `sent_at` and `server_time`
-each return zero matches across the vendored 1.6.2 packet (re-run at the 2.9.0 sync — D-047 added no time field, so this ask is unchanged by it)
-([`response-contract.md`](../wsuite/response-contract.md),
-[`integration-guide.md`](../wsuite/integration-guide.md)).
+**What it did not, and what is still true below:** the **timezone** case — a guest who changes
+zone between visits still sees their days recomputed, because `dayKey()` deliberately takes
+local midnight in the *device's* zone and `server_time` corrects the instant, never the zone —
+and the absence of a **per-turn** timestamp, which is still not asked for and still not needed
+at day granularity. Do **not** ask for a top-level `created_at`: contract §Envelope states the
+three top-level keys are the whole surface and always will be.
+
+Current release **2.10.0**; the surface described here landed in **2.8.1** and was corrected in
+**2.10.0**. `BUILT_AGAINST` is **1.7.0**, and **no transport changed** — the turn body is still
+`{message, locale}` and init is still `{locale, property}`. The widget's stored transcript is
+display-only, lives in `localStorage`, and never enters a request body.
+
+## The gap — half of it closed in 1.7.0
+
+**As it stood through 1.6.2:** there was **no time field anywhere in the guest API surface** —
+not on the turn envelope, not on an element, not on the init response. `timestamp`,
+`created_at`, `sent_at` and `server_time` each returned zero matches across the vendored packet
+(re-run at the 2.9.0 sync — D-047 added no time field).
+
+**Since 1.7.0** the init `201` carries **`server_time`**
+([`integration-guide.md`](../wsuite/integration-guide.md) §3.1). The **turn** envelope still
+carries none, and `created_at` / `sent_at` / `timestamp` still return zero matches: what a
+consumer gets is one instant per *conversation*, not per *message*. Everything below about what
+that leaves unanswered is still current.
 
 The nearest thing is `turn`, the 1-based exchange number — an **order**, not an instant. It
 says turn 4 came after turn 3, and nothing about whether an hour or a week passed between them.
@@ -69,19 +87,22 @@ inconsistently announced, never the only channel for anything.
 
 `reply` / `actions` / `turn` stay frozen. Both requests below are shaped to respect that.
 
-## Requested
+## Requested — and granted
 
-**Bundle these with the two asks already open**, all three being additive contract changes
-going to the same team:
+All three asks went upstream together, as one bundle of additive init-response changes, and all
+three came back in **contract 1.7.0** (D-050), adopted here in **2.10.0**:
 
-| Ask | Written up in |
-|---|---|
-| `idle_hours` (or `conversation.expires_at`) in the init `201` | [`visitor-measurement-and-events.md`](visitor-measurement-and-events.md) § The ask upstream |
-| An element-level `heading` on `quick_replies` | [`response-contract-phase2-elements.md`](response-contract-phase2-elements.md) open point 9 |
-| `server_time` in the init `201` | this document, below |
+| Ask | Written up in | Outcome |
+|---|---|---|
+| `idle_hours` in the init `201` | [`visitor-measurement-and-events.md`](visitor-measurement-and-events.md) § The ask upstream | **Delivered** — D-050(a) |
+| An element-level `heading` on `quick_replies` | [`response-contract-phase2-elements.md`](response-contract-phase2-elements.md) open point 9 | **Delivered** — D-050(c) |
+| `server_time` in the init `201` | this document, below | **Delivered** — D-050(b) |
 
-The first and third are the same shape — one more optional field on the init response — for
-overlapping reasons. Asking together costs the platform one decision instead of two.
+Bundling worked exactly as intended: one decision instead of three, one contract release
+instead of three, one sync instead of three. Worth repeating next time.
+
+The section below is left as written — it is the reasoning the ask was granted on, and the
+shape it was granted in.
 
 ### 1. `server_time` on the **init** response — the cheap one
 
@@ -124,11 +145,11 @@ widget's paint-only persist rule, joining `async_result` and `conversation_ended
 whose renderer is not a renderer. Recorded so it is not proposed back to us as the obvious
 solution.
 
-## Why the growing idle window sharpens this
+## Why the grown idle window sharpens this
 
-`IDLE_MS` mirrors the server's `idle_hours` and is **24h** today; the window is planned to
-reach **a week or more**. That plan is already the driver of the `idle_hours` request, and it
-raises the cost of a client clock by the same mechanism.
+**This is no longer a forecast.** The server's window is **168h — seven days** (`idle_hours` on
+the live init `201`), and since 2.10.0 the widget follows it instead of a 24h constant. The
+argument below was written while it was still planned; it now describes the current state.
 
 At 24h, client-side dating is close to unfalsifiable: a transcript spans at most two calendar
 days, the guest is almost certainly in the timezone they started in, and Today/Yesterday is
@@ -137,6 +158,7 @@ traveller — which is precisely who our guests are, moving between islands and 
 between zones. The error stops being theoretical at exactly the point the window makes the
 feature matter most.
 
-That is an argument for `server_time` riding along with `idle_hours`, not a second errand: one
-release teaching the widget both when a conversation expires and what time the server thinks it
-is closes the whole class.
+That was the argument for `server_time` riding along with `idle_hours` rather than being a
+second errand, and it is how it shipped: contract 1.7.0 carried both, and widget 2.10.0 adopted
+both in the same release — including persisting both into the stored record, because the resume
+path never calls init and would otherwise have neither.

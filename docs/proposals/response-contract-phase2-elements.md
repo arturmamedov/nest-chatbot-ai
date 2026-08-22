@@ -157,9 +157,8 @@ section originally described.
 
 Reusing `quick_replies` more than once in one init `actions[]` is correct and the widget handles
 each row independently — the intended payload is **two** rows, the site's "try asking" prompts
-and (when the turn calls for one) a clarification row. What 1.5.0 still cannot do is let a row
-say what it is asking; see open point 9, which is now the live request rather than a
-nice-to-have.
+and (when the turn calls for one) a clarification row. What 1.5.0 could not do — let a row say
+what it is asking — **1.7.0 can**: see open point 9, resolved.
 
 ## Widget-side degradation rules (2.4.0, all three types)
 
@@ -235,8 +234,16 @@ implements.
    though the stylesheet beside it is not. Without the header every host page falls back to
    the system font stack; the widget keeps working and nothing on screen flags it, so the only
    trace is the browser's own CORS error in devtools.
-9. **A `quick_replies` row cannot say what it is asking, and at init that is a real gap — this
-   is now the live request.** The element carries only `items[]`. The init envelope carries only
+9. **RESOLVED in contract 1.7.0 (D-050(c)), adopted in widget 2.10.0.** `quick_replies` now
+   carries an optional element-level `heading` — tenant-authored, server-localized, `textContent`
+   only — granted in the shape requested below. The widget renders it **inside** the row rather
+   than above it, so the one-shot rule retires the question with the chips it labels; when
+   present it is also the row's accessible name, with the visible copy `aria-hidden`. Absent
+   still means bare, and substituting our own label is still wrong. The original point is kept
+   below because it is the reasoning the field was granted on.
+
+   *(as written)* **A `quick_replies` row cannot say what it is asking, and at init that is a
+   real gap — this is now the live request.** The element carries only `items[]`. The init envelope carries only
    `greeting` and `actions[]`, and there is no text element type in the contract — so a server
    that sends island chips as welcome elements has **no way to send "Which island are you going
    to?" with them**. On a turn the `reply` string supplies that line for free (which is exactly

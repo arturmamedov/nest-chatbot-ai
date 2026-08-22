@@ -119,7 +119,7 @@ NestChatbot.toggle();
 NestChatbot.setLocale('es');
 NestChatbot.destroy();
 NestChatbot.locale;    // 'es'
-NestChatbot.version;   // '2.9.0'
+NestChatbot.version;   // '2.10.0'
 NestChatbot.state;     // a snapshot — see Measuring it, below
 ```
 
@@ -161,7 +161,9 @@ Events bubble from the widget's own container, so a listener on `document` or `w
 **Returning visitors.** `wchat:ready` carries `returning: true` when this browser arrived with a
 conversation still in progress, whether or not they open the panel; `wchat:open` carries
 `resumed: true` when the panel actually reopened onto it. The window is how long a conversation
-survives — 24 hours today.
+survives, and the **server** sets it — the widget reads it at the start of each conversation
+and follows it, so if the window is widened you will see `returning: true` reach further back
+without changing anything on your page.
 
 **No message text ever leaves.** Payloads carry counts, enums and booleans: `length` is a
 character count, `elements[]` lists element types. What the visitor wrote and what the assistant
@@ -204,7 +206,7 @@ NestChatbot.state;
   the API's structured response — never parsed out of the reply text.
 - Language switching mid-conversation across English, Spanish, Italian, German and French,
   without losing the thread.
-- Conversations that survive a page reload for 24 hours.
+- Conversations that survive a page reload, for as long as the server keeps them alive.
 - Keyboard accessible: `Enter` to send, `Esc` to close, focus moves into the composer on open,
   new replies announced to screen readers.
 
