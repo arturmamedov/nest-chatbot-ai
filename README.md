@@ -43,11 +43,32 @@ inside it either.
 | `data-font-heading` | — | An explicit stack for the header title and card names, e.g. `"Poppins, sans-serif"`. Overrides `data-fonts`. |
 | `data-font-body` | — | An explicit stack for everything else. Overrides `data-fonts`. |
 | `data-z-index` | `2147483000` | Raise or lower it if it fights with your own overlays. |
-| `data-auto-open` | `false` | Open the panel on load instead of waiting for a click. |
+| `data-auto-open` | `false` | Open the panel on load instead of waiting for a click. Note the Back-button caveat below. |
+| `data-back-button` | `true` | The device Back button closes the panel instead of leaving your site. Set `"false"` if your own router fights it — see below. |
 | `data-debug` | `false` | Verbose console logging. Leave off in production. |
 | `data-mock` | `false` | Serve replies from the built-in local fixtures instead of the API — the dev harness the demo page uses. Never on a production page. |
 
 The key must be **public**-scoped — never embed a `full`-scope key or any provider key.
+
+### `data-back-button`, and when to turn it off
+
+With the panel open, the device Back button closes it rather than navigating away from your
+page. This is the one thing the widget does that touches state your page may also own: it adds
+a single entry to session history when the panel opens and removes its own entry when the panel
+closes. **The URL never changes** — no fragment, no path, nothing in the address bar — and the
+widget only ever removes an entry it can prove is its own, so it will not walk your router
+backwards.
+
+Set `data-back-button="false"` if your site runs a client-side router that reacts badly to an
+entry it did not create. Everything else about the widget is unaffected; you simply get the
+pre-2.10.3 behaviour, where Back leaves the page.
+
+**One caveat, and it is a browser rule rather than ours.** Chromium skips history entries a page
+created before the visitor interacted with it, so a panel opened by `data-auto-open` — with the
+visitor having tapped nothing at all — may be stepped over by the Back button. Any tap anywhere
+on the page, including the one that opens the panel, removes the caveat. In practice this means
+Back-closes-the-panel is reliable for a panel the visitor opened, and best-effort for one that
+opened itself and was never touched.
 
 ### Positioning
 
@@ -119,7 +140,7 @@ NestChatbot.toggle();
 NestChatbot.setLocale('es');
 NestChatbot.destroy();
 NestChatbot.locale;    // 'es'
-NestChatbot.version;   // '2.10.2'
+NestChatbot.version;   // '2.10.3'
 NestChatbot.state;     // a snapshot — see Measuring it, below
 ```
 
@@ -148,7 +169,7 @@ Events bubble from the widget's own container, so a listener on `document` or `w
 |---|---|---|
 | `wchat:ready` | the widget has booted | `version`, `locale`, `mock`, `returning`, `storedTurns`, `expanded` |
 | `wchat:open` | the panel opens | `source` (`toggler` \| `teaser` \| `auto` \| `api`), `firstOpen`, `resumed`, `turns` |
-| `wchat:close` | the panel closes | `source` (`toggler` \| `close` \| `escape` \| `api`), `turns` |
+| `wchat:close` | the panel closes | `source` (`toggler` \| `close` \| `escape` \| `back` \| `api`), `turns` |
 | `wchat:message` | the visitor sends a message | `source` (`composer` \| `prompt` \| `chip` \| `welcome-chip`), `length`, `turns`, `locale` |
 | `wchat:reply` | a reply arrives | `turn`, `length`, `elements[]`, `async`, `resolved`, `ended`, `latencyMs` |
 | `wchat:action` | a booking / contact / card button is clicked | `element`, `url`, `channel`, `style`, `index` |
@@ -216,6 +237,9 @@ NestChatbot.state;
 - Conversations that survive a page reload, for as long as the server keeps them alive.
 - Keyboard accessible: `Enter` to send, `Esc` to close, focus moves into the composer on open,
   new replies announced to screen readers.
+- The device Back button closes the panel instead of leaving your site — the panel is
+  full-screen on phones, so Back is what a visitor reaches for to dismiss it. iOS Safari's
+  edge-swipe does the same thing.
 
 ## Development
 

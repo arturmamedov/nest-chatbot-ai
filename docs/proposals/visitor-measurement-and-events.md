@@ -106,7 +106,7 @@ Dispatched from `els.root`, never `window`: events bubble, so a host listener on
 |---|---|---|---|---|
 | `wchat:ready` | `boot()` | `version`, `locale`, `mock`, `returning`, `storedTurns`, `expanded` | the denominator; **how many arrivals are returning guests** | whether they ever open it |
 | `wchat:open` | `open()`, after `playIntro()` | `source`, `firstOpen`, `resumed`, `turns` | open rate; **whether the teaser converts** (`source:'teaser'`) | why they opened |
-| `wchat:close` | `close()` | `source`, `turns` | dwell time, paired with `open` | whether they got what they came for |
+| `wchat:close` | `close()` | `source`, `turns` | dwell time, paired with `open`; **whether the guest was leaving the page or putting the chat away** (`source:'back'` vs `'close'`) | whether they got what they came for |
 | `wchat:message` | `sendGuestText()` | `source`, `length`, `turns`, `locale` | **engagement** — read-only vs typed; whether the prompt pills and server chips earn their space | what they asked |
 | `wchat:reply` | `sendMessage()` 200; again on poll resolution | `turn`, `length`, `elements[]`, `async`, `resolved`, `ended`, `latencyMs` | **how slow the bot is**; which element types actually reach guests | reply quality; whether it was right |
 | `wchat:action` | delegated click in `els.body` | `element`, `url`, `channel`, `style`, `index` | **the conversion** — which Book / WhatsApp / card was clicked | whether the booking completed |
@@ -117,11 +117,20 @@ Dispatched from `els.root`, never `window`: events bubble, so a host listener on
 | `wchat:teaser` | `showTeaser()`, `dismissTeaserForever()` | `action` | whether the teaser earns its 8 seconds | — |
 
 `source` enums: `open` — `toggler` \| `teaser` \| `auto` \| `api`. `close` — `toggler` \|
-`close` \| `escape` \| `api`. `message` — `composer` \| `prompt` \| `chip` \| `welcome-chip`.
+`close` \| `escape` \| `back` \| `api` (`back` added in 2.10.3 with the device Back button;
+additive, so a patch). `message` — `composer` \| `prompt` \| `chip` \| `welcome-chip`.
 `restart` — `menu` \| `ended` (added in 2.10.2 with the header menu; additive, so a patch).
 There is deliberately no `api` in that last one: nothing on `window.NestChatbot` restarts a
 conversation, so the enum's fallback is `ended` — the one listener a bare function reference
 could ever regress.
+
+**`close` now carries one source the others cannot substitute for.** `'back'` is the only value
+that also says *the guest reached for the control that leaves the page* — they pressed Back, and
+the widget spent that press on the panel instead of the navigation. `'close'` and `'escape'` are
+a guest putting the chat away while staying put. Summed they are all dismissals; read apart, a
+rise in `'back'` is a fact about that page's exit pressure rather than about the chat. It is also
+the one close source that is **not** evidence the guest was finished — which is worth knowing
+before it is used as a proxy for satisfaction.
 
 ### Seven decisions inside that table
 

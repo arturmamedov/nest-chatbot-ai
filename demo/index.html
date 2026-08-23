@@ -173,6 +173,27 @@
             data-debug="true"
             defer></script>
 
+    <!-- Harness knob, demo page only: ?nc-back=off drives the data-back-button
+         opt-out, which is otherwise invisible from the outside — a host who sets
+         it simply gets the pre-2.10.3 behaviour back.
+
+         BELOW the tag on purpose, and this is the trap worth keeping: an inline
+         script ABOVE it cannot reach the tag at all. `nextElementSibling` is null
+         while the parser is still on the knob, because the widget tag has not
+         been parsed yet — the attribute is never set and the opt-out silently
+         does nothing. Sitting below, the tag exists and is still unexecuted,
+         because `defer` runs after parsing (the same fact the wchat listener
+         below depends on to catch 'wchat:ready').
+
+         Same spirit as ?nc-idle=, which the Mock object reads for the same
+         reason: a knob the demo needs and a production page can never reach. -->
+    <script>
+        if (/[?&]nc-back=off/.test(location.search)) {
+            document.querySelector('script[src*="nest-chatbot"]')
+                .setAttribute('data-back-button', 'false');
+        }
+    </script>
+
     <!-- What a host page's analytics wiring actually looks like: ONE listener on
          the umbrella event, which also receives any event a later release adds.
          Here it logs; on a real site the same three lines push to dataLayer.

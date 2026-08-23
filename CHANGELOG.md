@@ -5,6 +5,148 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.10.3 — 2026-08-23
+
+**The device Back button closes the panel instead of leaving the customer's site.** New UI
+behaviour, one additive `data-*` attribute and one additive `wchat:close` enum value — all three
+named as patch-shaped in CLAUDE.md § Conventions, and additive is never breaking. A **patch**:
+minor stays reserved for a contract sync, `BUILT_AGAINST` does not move from `1.7.0` and
+`docs/wsuite/` is untouched.
+
+### Why: below 1024px the panel is a screen, and Back is what dismisses a screen
+
+A guest on a hostel's booking page taps the bubble, the panel opens fullscreen, they read a
+reply and press Back — and until now that left the customer's site entirely, mid-conversation,
+taking the answer they were reading with it. The panel *looks* like a screen at those widths, so
+Back is what a phone guest reaches for to put it away. iOS Safari's edge-swipe gesture fires the
+same event, so it comes along for free.
+
+It applies at **every** width. Behaviour cannot live in a media query, so a `matchMedia` gate
+would be a second source of truth with no stylesheet half to agree with — the same argument
+`boot()` already makes about the expanded sheet. On desktop the ✕ is right there and Back is a
+redundancy rather than the only route out; that is a smaller cost than two rules.
+
+### This is the widget's first `window` listener, and its only reach outside `#nest-chatbot`
+
+`popstate` fires on `window` and nowhere else. It does not bubble to `document`, there is no
+delegation trick, so the standing promise of two listeners outside the root could not be kept.
+`teardown()` now unregisters three, and **all five places that vouched for the old count moved
+with it** — three comments in `nest-chatbot.js` (the events banner, `teardown()` itself, and
+`wire()`'s conversion-event note, which the scoping pass had missed) and two in CLAUDE.md.
+
+**The scroll cue's paragraph was not a number bump.** Its case for having no resize listener
+partly rested on "the widget adds no `window` listener at all"; once one exists that argument
+is dishonest rather than merely stale. It now stands on the cost/benefit it always actually
+rested on — a resize handler earns its keep only by re-measuring every frame of a drag, and the
+stale-cue window it would close is the gap the carousel arrows already live with.
+
+Session history is shared, global state the host may already own — about as far outside
+`#nest-chatbot` as it is possible to reach. Hence three commitments:
+
+- **`data-back-button`, defaulting to on.** The first opt-OUT boolean in `cfg` (`!== 'false'`,
+  where every other flag reads `=== 'true'`), and the asymmetry is deliberate: every other flag
+  is a feature a host asks for, this is behaviour a guest already expects. A host whose router
+  fights us writes `data-back-button="false"` and gets the pre-2.10.3 behaviour back, with no
+  `window` listener attached at all rather than one that no-ops.
+- **`pushState` never takes a third argument, and `replaceState` is never called.** The URL does
+  not change — no fragment, nothing in the address bar. A fragment would break hosts that route
+  on it and turn a dismissible panel into a navigable page; `replaceState` would destroy a host
+  entry instead of adding one.
+- **`history.back()` fires only when the current entry is demonstrably ours.** If the host's
+  router pushed over us the entry is simply left behind: one dead entry is a small cost, and
+  walking a customer's app backwards is not a cost we get to impose.
+
+### Two host-framework hazards, and the one guard that closes both
+
+Neither was in the scoping brief. Both were found before shipping, and both are answered by the
+same two decisions rather than by special-casing anyone's framework.
+
+- **single-spa patches `pushState` to dispatch a synthetic `popstate`.** The obvious handler —
+  `popstate → if (isOpen()) close('back')` — would have slammed the panel shut on the very click
+  that opened it, on every single-spa host. `onPopState()` returns early when it is standing on
+  our own entry, which is also the right answer for the ordinary case: a host router pushing
+  over us and the guest backing onto our entry is the same shape, and that press is not ours to
+  eat. Reading the marker as a reason **not** to act is the safe direction — a host who
+  `replaceState`s over it drops through to closing, which is exactly the behaviour we would have
+  had with no check at all, so nothing rests on the marker surviving.
+- **Next.js's App Router hard-reloads the page on a `popstate` whose state lacks `__NA`.** A
+  bare `{ ncPanel: true }` marker would have turned "close the chat" into "reload the customer's
+  site" the moment one of their routes sat above ours. The pushed state now **clones** the
+  host's `history.state` and adds `ncPanel` to it. Our entry is the same URL, so to their router
+  it reads as the same route — a no-op — and every host key rides along untouched.
+
+### Three things that look like bugs and are not
+
+- **There is no re-entrancy flag, and none is needed.** Both directions are closed by ordering:
+  `close()` removes `nc-open` synchronously before popping, so the `popstate` that follows finds
+  `isOpen()` false; and `onPopState()` clears `pushedEntry` *before* calling `close()`, so
+  `close()`'s own pop is a no-op and cannot navigate the host backwards. A flag set and cleared
+  inside `close()` would be long gone by the time an async `popstate` ran. The code says so, at
+  length, because the next reader will otherwise add one.
+- **`history.length` neither grows nor shrinks across a cycle.** A push at a non-tip position
+  truncates the forward entry, so length stays flat while the cursor moves. Measured: fresh tip
+  `len 1 / idx 0` → open `2 / 1` → close `2 / 0` → re-open `2 / 1`. The cursor is what proves
+  the entry is real; length alone cannot.
+- **`teardown()` removes the listener and deliberately does not pop.** It is reached from a live
+  `403`, not from `close()`, so the panel can still be open — and a widget being destroyed must
+  not navigate the page on its way out. The entry is orphaned, and the cost is stated rather
+  than hidden: one Back press then appears to do nothing before the next one leaves.
+
+### Back closes the whole panel; Escape, since 2.10.2, closes only the ⋯ menu
+
+The divergence is deliberate and the reason is mechanical rather than aesthetic. Closing just
+the menu would consume the history entry backing the panel, leaving the panel open with nothing
+behind it — so the guest's *next* Back press would leave the customer's site. Correcting that
+needs a re-push, and a widget pushing history entries to keep a one-item dropdown alive is not a
+trade worth making. `close()` already takes the menu and its primed confirm with it.
+
+### The one known limitation, and it is the browser's rule rather than ours
+
+Chromium marks a history entry skippable **by the back/forward UI** when the document has
+received no user activation. A panel opened by `data-auto-open` pushes exactly such an entry, so
+Back may step over it and leave the page — the behaviour this release exists to remove.
+
+It is far narrower than it sounds, and both halves of the rule are worth stating because each
+was assumed wrong at some point in this work. Activation counts whether it arrives **before or
+after** the push, so any tap anywhere on the page — including the one that opens the panel —
+retires the caveat for that document. And the intervention applies **only** to the back/forward
+UI, never to the `history.back()/forward()` APIs, so the widget's own stack-balancing pop is
+never affected by it. The only losing case is `data-auto-open` with a guest who taps nothing at
+all and then presses Back.
+
+**Stated from Chromium's own documentation, not measured.** CDP cannot press the browser's Back
+button, and `Page.navigateToHistoryEntry` is a programmatic call the intervention explicitly
+does not apply to — so the harness confirms the auto-opened entry is pushed and behaves
+correctly, but cannot exercise the skip. README and CLAUDE.md carry it as a caveat, not a claim.
+
+### Verified
+
+**Mock only** — nothing here touches the API. Served on a fresh port with the source asserted
+first. **222 assertions across eleven suites, all passing**, including the five that need the
+documented temporary fixture edits (`Mock.init`'s `actions: []` for the fallback pills, a bumped
+`contract_version` for the drift-warn positive control). 53 of them are new, in `t11-back.mjs`.
+
+The cache trap bit once and the source assertion caught it: a warm cache kept serving the
+pre-edit file after those two fixtures were changed, making two documented fixture-dependent
+tests look like regressions from this release. A fresh port cleared it, and both passed.
+
+Of the new checks, the ones worth naming: the stack stays balanced across ✕, Escape, the
+launcher, `NestChatbot.close()` and Back itself, and across ten mixed cycles; a `popstate`
+landing on our own entry leaves the panel open, both synthetically and via a real host entry
+pushed above ours; the pushed state carries the host's `__NA` and every other host key alongside
+our own marker; the URL is unchanged by the push; Back with the panel **closed** navigates the
+host page normally, so a press that is not ours is never swallowed; focus after a Back-close is
+on a visible node inside `#nest-chatbot`, never `<body>`; the ⋯ menu goes with the panel and its
+primed confirm resets; `data-back-button="false"` pushes nothing, writes no marker and pops
+nothing; and `destroy()` with the panel open neither navigates nor pops, with a later Back press
+hitting no live handler. The other ten suites are unchanged, `t10-menu` included.
+
+The demo page gained a `?nc-back=off` knob, and its first placement was wrong in a way worth
+recording: an inline script placed **above** the widget tag cannot reach it, because
+`nextElementSibling` is null while the parser is still sitting on the knob — the attribute was
+never set and the opt-out silently did nothing, which the suite caught. It sits below the tag
+now, which still runs first because `defer` executes after parsing, and the comment says why.
+
 ## 2.10.2 — 2026-08-23
 
 **A ⋯ menu in the panel header, carrying "Start a new chat".** New UI behaviour and nothing

@@ -109,8 +109,8 @@ page rather than in production.
 | `render` | bubbles, thinking dots, `renderAction()`, `safeHttpUrl()` |
 | `typing` | the character-by-character reveal |
 | `intro` | the circular-progress loader sequence |
-| `flow` | open/close, submit, status handling, teardown, the async poll, the header ⋯ menu |
-| `boot` | listeners, `window.NestChatbot`, entry |
+| `flow` | open/close, submit, status handling, teardown, the async poll, the header ⋯ menu, the Back-button history entry |
+| `boot` | listeners (two on `document`, `popstate` on `window`), `window.NestChatbot`, entry |
 
 **Why a classic IIFE and not ES modules.** `document.currentScript` — how the widget reads its
 `data-*` config and finds its own asset base — is `null` inside `type="module"`. A module build
@@ -240,7 +240,8 @@ Set on the `<script>` tag. `document.currentScript.dataset` reads them at boot.
 | `data-fonts` | `nest` | `nest` \| `host` \| `system` — see the typography seam below. Unknown values fall through to `nest`. |
 | `data-font-heading` `data-font-body` | — | An explicit family list for either var. Beats `data-fonts`, so the two mix. Validated by `FONT_OK`; a rejected value is ignored, same as `data-offset-x`. |
 | `data-z-index` | `2147483000` | For hosts with their own stacking conflicts. Same CSS-default mechanism as `data-color`. |
-| `data-auto-open` | `false` | |
+| `data-auto-open` | `false` | See the Back-button caveat below — an auto-opened panel's history entry is skippable until the guest taps something. |
+| `data-back-button` | `true` | The device Back button closes the panel. **The only opt-OUT boolean in `cfg`** (`!== 'false'`, not `=== 'true'`) — see the Back-button section. |
 | `data-debug` | `false` | Gates **all** `console` output — sole exception: the one-time contract-drift warn (guide §3.1). |
 | `data-mock` | `false` | Serves replies from the local fixtures instead of the API — the dev harness. The demo page sets it; never a production page. |
 
@@ -260,8 +261,9 @@ Four rules the section states and the code has to keep true:
 
 - **Dispatch from `els.root`, never `window`.** Events bubble, so a host listener on `window`
   or `document` hears them either way, and the widget still touches no node it does not own.
-  `teardown()`'s "exactly two listeners outside `#nest-chatbot`" claim survives — dispatching
-  attaches none.
+  The measurement seam attaches **no listener at all** — whatever the widget's outside-the-root
+  count is, this section adds nothing to it. (It was two, both on `document`, until 2.10.3 put
+  `popstate` on `window` for the Back button. Dispatching still attaches none.)
 - **Counts, enums and booleans. Never guest text, never reply text.** `length` is a character
   count; `elements[]` lists element *types*. Element urls are the one string that travels
   (a server-supplied href the guest is navigating to, already in the DOM) — and
@@ -348,9 +350,68 @@ Three things are easy to get wrong here:
   Conventions.
 
 The cue re-syncs at `open()`, `resyncCarousels()`'s post-transition beat, `adjustInputHeight()`
-and the restart wipe. There is deliberately **no** window resize listener (`teardown()` claims the
-widget attaches exactly two listeners outside `#nest-chatbot`, and that claim stays true), so a
-viewport resize can leave the cue briefly stale — the same accepted gap the carousel arrows have.
+and the restart wipe. There is deliberately **no** resize listener, and the reason is the trade
+rather than the listener count: a resize handler earns its keep only by re-measuring on every
+frame of a drag, and what it would buy is closing a gap the carousel arrows already live with —
+a viewport resize can leave the cue briefly stale until the next scroll or the next message.
+(Until 2.10.3 this paragraph also leant on "the widget attaches no `window` listener at all".
+It does now — `popstate`, for the Back button — so the argument stands on its own cost/benefit,
+which is where it always actually rested.)
+
+## The Back button is the one thing that reaches outside `#nest-chatbot`
+
+Since 2.10.3 `open()` pushes a session-history entry and `close()` pops it, so the device Back
+button dismisses the panel instead of leaving the customer's site. Below 1024px the panel is
+fullscreen — it *looks* like a screen, and Back is what dismisses a screen. iOS Safari's
+edge-swipe rides the same event. It applies at **every** width: behaviour cannot live in a media
+query, so a `matchMedia` gate would be a second source of truth with no stylesheet half to agree
+with (the same argument `boot()` makes about the expanded sheet).
+
+This is the widget's only exception to *"the host page is not ours"*, and the four things that
+keep it defensible are all easy to undo by accident:
+
+- **`pushState` never gets a third argument.** The URL must not change. A fragment would show in
+  the address bar, break hosts that route on it, and turn a dismissible panel into a navigable
+  page. `replaceState` is likewise never used — it destroys a host entry instead of adding one.
+- **`history.back()` fires only when `history.state.ncPanel` is on the *current* entry.** If the
+  host's router pushed over us, one dead entry is a small cost; walking a customer's app
+  backwards is not a cost we get to impose.
+- **The pushed state CLONES the host's `history.state`** and adds `ncPanel` to it, rather than
+  replacing it with a bare marker. Next.js's App Router hard-**reloads** the page on a `popstate`
+  whose state lacks `__NA`, so a bare marker turns "close the chat" into "reload the customer's
+  site" the moment one of their routes sits above ours. Our entry is the same URL, so to their
+  router it reads as the same route — a no-op.
+- **`onPopState()` returns early when it is standing on our own entry.** This is not belt and
+  braces, it is load-bearing twice over: single-spa patches `pushState` to dispatch a
+  **synthetic `popstate`**, so the naive `if (isOpen()) close()` would slam the panel shut on the
+  very click that opened it; and a host router pushing over us would otherwise have its Back
+  press eaten by our panel. Reading the marker as a reason **not** to act is the safe direction —
+  a host who `replaceState`s over it drops through to closing, which is the behaviour we would
+  have had with no check at all.
+
+Three more things that will bite:
+
+- **There is no re-entrancy flag and none is needed.** Do not add one. `close()` removes
+  `nc-open` synchronously and then pops, so the `popstate` that follows finds `isOpen()` false;
+  `onPopState()` clears `pushedEntry` **before** calling `close()`, so `close()`'s own pop is a
+  no-op and cannot navigate the host backwards. A flag set and cleared inside `close()` would be
+  long gone by the time an async `popstate` ran.
+- **`history.length` is the wrong thing to assert on.** A push at a non-tip position truncates
+  the forward entry, so after one open/close cycle the length stays flat while the cursor still
+  moves. Measured: fresh tip `len 1 / idx 0` → open `2 / 1` → close `2 / 0` → re-open `2 / 1`.
+  The stack never grows; the **cursor** is what proves the entry is real.
+- **`teardown()` removes the listener and deliberately does not pop.** It is reached from a live
+  `403`, not from `close()`, so the panel can still be open — and a widget being destroyed must
+  not navigate the page on its way out. The entry is orphaned: one Back press appears to do
+  nothing before the next one leaves. A dead widget's dead entry is the cheaper failure.
+
+**The auto-open caveat is a browser rule, not ours.** Chromium marks a history entry skippable
+by the back/forward **UI** if the document has received no user activation — but activation
+counts whether it arrives *before or after* the push, and it explicitly does **not** apply to the
+`history.back()/forward()` APIs, so our own pop always lands. So the only losing case is
+`data-auto-open` with a guest who taps nothing at all and then presses Back. Any tap anywhere,
+including the one that opens the panel, retires it. Do not try to fight the intervention; the
+browser is defending against exactly the pattern we are using.
 
 ## Local development
 
@@ -551,7 +612,10 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   every way of dismissing the menu hides an item the guest may be standing on. It is a rule,
   not a case.
 - Never touch `document.documentElement.lang`, the host's `<body>`, or anything outside
-  `#nest-chatbot`. The host page is not ours.
+  `#nest-chatbot`. The host page is not ours. **Session history is the one deliberate
+  exception** (2.10.3, the Back button) — which is exactly why it is the only behaviour in the
+  widget carrying a `data-*` opt-out, why the URL is never touched, and why `history.back()`
+  fires only when the top entry is demonstrably ours. See the Back-button section.
 - Version bumps err small: **patch unless the embed contract changes.** Everything
   non-breaking is a patch — a bug fix, new UI behaviour, a new `data-*` attribute, a new
   runtime-API method, a whole new stored surface. Reserve **minor** for a contract sync (a
@@ -565,4 +629,7 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   falsified, plus two hardening fixes, and **no** `BUILT_AGAINST` move (it moves only during a
   sync). 2.10.2 is the header ⋯ menu: new UI behaviour and three restart-race fixes, no
   `data-*` attribute, no runtime-API method, so a patch by this rule and not a minor.
-  The next is **2.10.3** unless it is a sync.
+  2.10.3 is the device Back button closing the panel: new UI behaviour, one additive `data-*`
+  attribute (`data-back-button`) and one additive `wchat:close` enum value — all three named in
+  this rule as patch-shaped, and additive is never breaking.
+  The next is **2.10.4** unless it is a sync.

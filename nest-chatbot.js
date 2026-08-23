@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.10.2';
+    var VERSION = '2.10.3';
 
     /* =========================================================== config ===== */
 
@@ -65,6 +65,12 @@
         offsetY: data.offsetY || '',
         autoOpen: data.autoOpen === 'true',
         debug: data.debug === 'true',
+        // The ONE opt-OUT flag in cfg, and the asymmetry is deliberate: every
+        // other boolean here is a feature a host asks FOR, so it reads
+        // === 'true'. This one is behaviour a guest already expects from a
+        // fullscreen panel, and they get it with the host doing nothing. A host
+        // whose own router fights us writes data-back-button="false".
+        backButton: data.backButton !== 'false',
         // Typography opt-out — see applyFonts() in the dom section for what each
         // value does and why the default is worth keeping.
         fonts: data.fonts || '',              // '' | 'nest' | 'host' | 'system'
@@ -677,9 +683,10 @@
      *
      * Dispatched from els.root, never from window: events bubble, so a host
      * listener on window or document hears them either way, and the widget still
-     * touches no node it does not own. teardown()'s claim that the widget
-     * attaches exactly two listeners outside #nest-chatbot stays true —
-     * dispatching attaches none.
+     * touches no node it does not own. The measurement seam attaches NO listener
+     * anywhere — whatever the widget's outside-the-root count is, this section
+     * adds nothing to it. (It was two, both on document, until 2.10.3 put
+     * popstate on window for the Back button; see pushHistoryEntry() in flow.)
      *
      * TWO dispatches per call: 'wchat:<name>' for a host that wants one thing,
      * and a bare 'wchat' carrying the same detail plus `name`, so a host who
@@ -775,7 +782,7 @@
     }
 
     var OPEN_SOURCES = ['toggler', 'teaser', 'auto', 'api'];
-    var CLOSE_SOURCES = ['toggler', 'close', 'escape', 'api'];
+    var CLOSE_SOURCES = ['toggler', 'close', 'escape', 'back', 'api'];
     /* No 'api' in this one: there is no NestChatbot.restart(), so the default
        fallback below would name a caller that cannot exist. 'ended' is the
        honest answer — the conversation_ended button is the only restart
@@ -3513,6 +3520,106 @@
 
     /* ============================================================= flow ===== */
 
+    /*
+     * THE DEVICE BACK BUTTON (2.10.3).
+     *
+     * Below 1024px the panel is fullscreen, so it LOOKS like a screen, and Back
+     * is what dismisses a screen — without this it leaves the customer's site
+     * mid-conversation instead. iOS Safari's edge-swipe fires the same event, so
+     * it comes along for free. One rule at every width: behaviour cannot live in
+     * a media query, so a matchMedia gate here would be a second source of truth
+     * with no stylesheet half to agree with (see boot()'s note on the same).
+     *
+     * THIS IS THE WIDGET'S ONE DELIBERATE EXCEPTION to "the host page is not
+     * ours". Session history is shared, global, mutable state the host may
+     * already own — a customer on Next.js, Vue Router, Turbo or single-spa
+     * pushes and pops entries and listens to popstate themselves, and our entry
+     * sits in THEIR stack. That is why this is the only behaviour in the widget
+     * with a data-* opt-out, and why three things below are not negotiable:
+     *
+     *   - NO third argument to pushState, ever. The URL must not change: it
+     *     would show in the address bar, break hosts that route on it, and turn
+     *     a dismissible panel into a navigable page.
+     *   - NO replaceState. That destroys a host entry instead of adding one.
+     *   - history.back() ONLY when the top entry is demonstrably ours. If their
+     *     router pushed over us, one dead entry is a small cost; walking a
+     *     customer's app backwards is not a cost we get to impose.
+     */
+    var pushedEntry = false;
+
+    function pushHistoryEntry() {
+        if (!cfg.backButton || pushedEntry || !window.history || !history.pushState) { return; }
+        // Carry the host router's own state FORWARD rather than replacing it with
+        // a bare marker. Our entry is the same URL, so to their router it is the
+        // same route — a no-op — but only if it recognises its own keys on it:
+        // Next.js's App Router hard-RELOADS the page on a popstate whose state
+        // lacks __NA, so a bare marker turns "close the chat" into "reload the
+        // customer's site" the moment one of their routes sits above ours.
+        var state = {}, prev = history.state, k;
+        if (prev && typeof prev === 'object') {
+            for (k in prev) {
+                if (Object.prototype.hasOwnProperty.call(prev, k)) { state[k] = prev[k]; }
+            }
+        }
+        state.ncPanel = true;
+        try {
+            history.pushState(state, '');   // no third argument — see the banner
+            // AFTER the call, deliberately: single-spa patches pushState to
+            // dispatch a synthetic popstate from inside it, and onPopState()
+            // reading this as false is the first of three guards that stop the
+            // panel slamming shut on the very click that opened it.
+            pushedEntry = true;
+        } catch (e) {
+            // A sandboxed iframe without allow-same-origin throws here. The panel
+            // still opens; Back simply is not ours on that page.
+            pushedEntry = false;
+        }
+    }
+
+    function popHistoryEntry() {
+        if (!pushedEntry) { return; }
+        pushedEntry = false;
+        // Only pop what is demonstrably ours. A host router is free to push over
+        // our entry or replaceState across it, and in both cases history.back()
+        // would navigate THEIR app rather than pop us.
+        if (!history.state || !history.state.ncPanel) { return; }
+        // Chromium's history-manipulation intervention does not reach this call:
+        // it is scoped to the back/forward UI and explicitly not to the
+        // history.back()/forward() APIs, so this pop always lands.
+        try { history.back(); } catch (e) {}
+    }
+
+    /*
+     * THE FIRST AND ONLY window LISTENER THIS WIDGET HAS EVER ATTACHED. popstate
+     * fires on window and nowhere else — it does not bubble to document, there
+     * is no delegation trick — so teardown()'s two-listener claim is a
+     * three-listener claim from 2.10.3, and teardown() unregisters this one too.
+     *
+     * THERE IS NO RE-ENTRANCY FLAG AND NONE IS NEEDED — do not add one. Both
+     * directions are already closed by ordering:
+     *   close()   removes nc-open synchronously, then pops; the popstate that
+     *             follows finds isOpen() false.
+     *   popstate  clears pushedEntry before calling close(), so close()'s own
+     *             popHistoryEntry() is a no-op and cannot navigate the host's
+     *             page backwards.
+     * A flag set and cleared inside close() would be long gone by the time an
+     * async popstate ran anyway, which is the trap this comment exists to spare
+     * the next reader.
+     */
+    function onPopState() {
+        if (removed || !pushedEntry || !isOpen()) { return; }
+        // Standing ON our own entry means this press popped something ABOVE it —
+        // a host router's entry, or single-spa's synthetic popstate. Ours is
+        // still on the stack, so the panel is not this press's business.
+        //
+        // Reading the marker as a reason NOT to act is the safe direction: a
+        // host who replaceState'd over it drops us through to close(), which is
+        // exactly the behaviour we would have had with no check at all.
+        if (history.state && history.state.ncPanel) { return; }
+        pushedEntry = false;   // the browser consumed it; close() must not re-pop
+        close('back');
+    }
+
     function isOpen() { return els.root.classList.contains('nc-open'); }
 
     function open(source) {
@@ -3521,6 +3628,9 @@
         // still says whether the guest had opened the panel earlier this session.
         var firstOpen = !readFlag('sessionStorage', FLAG_OPENED);
         els.root.classList.add('nc-open');
+        // AFTER the class, so isOpen() already reads true if a host's patched
+        // pushState re-enters us synchronously.
+        pushHistoryEntry();
         els.toggler.setAttribute('aria-expanded', 'true');
         markOpened();
         hideTeaser();
@@ -3580,6 +3690,11 @@
             source: oneOf(CLOSE_SOURCES, source),
             turns: transcript.length
         });
+        // LAST: after nc-open is already gone and after the host has had its
+        // event. A host router may react to this synchronously — Next.js
+        // re-renders, single-spa re-dispatches — so the widget's own state must
+        // be settled before we touch their history.
+        popHistoryEntry();
     }
 
     // The source rides through to whichever half runs — 'toggler' is legal in
@@ -4275,10 +4390,17 @@
 
     function teardown() {
         removed = true;
-        // The only two listeners the widget ever attaches outside #nest-chatbot —
-        // a destroyed widget must leave the document untouched.
+        // The only THREE listeners the widget ever attaches outside
+        // #nest-chatbot — two on document, and popstate, which fires on window
+        // and nowhere else. A destroyed widget must leave both untouched.
         document.removeEventListener('click', onDocumentClick);
         document.removeEventListener('keydown', onDocumentKeydown);
+        window.removeEventListener('popstate', onPopState);
+        // Deliberately NOT popHistoryEntry(). teardown() is reached from a live
+        // 403, not from close(), so the panel can still be open — and a widget
+        // being destroyed must not navigate the page on its way out. The entry is
+        // orphaned: one Back press then appears to do nothing before the next one
+        // leaves the site. A dead widget's dead entry is the cheaper failure.
         if (els.root && els.root.parentNode) { els.root.parentNode.removeChild(els.root); }
     }
 
@@ -4666,7 +4788,8 @@
          * els.body, so this covers link_button / booking_link / availability /
          * property_card / promo_card and any element type that tags one later.
          *
-         * Inside #nest-chatbot, so teardown()'s two-listener claim is untouched.
+         * Inside #nest-chatbot, so teardown()'s outside-the-root listener
+         * count is untouched by it.
          *
          * Fires on the click, never on a navigation outcome — a blocked popup or
          * a guest who backs out still counts as intent, which is what a CTA
@@ -4741,6 +4864,12 @@
 
         document.addEventListener('click', onDocumentClick);
         document.addEventListener('keydown', onDocumentKeydown);
+        // The third, and the only one not on document: popstate fires on window
+        // and nowhere else — it does not bubble, so there is no delegation trick
+        // and no way to keep the old two-listener promise. Registered only when
+        // the host has not opted out, so data-back-button="false" leaves window
+        // untouched rather than attaching a listener that would no-op.
+        if (cfg.backButton) { window.addEventListener('popstate', onPopState); }
 
         adjustInputHeight();   // run once for any prefilled content
     }
