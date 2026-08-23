@@ -8,6 +8,9 @@
 .DS_Store
 Thumbs.db
 
+# Personal working notes kept beside the repo, not part of its record.
+/my_notes.md
+
 # Local test credentials (even public-scoped ws_live_ keys stay out of git —
 # this repo has shipped committed keys twice; see CLAUDE.md rule 3)
 .env
