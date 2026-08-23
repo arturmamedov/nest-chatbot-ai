@@ -148,6 +148,17 @@ and §4 carries a ready-rendered sync prompt naming this repo. Read §4 before a
 improvising one. Their rule, worth honouring because their own file records it slipping twice:
 **the registry row moves in the same commit as the sync, whichever repo the work happened in.**
 
+**That row is the only thing this repo edits in `nest-mind`.** It crosses because their file makes
+it an obligation — the follow-up commit is "not optional" — and nothing else does. Their
+dev-guide, their decision log, their audit registers, their design docs: research the change from
+here, then hand it over as a prompt for a session opened at `~/Herd/nest-mind`, which is the
+direction §4 already works in the other. The reason is not tidiness. A session rooted here carries
+*this* file's conventions, cannot run their tests, and reasons about their server from the
+outside — which on 2026-08-23 put a false claim about the deployment's idle window into their
+registry, and a corrected gate condition into a doc whose own header reads "Design only — nothing
+here is built" while their authoritative `decisions.md` kept the incomplete one. Both reached
+origin before anyone noticed.
+
 Three endpoints: init a conversation, post a turn, poll an async turn.
 
 ```
