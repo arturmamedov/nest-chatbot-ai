@@ -57,19 +57,21 @@ the destination already exists.
 The only route that answers "came back next week", "same person, different device", or that
 puts the answer in wSuite's own panel rather than in each host's GA4.
 
-It is deferred because **the returning-guest ceiling is the idle window, and the window is
-about to move**. That was written when `IDLE_MS` was a hardcoded 24h and the widening was a
-plan; since 2.10.0 the widget reads the window from the init response instead of guessing, and
-the platform's config carries `WSUITE_CHATBOT_IDLE_HOURS=168` — **seven days**. **Not yet in
-effect:** measured 2026-08-23 the live server still reports `contract_version: 1.6.2` and sends
-no `idle_hours`, so the widget is on its 24h fallback and "came back next week" is *not*
-answerable from route A today. It becomes answerable on the deploy, without building anything.
-Building a cross-session identifier to answer a question that is one deploy from answering
-itself is the wrong order — but if the deploy keeps slipping, that is the thing to chase, not
-this.
+It is deferred because **the returning-guest ceiling is the idle window, and the window has now
+moved**. That was written when `IDLE_MS` was a hardcoded 24h and the widening was a plan; since
+2.10.0 the widget reads the window from the init response instead of guessing, and the deploy has
+landed — measured 2026-08-23 20:56 UTC the live init `201` reports `contract_version: 1.7.0` and
+`idle_hours: 168`, **seven days**. So "came back next week" *is* answerable from route A today,
+without building anything, which is what the deferral was waiting on. Building a cross-session
+identifier to answer a question route A already answers is the wrong order. The thing to chase is
+no longer the deploy: it is whether a real question **survives** a week-long window, because that
+is the only kind that now justifies a cross-session identifier. Do not re-derive the window from
+`nest-mind`'s env — read it off a `201`; this section has been wrong in both directions by
+reasoning from config instead of measuring.
 
 It also carries a real decision that should be made deliberately rather than discovered at
-review: a persistent visitor id is **categorically different** from a 24h conversation uuid. It
+review: a persistent visitor id is **categorically different** from a conversation uuid that
+expires with the server's idle window — a week today, and a number that moves. It
 is a cross-session identifier for a person, on properties in the EU, and needs consent
 treatment and a retention policy before it can ship. The widget's storage today is functional
 and short-lived, which is much of why it has been uncontroversial.

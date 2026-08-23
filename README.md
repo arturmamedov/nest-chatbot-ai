@@ -191,7 +191,9 @@ conversation still in progress, whether or not they open the panel; `wchat:open`
 survives, and the **server** sets it — the widget reads it at the start of each conversation
 and follows it, so if the window is widened you will see `returning: true` reach further back
 without changing anything on your page. Against a server that does not report a window the
-widget falls back to **24 hours**, which is what you get today.
+widget falls back to **24 hours** — that is a floor for older servers, not a description of
+yours. Ask your window off an init response rather than assuming it, because the number moves
+without the widget changing.
 
 **No message text ever leaves.** Payloads carry counts, enums and booleans: `length` is a
 character count, `elements[]` lists element types. What the visitor wrote and what the assistant

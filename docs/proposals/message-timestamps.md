@@ -147,20 +147,20 @@ solution.
 
 ## Why the grown idle window sharpens this
 
-**Still a forecast, but a funded one.** The mechanism is built — since 2.10.0 the widget follows
-`idle_hours` instead of a 24h constant — and the platform's config carries
-`WSUITE_CHATBOT_IDLE_HOURS=168`, **seven days**. What has *not* happened is the deploy:
-measured 2026-08-23 the live init `201` reports `contract_version: 1.6.2` and carries no
-`idle_hours` at all, so the widget is on its 24h fallback today. Do not read a live window off
-`nest-mind`'s env — that is the local repo's config, and an earlier revision of this very
-section did exactly that. The argument below describes what the deploy turns on.
+**No longer a forecast — the window is live.** The mechanism was built in 2.10.0 (the widget
+follows `idle_hours` instead of a 24h constant) and the deploy has now landed: measured
+2026-08-23 20:56 UTC the live init `201` reports `contract_version: 1.7.0` and `idle_hours: 168`,
+**seven days**. Do not read a live window off `nest-mind`'s env — that is the local repo's
+config, an earlier revision of this very section did exactly that, and the correction that
+replaced it was itself wrong within a day when the deploy landed. The `201` is the evidence;
+re-measure rather than re-reason.
 
-At 24h — where the widget still sits — client-side dating is close to unfalsifiable: a
-transcript spans at most two calendar days, the guest is almost certainly in the timezone they started in, and Today/Yesterday is
-right essentially always. At a week the same code dates history across several days for a
-traveller — which is precisely who our guests are, moving between islands and occasionally
-between zones. The error stops being theoretical at exactly the point the window makes the
-feature matter most.
+At 24h, client-side dating was close to unfalsifiable: a transcript spans at most two calendar
+days, the guest is almost certainly in the timezone they started in, and Today/Yesterday is
+right essentially always. At a week — where the widget now sits — the same code dates history
+across several days for a traveller, which is precisely who our guests are, moving between
+islands and occasionally between zones. The error stopped being theoretical at exactly the point
+the window made the feature matter most, and that point has now passed rather than approaching.
 
 That was the argument for `server_time` riding along with `idle_hours` rather than being a
 second errand, and it is how it shipped: contract 1.7.0 carried both, and widget 2.10.0 adopted

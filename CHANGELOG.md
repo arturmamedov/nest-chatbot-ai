@@ -177,6 +177,16 @@ being one entirely, and there has never been a guest-initiated way to ask for a 
 The only restart affordance was the button `endConversation()` paints after the *server* kills
 the conversation at its turn cap — a dead-end recovery, not a control.
 
+> **Resolved later the same day; the whole section above is left as written because it was true
+> when measured.** The platform deployed 1.7.0 — measured 2026-08-23 20:56 UTC the init `201`
+> returns `contract_version: 1.7.0` and `idle_hours: 168`. The forecast held in its main claim
+> (the widget followed the server without changing, so a week-old thread now replays in full) and
+> **missed in its worry**: "after the deploy they stop agreeing for anyone still on an older
+> widget" needed an older widget in the field, and there was none — `nestshostels.com` serves
+> `2.10.3`. What the deploy actually left behind is narrower: records written *before* it carry
+> `idleHours: null` and are judged at the 24h fallback for up to a day. The standing statement of
+> the live window is CLAUDE.md § Open items, anchored to a `201` rather than to an env file.
+
 - **The button is leftmost of the three**, so ✕ keeps the corner every guest reaches for and ⤴
   keeps its position relative to it. Below 1024px ⤴ is still absent and the header reads ⋯ ✕ —
   which is where the menu matters most: the panel is fullscreen there and a phone guest has no
@@ -321,6 +331,11 @@ pre-1.7.0 behaviour byte-for-byte, with no drift `console.warn` (correctly: a se
 the widget is not a drift condition, guide §3.1). A positive control built outside the repo,
 with `BUILT_AGAINST` forced to `1.5.0`, fired the warn on cue. **`idle_hours` cannot be
 confirmed on the wire until the platform deploys 1.7.0** — see CLAUDE.md § Open items.
+
+> **Confirmed 2026-08-23 20:56 UTC**, after the platform deployed: the init `201` carries
+> `contract_version: 1.7.0`, `idle_hours: 168` and `server_time`. This release's absent-tolerance
+> was the right thing to have shipped — it is what carried the widget across the deploy — but it
+> is no longer the path being exercised in production.
 
 ## 2.10.0 — 2026-08-22
 

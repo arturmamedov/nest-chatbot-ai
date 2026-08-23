@@ -556,33 +556,51 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   - **`heading`** closed open point 9 of `docs/proposals/response-contract-phase2-elements.md`.
     A chip row can say what it asks; absent still means bare, and substituting our own label
     is still wrong.
-- **The widget half is shipped; the server half is not deployed — and the desync is LATENT,
-  not live.** Measured 2026-08-23, `nest-mind.laravel.cloud` still reports
-  `contract_version: 1.6.2` and sends no `idle_hours` and no `server_time`, so 2.10.x cannot
-  learn the window: it degrades exactly as designed — `idleHours: null`, `clockOffset: 0`, the
-  24h fallback. **Nothing is broken by that today**, and the reason is worth knowing before
-  anyone treats this as urgent: at the deployed contract, `config/chatbot.php` carried
-  `'idle_hours' => 24` as a **hardcoded literal** (`git show
-  chatbot-contract-v1.6.2:modules/chatbot/config/chatbot.php`), and it only became
-  `env('WSUITE_CHATBOT_IDLE_HOURS', 24)` at 1.7.0. So the `168` in `nest-mind`'s env **cannot
-  take effect on the running server** — server and widget are both at 24h and they agree.
-  The bug appears only if the deploy lands while a **pre-1.7.0** widget is still in the field:
-  then the server idles at a week, the widget expires at a day, and a returning guest loses
-  their transcript and opens a second conversation against one still holding the working
-  memory `data-property` seeded. A spike in `wchat:error {phase:'turn', status:410,
-  retrying:true}` is what that looks like from the outside. **Read `contract_version` off a
-  real init `201` before asserting anything here, and never re-derive the window from
-  `nest-mind`'s env** — that is the *local* repo's config, not the deployed instance's. That
-  mistake has now been made twice in these docs, once by the release that fixed it.
+- **Both halves are deployed, and the window is a live seven days.** Measured 2026-08-23 20:56 UTC
+  off a real init `201` against `nest-mind.laravel.cloud`: `contract_version: 1.7.0`,
+  `idle_hours: 168`, `server_time` present. So 2.10.x now learns the window from the server on
+  every init and carries it in the record, exactly as designed.
+  **The condition this bullet used to warn about was not met.** The bug needed the deploy to land
+  while a **pre-1.7.0** widget was still in the field; the widget serving
+  `nestshostels.com` is `2.10.3` / `BUILT_AGAINST 1.7.0`, so server and widget agree at 168h.
+  What remains is a smaller, self-draining version: a record written **before** the deploy has
+  `idleHours: null` and `storedIdleMs()` judges it at the 24h `IDLE_MS` fallback while the server
+  holds it for a week. Such a record is unreadable 24h after its own last activity, so the cohort
+  drains within a day of the deploy — with one long tail, because a guest who keeps returning
+  inside 24h never re-inits, so the resume branch restores `serverIdleHours = null` and `persist()`
+  writes `null` back. That record stays on the 24h judgment until the guest gaps past it once,
+  which is exactly when it costs them their transcript and opens a second conversation against one
+  still holding the working memory `data-property` seeded. Degraded, not broken; once per guest;
+  self-healing.
+- **The signal for that desync is NOT a `410` — this doc said so for two releases and was wrong on
+  the mechanics, not merely out of date.** A `410` means the *server* expired first, which is the
+  opposite desync. When the widget's window is the **shorter** one, nothing ever 410s: a guest
+  returning inside it resumes and the server still has the conversation (`200`), and a guest
+  returning outside it hits `readStore()`'s expiry check, which returns `null` and drops the record
+  — so the dead uuid is **never sent** and no request exists that could fail. Watching for a `410`
+  spike here is watching for something that cannot fire. The observable signal is on the events
+  surface: **`wchat:ready` arriving with `returning: false` where it should be `true`** — a fall in
+  the returning rate and a rise in conversations per visitor.
+- **Anchor this fact to a `201`; it has now flipped twice, both times from reading an env file.**
+  `65b0742` corrected the docs *from* "a live seven days" *to* "24h, latent" because the `168` in
+  `nest-mind`'s env could not be read by the deployed 1.6.2 build; this entry corrects that back,
+  because the deploy landed. Neither error was about the number — both were about deriving it from
+  configuration instead of from a response. **Read `contract_version` and `idle_hours` off a real
+  init `201` before asserting anything here, and never re-derive the window from `nest-mind`'s
+  env** — that is the *local* repo's config, not the deployed instance's, and even the deployed
+  instance's env is not evidence of what the running build does with it. `demo/demo.html`
+  (gitignored) holds a real public key and the live `apiBase` for exactly this check.
 - **A persistent visitor token at init is deliberately NOT asked for yet.** It is the only way
   to answer "same person, cross-device" or "came back after the window", and the only way to
   put the answer in wSuite's own panel rather than in each host's GA4 — but it is a
   cross-session identifier for a person, on EU properties, and needs consent treatment and a
   retention policy before it can ship. The widget's storage today is functional and
   short-lived, which is much of why it has been uncontroversial. Extending the idle window
-  answers most of the same question for free — but note the deferral currently rests on a
-  window that is **configured** at a week and **not yet deployed** (see above), so today the
-  widget still sees 24h. Revisit if a real question survives the deploy, not before it.
+  answers most of the same question for free — and as of 2026-08-23 that extension is **live**:
+  the deploy landed and the window is a measured 168h (see above). The deferral said "revisit if a
+  real question survives the deploy", and the deploy has now happened, so that condition is
+  discharged: the next move is to ask whether a question actually survives a week-long window
+  before reaching for a cross-session identifier, not to treat the token as pending.
   Inferring visitors server-side from IP + user-agent was considered and **rejected**: guide
   §6 names "a hotel's own wifi" as a case where strangers share one bucket, and our guests are
   mostly on property wifi — it would merge strangers and split one guest across their phone
