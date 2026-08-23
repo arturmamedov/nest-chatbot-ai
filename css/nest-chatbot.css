@@ -501,7 +501,8 @@
 }
 
 #nest-chatbot .nc-expand,
-#nest-chatbot .nc-close {
+#nest-chatbot .nc-close,
+#nest-chatbot .nc-menu-toggle {
     border: none;
     color: #fff;
     height: 30px;
@@ -518,6 +519,13 @@
 #nest-chatbot .nc-close:hover {
     background: #ffffff81;
     color: var(--nc-danger);
+}
+
+/* The open menu keeps the hover tint, so the control that is holding a panel
+   open on screen does not read as idle. */
+#nest-chatbot .nc-menu-toggle:hover,
+#nest-chatbot .nc-header-controls.nc-menu-open .nc-menu-toggle {
+    background: #ffffff81;
 }
 
 /* Off below the desktop breakpoint: the panel is already fullscreen there, so
@@ -537,9 +545,92 @@
    on the teal header bar, so their ring has to be white, not the launcher's
    teal one. */
 #nest-chatbot .nc-expand:focus-visible,
-#nest-chatbot .nc-close:focus-visible {
+#nest-chatbot .nc-close:focus-visible,
+#nest-chatbot .nc-menu-toggle:focus-visible {
     outline: 2px solid #fff;
     outline-offset: 2px;
+}
+
+/* ----------------------------------------------------------------- header menu */
+
+/* The dropdown's positioning context. An absolutely positioned child is out of
+   flow, so the flex row above is unaffected by it. */
+#nest-chatbot .nc-menu-wrap {
+    position: relative;
+    display: flex;
+}
+
+/* The menu falls INSIDE the panel, over the transcript, so .nc-panel's
+   overflow: hidden does not clip it - and must not be touched to make this
+   work. That overflow is what keeps the 15px corners honest and stops the
+   transcript bleeding past them; if this ever looks clipped, the cause is
+   stacking or positioning here, never the panel.
+
+   right: 0 aligns the dropdown's right edge with the toggle's, so it opens
+   leftwards into the header's own width rather than towards the close button.
+
+   The z-index is over .nc-body: that box is not positioned, but its children
+   are (the carousel arrows, the promo card), and a bare source-order win would
+   not hold against them. */
+#nest-chatbot .nc-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 20;
+    display: none;
+    min-width: 200px;
+    max-width: 240px;
+    padding: 6px;
+    border-radius: 12px;
+    background: var(--nc-surface-alt);
+    box-shadow: var(--nc-shadow-card);
+}
+
+/* The open state is a class on the CONTAINER, the way .nc-lang-open sits on
+   .nc-controls - same shape, same seam. */
+#nest-chatbot .nc-header-controls.nc-menu-open .nc-menu {
+    display: block;
+}
+
+#nest-chatbot .nc-menu-item {
+    display: block;
+    width: 100%;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: transparent;
+    /* One of the two typography-seam vars, never a family name: hardcode one
+       here and data-fonts silently stops covering this rule. */
+    font-family: var(--nc-font-body);
+    /* 400 or 600 and nothing between. Only those two faces ship, and font
+       matching searches weights BELOW the target before above, so 500 would
+       render 400 while reading as a request for heavier. */
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 1.35;
+    color: var(--nc-text);
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+#nest-chatbot .nc-menu-item:hover {
+    background: var(--nc-surface-sunken);
+}
+
+/* Teal, not the header's white: this item sits on white inside the dropdown,
+   not on the light-teal bar. Inset offset so the ring stays within the menu's
+   6px padding instead of riding its edge. */
+#nest-chatbot .nc-menu-item:focus-visible {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: -2px;
+}
+
+/* Primed. The next activation wipes the conversation, so the item says so in
+   the colour this widget already reserves for exactly that. */
+#nest-chatbot .nc-menu-item--confirm {
+    color: var(--nc-danger);
+    font-weight: 600;
 }
 
 #nest-chatbot .nc-icon {
@@ -1760,10 +1851,20 @@
        panel goes edge-to-edge everywhere below 1024px, and an iPad in portrait
        (768px) is a touch device holding a fullscreen panel. Under the old scoping
        it got the fullscreen sheet with a 30px ✕ in the corner. */
-    #nest-chatbot .nc-close {
+    #nest-chatbot .nc-close,
+    #nest-chatbot .nc-menu-toggle {
         height: 44px;
         width: 44px;
         border-radius: 12px;
+    }
+
+    /* .nc-menu-toggle takes the thumb target above and deliberately NOT
+       .nc-expand's display: none. There is nothing to expand into at these
+       widths, but "start a new chat" is the ONE route a phone guest has - the
+       panel is fullscreen and no other affordance exists anywhere. */
+    #nest-chatbot .nc-menu-item {
+        padding: 13px 14px;
+        font-size: 15px;
     }
 
     #nest-chatbot .nc-body {

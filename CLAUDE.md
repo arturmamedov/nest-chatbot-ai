@@ -109,7 +109,7 @@ page rather than in production.
 | `render` | bubbles, thinking dots, `renderAction()`, `safeHttpUrl()` |
 | `typing` | the character-by-character reveal |
 | `intro` | the circular-progress loader sequence |
-| `flow` | open/close, submit, status handling, teardown, the async poll |
+| `flow` | open/close, submit, status handling, teardown, the async poll, the header ⋯ menu |
 | `boot` | listeners, `window.NestChatbot`, entry |
 
 **Why a classic IIFE and not ES modules.** `document.currentScript` — how the widget reads its
@@ -538,10 +538,12 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   contains it, move focus somewhere still visible inside `#nest-chatbot` before the node goes.
   A removed or `display: none` element drops focus to `<body>`, so the guest's next Tab
   restarts at the top of the *customer's* page; a merely invisible one is worse, stranding them
-  on a control they cannot see. This repo has rediscovered that bug five times — the teaser,
-  the carousel arrows, the prompt pills, the language row, and the scroll cue, where hiding a
-  focused node is the control's *main* path rather than an edge case: pressing ⌄ scrolls to the
-  bottom, which is exactly the condition that hides ⌄. It is a rule, not a case.
+  on a control they cannot see. This repo has rediscovered that bug six times — the teaser,
+  the carousel arrows, the prompt pills, the language row, the scroll cue, and the header ⋯
+  menu. In the last two, hiding a focused node is the control's *main* path rather than an edge
+  case: pressing ⌄ scrolls to the bottom, which is exactly the condition that hides ⌄, and
+  every way of dismissing the menu hides an item the guest may be standing on. It is a rule,
+  not a case.
 - Never touch `document.documentElement.lang`, the host's `<body>`, or anything outside
   `#nest-chatbot`. The host page is not ours.
 - Version bumps err small: **patch unless the embed contract changes.** Everything
@@ -555,4 +557,6 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   2.8.1 and 2.8.2 are the first releases numbered by it, and 2.9.0 / 2.10.0 are both syncs.
   2.10.1 is the close-out patch that followed the 1.7.0 sync — documentation the sync had
   falsified, plus two hardening fixes, and **no** `BUILT_AGAINST` move (it moves only during a
-  sync). The next is **2.10.2** unless it is a sync.
+  sync). 2.10.2 is the header ⋯ menu: new UI behaviour and three restart-race fixes, no
+  `data-*` attribute, no runtime-API method, so a patch by this rule and not a minor.
+  The next is **2.10.3** unless it is a sync.

@@ -5,6 +5,109 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.10.2 — 2026-08-23
+
+**A ⋯ menu in the panel header, carrying "Start a new chat".** New UI behaviour and nothing
+else: no `data-*` attribute, no `window.NestChatbot` method, nothing a host's `<script>` tag has
+to say. A **patch** by the rule in CLAUDE.md § Conventions — minor stays reserved for a contract
+sync, and `BUILT_AGAINST` does not move from `1.7.0`.
+
+### Why now: waiting was never a reliable reset, and is about to stop being one at all
+
+Until 2.10.0 the widget expired its stored conversation after a hardcoded 24 hours, so a guest
+who abandoned a thread got a clean slate by morning and "start over" was never something they
+had to ask for. 2.10.0 handed that window to the server, and `nest-mind`'s config carries
+`WSUITE_CHATBOT_IDLE_HOURS=168` — **seven days**. When the platform deploys 1.7.0 the widget
+will follow it, and a week-old thread will replay in full on the next visit.
+
+**Not yet, and the distinction is the one 2.10.1 exists to correct.** Measured against the live
+deployment on 2026-08-23, `nest-mind.laravel.cloud` still reports `contract_version: 1.6.2` and
+sends no `idle_hours` at all, so today the widget degrades to its 24h fallback exactly as
+designed. Do not re-derive the window from `nest-mind`'s env — that is the *local* repo's
+config, not the deployed instance's.
+
+The gap is what makes this release worth shipping now rather than after that deploy: the
+**server's** conversation outlives the widget's record either way. It is still live, still
+holding the working memory `data-property` seeded, when the guest's own record has expired —
+and the guest cannot tell. So waiting has never been a reliable reset, it is about to stop
+being one entirely, and there has never been a guest-initiated way to ask for a fresh thread.
+The only restart affordance was the button `endConversation()` paints after the *server* kills
+the conversation at its turn cap — a dead-end recovery, not a control.
+
+- **The button is leftmost of the three**, so ✕ keeps the corner every guest reaches for and ⤴
+  keeps its position relative to it. Below 1024px ⤴ is still absent and the header reads ⋯ ✕ —
+  which is where the menu matters most: the panel is fullscreen there and a phone guest has no
+  other route. It is a 44px thumb target at those widths, like the ✕ beside it.
+- **Two-step confirm, inside the menu.** From the header this is reachable *mid-conversation*,
+  which the ended-state button never was: `restartConversation()` clears the store and wipes the
+  body, so a mis-tap eight turns into a booking question has no undo. The first activation swaps
+  the item's label and leaves the menu open; the second restarts. **Every dismissal reverts it**
+  — Escape, a click outside, a second tap on ⋯, the panel closing — so nobody comes back to a
+  primed "Yes". A state change on one item rather than a dialog, which is why it needs no modal,
+  no scrim, no focus trap and no third document listener. The ended-state button stays one-tap:
+  that conversation is already dead.
+- **`wchat:restart` gained `source`** — `menu` | `ended`. Additive. It separates a guest
+  *choosing* a fresh thread from one who ran into the turn cap, and those call for opposite
+  responses. `README.md` § Measuring it and the events proposal both carry it.
+- **One item.** The language switcher stays beside the composer, where the choice is about what
+  you are *about to type*. The menu is the container that makes a second item a patch later.
+
+### Escape now closes the menu, not the panel
+
+**The one thing here a returning guest could notice as *different* rather than new.** With the
+menu open, Escape dismisses the menu and returns focus to ⋯; the panel stays open. With no menu
+open it closes the panel exactly as before. The language popover deliberately keeps the old
+behaviour — changing it is a second behaviour change nobody asked for.
+
+No new listener outside `#nest-chatbot`: the menu joins `onDocumentClick` and
+`onDocumentKeydown`, so `teardown()`'s claim that the widget attaches exactly **two** stays
+literally true.
+
+### Three restart races the menu made reachable
+
+`restartConversation()` already did all the wipe-and-reset work, so most of this release is
+exposure. These are not. All three were unreachable while the ended-state button was the only
+caller — by then the conversation was over, the queue was empty and the intro was long spent —
+and every one of them is silent rather than loud.
+
+- **An in-flight turn landed in the new conversation.** `API.send`'s callback guarded on
+  `removed` only, so the old conversation's reply cleared `busy`, pushed itself into the **new**
+  transcript, painted a bot bubble under the fresh greeting and persisted it: an answer to a
+  question the new conversation has no record of and the server's side of it never saw. The turn
+  callback now takes the same `chatEpoch` guard `pollResult()` has always used, **before**
+  `busy` — clearing it there would release a turn the guest had since sent. `restartConversation()`
+  releases `busy` and empties `sendQueue` itself.
+- **A restart during init adopted the abandoned conversation's uuid.** `startConversation()`
+  queues behind an in-flight init rather than firing a new one, so "start a new chat" silently
+  continued the old chat, with two greetings on screen. The init callback takes the epoch guard
+  too — checked *before* it takes the waiter list, or a stale callback would null the new init's
+  waiters and the restart's greeting would never paint — and the restart releases `initWaiters`.
+  The cost is one abandoned server-side conversation per restart-during-init, which is the right
+  trade.
+- **A restart mid-intro painted a second greeting.** `restartConversation()`'s own comment says
+  it deliberately does not replay the intro because the latches "stay spent" — true by luck, not
+  by construction: mid-intro `intro.settled` is still false, and the animation's deferred
+  `introMaybeFinish()` lands after the restart's callback and paints a greeting beside it. The
+  latches are spent explicitly now, and the loader is taken out if it never got its exit.
+
+### Verified
+
+**Mock only** — nothing here touches the API. Served on a fresh port with the source asserted
+first (CLAUDE.md's cache trap has already cost this repo a pass). **164 assertions across eight
+suites, all passing**, plus the five that need the documented temporary fixture edits
+(`Mock.init`'s `actions: []` for the fallback pills, a bumped `contract_version` for the
+drift-warn positive control).
+
+Of the 56 new checks, the ones worth naming: Escape closes the menu and leaves the panel open
+with focus back on ⋯; the confirm reverts on all four dismissal paths; a **keyboard** restart
+leaves `document.activeElement` on a visible node inside `#nest-chatbot`, never `<body>` and
+never stranded in the hidden menu; priming swaps `textContent` without moving focus; `setLocale`
+repaints both the ⋯ label and the item **while primed**; a restart with a turn on the wire
+produces no reply, no stale bubble and no wedged composer; a restart during init paints exactly
+one greeting and the stored uuid is the live one. The scoping suite re-confirms the demo page's
+appearance is byte-identical with the widget stylesheet on and off — a header change is exactly
+the kind that reaches for a bare element selector.
+
 ## 2.10.1 — 2026-08-23
 
 **The close-out of the 1.7.0 sync.** No contract surface moved: `BUILT_AGAINST` stays `1.7.0`

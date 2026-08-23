@@ -108,12 +108,16 @@ Dispatched from `els.root`, never `window`: events bubble, so a host listener on
 | `wchat:action` | delegated click in `els.body` | `element`, `url`, `channel`, `style`, `index` | **the conversion** — which Book / WhatsApp / card was clicked | whether the booking completed |
 | `wchat:error` | every non-200 branch | `phase`, `status`, `retrying` | **429s on shared hostel wifi**, 403 origin refusals, transport failures — all invisible before this | why the server failed |
 | `wchat:ended` | `endConversation()` | `turns` | how often the turn cap bites | whether the guest minded |
-| `wchat:restart` | `restartConversation()` | `turns` | whether "start a new chat" is used | — |
+| `wchat:restart` | `restartConversation()` | `source`, `turns` | whether "start a new chat" is used, and **whether it was chosen or forced** (`source`) | why they wanted a fresh thread |
 | `wchat:locale` | `setLocale()` | `from`, `to` | **whether the language switcher earns its space** | whether detection would have got it right |
 | `wchat:teaser` | `showTeaser()`, `dismissTeaserForever()` | `action` | whether the teaser earns its 8 seconds | — |
 
 `source` enums: `open` — `toggler` \| `teaser` \| `auto` \| `api`. `close` — `toggler` \|
 `close` \| `escape` \| `api`. `message` — `composer` \| `prompt` \| `chip` \| `welcome-chip`.
+`restart` — `menu` \| `ended` (added in 2.10.2 with the header menu; additive, so a patch).
+There is deliberately no `api` in that last one: nothing on `window.NestChatbot` restarts a
+conversation, so the enum's fallback is `ended` — the one listener a bare function reference
+could ever regress.
 
 ### Seven decisions inside that table
 

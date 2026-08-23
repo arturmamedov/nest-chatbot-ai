@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.10.1';
+    var VERSION = '2.10.2';
 
     /* =========================================================== config ===== */
 
@@ -165,7 +165,7 @@
             openUnread: 'Open Germán — 1 new message',
             teaser: 'Need a hand picking your Nest?', teaserDismiss: 'Dismiss',
             subline: 'Nests Hostels · replies in seconds', aiAssistant: 'AI assistant',
-            expand: 'Expand the chat', shrink: 'Shrink the chat',
+            expand: 'Expand the chat', shrink: 'Shrink the chat', menu: 'More options',
             tryAsking: 'Try asking',
             quickReplies: 'Quick replies',
             prompt1: 'Which hostel fits me best?', prompt2: 'How does the Nest Pass work?',
@@ -179,7 +179,7 @@
             send: 'Send message', input: 'Type your message',
             language: 'Change language', languageOf: 'Switch to %s',
             book: 'Book now', open_link: 'Open',
-            newChat: 'Start a new chat',
+            newChat: 'Start a new chat', newChatConfirm: 'Yes, clear this chat',
             dayToday: 'Today', dayYesterday: 'Yesterday',
             call: 'Call %s', whatsapp: 'WhatsApp', email: 'Email %s',
             noAvailability: 'No availability for those dates.',
@@ -195,7 +195,7 @@
             openUnread: 'Abrir Germán — 1 mensaje nuevo',
             teaser: '¿Te ayudo a elegir tu Nest?', teaserDismiss: 'Descartar',
             subline: 'Nests Hostels · responde en segundos', aiAssistant: 'Asistente IA',
-            expand: 'Ampliar el chat', shrink: 'Reducir el chat',
+            expand: 'Ampliar el chat', shrink: 'Reducir el chat', menu: 'Más opciones',
             tryAsking: 'Prueba a preguntar',
             quickReplies: 'Respuestas rápidas',
             prompt1: '¿Qué hostel me encaja mejor?', prompt2: '¿Cómo funciona el Nest Pass?',
@@ -209,7 +209,7 @@
             send: 'Enviar mensaje', input: 'Escribe tu mensaje',
             language: 'Cambiar idioma', languageOf: 'Cambiar a %s',
             book: 'Reservar ahora', open_link: 'Abrir',
-            newChat: 'Empezar un chat nuevo',
+            newChat: 'Empezar un chat nuevo', newChatConfirm: 'Sí, borrar este chat',
             dayToday: 'Hoy', dayYesterday: 'Ayer',
             call: 'Llamar %s', whatsapp: 'WhatsApp', email: 'Escribir a %s',
             noAvailability: 'No hay disponibilidad para esas fechas.',
@@ -227,7 +227,7 @@
             subline: 'Nests Hostels · risponde in pochi secondi', aiAssistant: 'Assistente IA',
             // Not 'Riduci la chat': that is already `close` above, and the two
             // controls sit side by side in the header — one accessible name each.
-            expand: 'Espandi la chat', shrink: 'Rimpicciolisci la chat',
+            expand: 'Espandi la chat', shrink: 'Rimpicciolisci la chat', menu: 'Altre opzioni',
             tryAsking: 'Prova a chiedere',
             quickReplies: 'Risposte rapide',
             prompt1: 'Quale hostel fa per me?', prompt2: 'Come funziona il Nest Pass?',
@@ -241,7 +241,7 @@
             send: 'Invia messaggio', input: 'Scrivi il tuo messaggio',
             language: 'Cambia lingua', languageOf: 'Passa a %s',
             book: 'Prenota ora', open_link: 'Apri',
-            newChat: 'Inizia una nuova chat',
+            newChat: 'Inizia una nuova chat', newChatConfirm: 'Sì, cancella questa chat',
             dayToday: 'Oggi', dayYesterday: 'Ieri',
             call: 'Chiama %s', whatsapp: 'WhatsApp', email: 'Scrivi a %s',
             noAvailability: 'Nessuna disponibilità per quelle date.',
@@ -257,7 +257,7 @@
             openUnread: 'Germán öffnen — 1 neue Nachricht',
             teaser: 'Soll ich dir helfen, dein Nest zu finden?', teaserDismiss: 'Schließen',
             subline: 'Nests Hostels · antwortet in Sekunden', aiAssistant: 'KI-Assistent',
-            expand: 'Chat vergrößern', shrink: 'Chat verkleinern',
+            expand: 'Chat vergrößern', shrink: 'Chat verkleinern', menu: 'Weitere Optionen',
             tryAsking: 'Frag zum Beispiel',
             quickReplies: 'Schnellantworten',
             prompt1: 'Welches Hostel passt zu mir?', prompt2: 'Wie funktioniert der Nest Pass?',
@@ -271,7 +271,7 @@
             send: 'Nachricht senden', input: 'Schreibe deine Nachricht',
             language: 'Sprache wechseln', languageOf: 'Zu %s wechseln',
             book: 'Jetzt buchen', open_link: 'Öffnen',
-            newChat: 'Neuen Chat starten',
+            newChat: 'Neuen Chat starten', newChatConfirm: 'Ja, Chat löschen',
             dayToday: 'Heute', dayYesterday: 'Gestern',
             call: '%s anrufen', whatsapp: 'WhatsApp', email: 'E-Mail an %s',
             noAvailability: 'Keine Verfügbarkeit für diese Daten.',
@@ -289,7 +289,7 @@
             subline: 'Nests Hostels · répond en quelques secondes', aiAssistant: 'Assistant IA',
             // Not 'Réduire le chat': that is already `close` above, and the two
             // controls sit side by side in the header — one accessible name each.
-            expand: 'Agrandir le chat', shrink: 'Rétrécir le chat',
+            expand: 'Agrandir le chat', shrink: 'Rétrécir le chat', menu: 'Plus d\'options',
             tryAsking: 'Essayez de demander',
             quickReplies: 'Réponses rapides',
             prompt1: 'Quel hostel me correspond le mieux ?', prompt2: 'Comment fonctionne le Nest Pass ?',
@@ -303,7 +303,7 @@
             send: 'Envoyer le message', input: 'Écris ton message',
             language: 'Changer de langue', languageOf: 'Passer en %s',
             book: 'Réserver', open_link: 'Ouvrir',
-            newChat: 'Commencer un nouveau chat',
+            newChat: 'Commencer un nouveau chat', newChatConfirm: 'Oui, effacer ce chat',
             dayToday: 'Aujourd\'hui', dayYesterday: 'Hier',
             call: 'Appeler %s', whatsapp: 'WhatsApp', email: 'Écrire à %s',
             noAvailability: 'Aucune disponibilité pour ces dates.',
@@ -776,9 +776,19 @@
 
     var OPEN_SOURCES = ['toggler', 'teaser', 'auto', 'api'];
     var CLOSE_SOURCES = ['toggler', 'close', 'escape', 'api'];
+    /* No 'api' in this one: there is no NestChatbot.restart(), so the default
+       fallback below would name a caller that cannot exist. 'ended' is the
+       honest answer — the conversation_ended button is the only restart
+       listener a bare reference could regress, which is why endConversation()
+       wires it through a wrapper. */
+    var RESTART_SOURCES = ['ended', 'menu'];
 
-    function oneOf(list, value) {
-        return list.indexOf(value) === -1 ? 'api' : value;
+    /* `fallback` is what an unrecognised value becomes. It defaults to 'api'
+       because that is the truthful answer for open/close — a host calling the
+       runtime method is the one caller those two cannot name — and restart
+       passes its own for the reason above. */
+    function oneOf(list, value, fallback) {
+        return list.indexOf(value) === -1 ? (fallback || 'api') : value;
     }
 
     /* ============================================================== api ===== */
@@ -1356,6 +1366,9 @@
         // Plain chevron, drawn pointing RIGHT. Every other direction is this same
         // node turned in CSS: the carousel's two arrows, and the scroll cue's ⌄.
         chevron: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708"/></svg>',
+        // The header menu's toggle. Horizontal, not vertical: it sits in a row
+        // of square controls where a vertical triple reads as a drag handle.
+        dots: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"/></svg>',
         send: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon" viewBox="0 0 512 512" aria-hidden="true"><path d="M498.1 5.6c10.1 7 15.4 19.1 13.5 31.2l-64 416c-1.5 9.7-7.4 18.2-16 23s-18.9 5.4-28 1.6L284 427.7l-68.5 74.1c-8.9 9.7-22.9 12.9-35.2 8.1S160 493.2 160 480v-83.6c0-4 1.5-7.8 4.2-10.8L331.8 202.8c5.8-6.3 5.6-16-.4-22s-15.7-6.4-22-.7L106 360.8 17.7 316.6C7.1 311.3.2 300.7 0 288.9s6.2-22.6 16.6-28.3l448-243.4c10.8-5.9 24-5 33.9 2.1z"/></svg>'
     };
 
@@ -1558,6 +1571,35 @@
         // sheet at those widths and the panel is already fullscreen. Both glyphs
         // ship in the button so the toggle is a class swap, never a re-render.
         var headerControls = el('div', 'nc-header-controls');
+
+        /* The menu, LEFTMOST of the three. The corner stays the ✕ every guest
+           already reaches for and ⤢ keeps its position relative to it, so the
+           new control is added at the far end and no muscle memory moves. Below
+           1024px ⤢ is display:none and this reads ⋯ ✕ — which is where the menu
+           matters MOST: the panel is fullscreen there and a guest has no other
+           way to start a conversation over.
+
+           Toggle and dropdown share a wrapper the way .nc-lang wraps its own
+           toggle and options. It is the dropdown's positioning context, and it
+           puts the item beside ⋯ in the tab order instead of after ✕.
+
+           Deliberately NOT role="menu" / role="menuitem" / aria-haspopup. Those
+           roles carry a keyboard contract — roving tabindex, arrow keys,
+           Home/End, typeahead — that one item does not need, and half-honouring
+           it is worse than never claiming it. aria-expanded alone, exactly as
+           .nc-lang-toggle does for the same shape. */
+        var menuWrap = el('div', 'nc-menu-wrap');
+        var menuToggle = el('button', 'nc-menu-toggle');
+        attrs(menuToggle, { type: 'button', 'aria-label': t('menu'), 'aria-expanded': 'false' });
+        menuToggle.appendChild(svgNode(ICONS.dots));
+
+        var menu = el('div', 'nc-menu');
+        var menuNewChat = el('button', 'nc-menu-item', t('newChat'));
+        attrs(menuNewChat, { type: 'button' });
+        menu.appendChild(menuNewChat);
+        menuWrap.appendChild(menuToggle);
+        menuWrap.appendChild(menu);
+
         var expandBtn = el('button', 'nc-expand');
         attrs(expandBtn, { type: 'button', 'aria-label': t('expand') });
         expandBtn.appendChild(svgNode(ICONS.expand));
@@ -1567,6 +1609,7 @@
         attrs(closeBtn, { type: 'button', 'aria-label': t('close') });
         closeBtn.appendChild(svgNode(ICONS.x));
 
+        headerControls.appendChild(menuWrap);
         headerControls.appendChild(expandBtn);
         headerControls.appendChild(closeBtn);
 
@@ -1680,6 +1723,11 @@
             progress: progress, form: form, input: input, send: send, close: closeBtn,
             controls: controls, langToggle: langToggle, langOptions: langOptions,
             optionButtons: optionButtons, badge: badge, subline: subline, expand: expandBtn,
+            // The header menu. Its open state is a class on headerControls, the
+            // way the language row's is a class on controls — same shape, so the
+            // same seam.
+            headerControls: headerControls, menuToggle: menuToggle, menu: menu,
+            menuNewChat: menuNewChat,
             unread: unread, teaser: teaser, teaserBody: teaserBody, teaserClose: teaserClose,
             announcer: announcer, disclaimer: disclaimer, cue: cue,
             // The welcome wrapper is built later, by the intro, and removed whole
@@ -3527,6 +3575,7 @@
         els.root.classList.remove('nc-open');
         els.toggler.setAttribute('aria-expanded', 'false');
         closeLanguageMenu();
+        closeHeaderMenu();
         emit('close', {
             source: oneOf(CLOSE_SOURCES, source),
             turns: transcript.length
@@ -3737,8 +3786,21 @@
         // behind the in-flight call instead.
         if (initWaiters) { initWaiters.push(cb); return; }
         initWaiters = [cb];
+        // Same claim sendMessage() and pollResult() make about their own
+        // requests: this init belongs to the conversation live at its start.
+        var epoch = chatEpoch;
 
         API.init(function (status, body) {
+            // A restart while this was on the wire released initWaiters and
+            // fired its OWN init (see restartConversation). Checked BEFORE the
+            // waiters are taken below, and that order is the point: a stale
+            // callback grabbing the list would null the NEW init's waiters and
+            // the restart's greeting would never paint. Returning also abandons
+            // the conversation this 201 created - deliberate, because adopting
+            // its uuid is exactly how "start a new chat" would silently continue
+            // the old chat. One orphaned server-side conversation per
+            // restart-during-init is the price, and it is the right one.
+            if (epoch !== chatEpoch) { return; }
             var waiters = initWaiters || [];
             initWaiters = null;
             if (removed) { return; }
@@ -3891,9 +3953,20 @@
         // Measured around the transport, so the mock reports its own fixture
         // delay rather than pretending to be instant.
         var sentAt = Date.now();
+        // This turn belongs to the conversation live at its send - the same
+        // claim pollResult() has always made about its poll.
+        var epoch = chatEpoch;
 
         API.send(conversationUuid, text, function (status, body) {
-            if (removed) { return; }
+            // BEFORE busy, and the order is load-bearing. A restart (the header
+            // menu, mid-conversation) already cleared busy, and a guest who has
+            // since sent into the NEW conversation has set it again - clearing
+            // it here would let a second send through while the first is still
+            // on the wire. The thinking node needs no cleanup on this path
+            // either: the restart's body wipe took it. Everything below writes
+            // to a transcript, a store and a bubble that are no longer this
+            // turn's.
+            if (removed || epoch !== chatEpoch) { return; }
             busy = false;
             els.send.disabled = false;
             log('turn', status, body);
@@ -4050,7 +4123,11 @@
 
         var restart = el('button', 'nc-action nc-action--primary nc-restart', t('newChat'));
         attrs(restart, { type: 'button' });
-        restart.addEventListener('click', restartConversation);
+        // WRAPPED, not passed by reference - the defence wire() applies to its
+        // own three listeners, and now needed here: addEventListener hands its
+        // handler a MouseEvent as the first argument, and restartConversation()'s
+        // first argument is the `source` that reaches wchat:restart.
+        restart.addEventListener('click', function () { restartConversation('ended'); });
         var row = el('div', 'nc-action-row');
         row.appendChild(restart);
         els.body.appendChild(row);
@@ -4080,11 +4157,17 @@
      * the old one; keeping the exchange on screen implies a continuity the
      * server does not have.
      */
-    function restartConversation() {
+    function restartConversation(source) {
         if (removed) { return; }
         // BEFORE the wipe below, while transcript.length still says how much
         // conversation the guest was carrying when they chose to start over.
-        emit('restart', { turns: transcript.length });
+        // `source` separates the two routes, and they call for opposite
+        // responses: 'menu' is a guest CHOOSING to start again, 'ended' is one
+        // who hit the server's turn cap and had nothing else left to press.
+        emit('restart', {
+            turns: transcript.length,
+            source: oneOf(RESTART_SOURCES, source, 'ended')
+        });
         clearStore();
         conversationUuid = null;
         started = false;
@@ -4092,6 +4175,25 @@
         guestTurned = false;      // a NEW conversation gets first-contact affordances again
         intro.greeting = null;    // the fresh init must re-settle both
         intro.actions = null;
+        /*
+         * The intro's latches, SPENT — which the header comment above has always
+         * assumed and which used to be true only by luck. While the ended-state
+         * button was the sole caller the intro had long finished by the time
+         * anyone could press it. From the header menu this runs mid-intro too,
+         * and there `settled` is still false: the animation's own deferred
+         * introMaybeFinish() lands AFTER the callback below has painted the new
+         * greeting and paints a SECOND one beside it, because by then the
+         * restart's own init has filled intro.greeting back in. Spending them
+         * here is what makes "deliberately NOT a replay of the intro" true
+         * rather than incidental.
+         */
+        intro.settled = true;
+        intro.animDone = true;
+        // And take the loader out if it never got its exit. It stays ATTACHED —
+        // nc-hidden is display:none, and the callback below still needs it as
+        // the greeting's insertion anchor — but a progress ring left spinning
+        // above a finished greeting is the intro half-played.
+        els.loader.classList.add('nc-hidden');
         chipRows = [];            // already retired; the wipe below removes any remnant
         transcript = [];                     // a NEW conversation shares no history with the old one
         pollEntries = Object.create(null);   // any orphaned poll handle died with its epoch
@@ -4105,6 +4207,30 @@
         // server_time, so a re-init that omits it (older server) or fails outright
         // would otherwise stamp the new conversation on the old one's correction.
         serverOffset = 0;
+        /*
+         * THE THREE BELOW ARE WHY THIS FUNCTION IS NOT PURE EXPOSURE.
+         *
+         * Until 2.10.2 the only caller was the conversation_ended button, where
+         * `busy` is false (the capped reply has landed) and endConversation()
+         * has already emptied the queue. From the header menu neither holds. A
+         * turn on the wire when the guest restarts would clear busy, push itself
+         * into the NEW transcript, paint a bot bubble under the fresh greeting
+         * and persist it - an answer to a question the new conversation has no
+         * record of and the server's side of it never saw.
+         *
+         * chatEpoch above is the guard; sendMessage() and startConversation()
+         * re-check it exactly as pollResult() already did. These three release
+         * what a guard alone cannot. Without `busy` the new conversation is
+         * wedged, because submit() and sendGuestText() both gate on it and the
+         * stale callback now returns before clearing it. Without the queue the
+         * dead conversation's backlog drains into the new one. And without
+         * releasing initWaiters, startConversation() below would queue behind
+         * the dead conversation's in-flight init instead of firing its own -
+         * adopting the very uuid this function exists to abandon.
+         */
+        busy = false;
+        sendQueue.length = 0;
+        initWaiters = null;
 
         els.input.disabled = false;
         els.send.disabled = false;
@@ -4284,6 +4410,77 @@
         syncScrollCue();
     }
 
+    /* ---------------------------------------------------------- header menu */
+
+    /*
+     * The three-dots menu. Shaped on the language popover - aria-expanded on the
+     * toggle, an open-state class on the container, stopPropagation on the
+     * toggle's click, delegated handling resolved with closest(), and a close
+     * path safe to call when already closed - with two of its habits dropped:
+     *
+     *   - NO auto-close timer. The language row squeezes the composer to make
+     *     room for five flags, so it has to be transient. This dropdown takes
+     *     room from nothing and stays until the guest dismisses it.
+     *   - NO max-width clipping. That is a squeeze-in-place animation for a row
+     *     inside a flex bar; this is an ordinary absolutely-positioned panel.
+     *
+     * THE CONFIRM. From the header this is reachable MID-CONVERSATION, which the
+     * conversation_ended button never was: restartConversation() calls
+     * clearStore() and wipes the body, so a guest eight turns into a booking
+     * question who taps the wrong item loses the thread with no undo and no
+     * warning. Two activations, and any dismissal reverts. That is the whole
+     * reason it is a state change on the one item rather than a dialog - the
+     * menu already handles its own dismissal, so there is no modal, no scrim, no
+     * focus trap and no third document listener. The ended-state button stays
+     * one-tap: that conversation is already dead, and there is nothing to
+     * protect.
+     */
+    var menuConfirm = false;
+
+    function isMenuOpen() { return els.headerControls.classList.contains('nc-menu-open'); }
+
+    function closeHeaderMenu() {
+        if (!isMenuOpen()) { return; }
+        // The standing focus rule, for the SIXTH time in this repo - the teaser,
+        // the carousel arrows, the prompt pills, the language row, the scroll
+        // cue, and now this. The menu is display:none when closed, so an item
+        // holding focus drops it to <body>, i.e. the top of the customer's page.
+        // The toggle is always visible and is the way back in, so it is the
+        // landing spot as well as the rescue.
+        if (els.menu.contains(document.activeElement)) { els.menuToggle.focus(); }
+        els.headerControls.classList.remove('nc-menu-open');
+        els.menuToggle.setAttribute('aria-expanded', 'false');
+        // EVERY dismissal runs through here - Escape, a click outside, a second
+        // tap on the toggle, the panel closing - so a guest who backs out and
+        // comes back can never find a primed "Yes" waiting for them.
+        resetMenuConfirm();
+    }
+
+    function toggleHeaderMenu() {
+        if (isMenuOpen()) { closeHeaderMenu(); return; }
+        els.headerControls.classList.add('nc-menu-open');
+        els.menuToggle.setAttribute('aria-expanded', 'true');
+    }
+
+    /*
+     * textContent on the SAME node, never a replacement. The guest may be
+     * standing on this button: changing an accessible name under focus is safe
+     * and screen readers announce it, but swapping the node out would drop their
+     * focus to <body> - the very rule closeHeaderMenu() exists to honour.
+     */
+    function armMenuConfirm() {
+        menuConfirm = true;
+        els.menuNewChat.textContent = t('newChatConfirm');
+        els.menuNewChat.classList.add('nc-menu-item--confirm');
+    }
+
+    function resetMenuConfirm() {
+        if (!menuConfirm) { return; }
+        menuConfirm = false;
+        els.menuNewChat.textContent = t('newChat');
+        els.menuNewChat.classList.remove('nc-menu-item--confirm');
+    }
+
     /* ------------------------------------------------------------- language */
 
     // The open row squeezes the composer to make space for five flags, so it is a
@@ -4371,6 +4568,12 @@
         // The restart button is a live control like the pills, not frozen
         // transcript — its label follows the language switcher.
         if (els.restart) { els.restart.textContent = t('newChat'); }
+        // Live controls too. The item reads its PRIMED state rather than the
+        // pack alone: a guest who armed the confirm and then switched language
+        // must not have it silently un-armed under them, which is what a bare
+        // t('newChat') here would do.
+        els.menuToggle.setAttribute('aria-label', t('menu'));
+        els.menuNewChat.textContent = menuConfirm ? t('newChatConfirm') : t('newChat');
         // Day pills and bubble titles follow too, for the same reason and against
         // the same line: what stays frozen is PAYLOAD — reply text and server chip
         // labels, already localized upstream and not ours to repaint. These are
@@ -4426,6 +4629,32 @@
         els.expand.addEventListener('click', function () {
             isExpanded() ? shrinkPanel(true) : expandPanel();
         });
+        // stopPropagation for the reason .nc-lang-toggle needs it: without it
+        // onDocumentClick would close the menu this very click just opened.
+        els.menuToggle.addEventListener('click', function (e) {
+            e.stopPropagation();
+            toggleHeaderMenu();
+        });
+
+        // Delegated and closest()-guarded, exactly as the langOptions listener
+        // is - a click on the dropdown's padding must resolve to no item.
+        els.menu.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var item = e.target.closest ? e.target.closest('.nc-menu-item') : null;
+            if (!item) { return; }
+            // First activation primes and leaves the menu open. See the confirm
+            // note on the header-menu block for why this is not a dialog.
+            if (!menuConfirm) { armMenuConfirm(); return; }
+            // Closed BEFORE the wipe, and that is what moves focus off the item
+            // the wipe is about to hide. restartConversation()'s own rescue
+            // tests els.body, and this item is in the HEADER, so that test is
+            // false here and would never fire. Focus rests on the toggle across
+            // the init round trip and lands on the composer from the restart's
+            // own callback.
+            closeHeaderMenu();
+            restartConversation('menu');
+        });
+
         els.teaserBody.addEventListener('click', function () { open('teaser'); });
         els.teaserClose.addEventListener('click', dismissTeaserForever);
         els.form.addEventListener('submit', submit);
@@ -4520,10 +4749,25 @@
     // lives inside #nest-chatbot and leaves with it.
     function onDocumentClick() {
         if (els.controls.classList.contains('nc-lang-open')) { closeLanguageMenu(); }
+        closeHeaderMenu();   // its own guard makes this a no-op when already closed
     }
 
     function onDocumentKeydown(e) {
         if (e.key !== 'Escape') { return; }
+        // The menu takes the key first and the PANEL STAYS OPEN: Escape
+        // dismisses the innermost thing, which is what every menu does and what
+        // a guest expects. This is the one thing in 2.10.2 a returning guest
+        // could notice as different rather than new.
+        //
+        // focus() is stated rather than left to closeHeaderMenu()'s rescue -
+        // that only fires when focus is INSIDE the menu, and a guest who opened
+        // it and then pressed Escape from the composer should still land on the
+        // control they opened.
+        //
+        // The language popover deliberately keeps the old behaviour (Escape
+        // closes the panel; close() collapses the row on the way out). Changing
+        // it is a second behaviour change nobody asked for.
+        if (isMenuOpen()) { closeHeaderMenu(); els.menuToggle.focus(); return; }
         if (isOpen()) { close('escape'); els.toggler.focus(); return; }
         // Esc on the teaser means "not now", never "not ever": it hides the nudge
         // for this moment and writes no flag. Dismissing it for good stays the ✕

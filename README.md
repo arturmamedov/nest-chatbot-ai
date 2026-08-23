@@ -119,7 +119,7 @@ NestChatbot.toggle();
 NestChatbot.setLocale('es');
 NestChatbot.destroy();
 NestChatbot.locale;    // 'es'
-NestChatbot.version;   // '2.10.1'
+NestChatbot.version;   // '2.10.2'
 NestChatbot.state;     // a snapshot — see Measuring it, below
 ```
 
@@ -154,9 +154,15 @@ Events bubble from the widget's own container, so a listener on `document` or `w
 | `wchat:action` | a booking / contact / card button is clicked | `element`, `url`, `channel`, `style`, `index` |
 | `wchat:error` | a request fails | `phase` (`init` \| `turn` \| `poll`), `status`, `retrying` |
 | `wchat:ended` | the conversation hits its turn cap | `turns` |
-| `wchat:restart` | the visitor starts a new chat | `turns` |
+| `wchat:restart` | the visitor starts a new chat | `source` (`menu` \| `ended`), `turns` |
 | `wchat:locale` | the language is switched | `from`, `to` |
 | `wchat:teaser` | the nudge appears or is dismissed | `action` (`shown` \| `dismissed`) |
+
+**Two ways a chat restarts, and they mean opposite things.** `wchat:restart` carries
+`source: 'menu'` when the visitor chose it from the header menu — they were done with that
+thread and wanted a fresh one — and `source: 'ended'` when the conversation had already hit its
+turn cap and starting over was the only thing left to press. A rise in the first is visitors
+self-serving; a rise in the second is the cap biting, and pairs with `wchat:ended`.
 
 **Returning visitors.** `wchat:ready` carries `returning: true` when this browser arrived with a
 conversation still in progress, whether or not they open the panel; `wchat:open` carries
