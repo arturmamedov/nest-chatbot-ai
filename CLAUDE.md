@@ -645,6 +645,14 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   exception** (2.10.3, the Back button) — which is exactly why it is the only behaviour in the
   widget carrying a `data-*` opt-out, why the URL is never touched, and why `history.back()`
   fires only when the top entry is demonstrably ours. See the Back-button section.
+- **Commit subjects follow Conventional Commits** (adopted 2026-08-23): `type(scope)?: Subject`,
+  imperative, **capitalised** after the colon, no trailing period. That casing matches this repo's
+  own history and `nest-mind`'s existing practice, so one habit covers both. Types in use: `docs`,
+  `feat`, `fix`, `refactor`, `chore`. **Scope is usually omitted** — this repo is one widget, so
+  there is rarely a second surface to name. A release is `chore(release):` carrying the version,
+  which keeps the version-bump rule below and the subject line answering the same question. The
+  body is where this repo does its real work: say *why*, name the precedent commits, and record
+  what was measured rather than assumed.
 - Version bumps err small: **patch unless the embed contract changes.** Everything
   non-breaking is a patch — a bug fix, new UI behaviour, a new `data-*` attribute, a new
   runtime-API method, a whole new stored surface. Reserve **minor** for a contract sync (a
