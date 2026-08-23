@@ -169,7 +169,8 @@ conversation still in progress, whether or not they open the panel; `wchat:open`
 `resumed: true` when the panel actually reopened onto it. The window is how long a conversation
 survives, and the **server** sets it — the widget reads it at the start of each conversation
 and follows it, so if the window is widened you will see `returning: true` reach further back
-without changing anything on your page.
+without changing anything on your page. Against a server that does not report a window the
+widget falls back to **24 hours**, which is what you get today.
 
 **No message text ever leaves.** Payloads carry counts, enums and booleans: `length` is a
 character count, `elements[]` lists element types. What the visitor wrote and what the assistant

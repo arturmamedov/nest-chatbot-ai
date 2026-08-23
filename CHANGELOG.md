@@ -26,10 +26,11 @@ sends no `idle_hours` at all, so today the widget degrades to its 24h fallback e
 designed. Do not re-derive the window from `nest-mind`'s env — that is the *local* repo's
 config, not the deployed instance's.
 
-The gap is what makes this release worth shipping now rather than after that deploy: the
-**server's** conversation outlives the widget's record either way. It is still live, still
-holding the working memory `data-property` seeded, when the guest's own record has expired —
-and the guest cannot tell. So waiting has never been a reliable reset, it is about to stop
+The gap is what makes this release worth shipping now rather than after that deploy. Today the
+two windows agree at 24h, so a guest's record and the server's conversation lapse together and
+the reset is real if slow. **After the deploy they stop agreeing for anyone still on an older
+widget**: the server's conversation stays live for a week — still holding the working memory
+`data-property` seeded — while the guest's own record has expired, and the guest cannot tell. So waiting has never been a reliable reset, it is about to stop
 being one entirely, and there has never been a guest-initiated way to ask for a fresh thread.
 The only restart affordance was the button `endConversation()` paints after the *server* kills
 the conversation at its turn cap — a dead-end recovery, not a control.

@@ -10,23 +10,21 @@ it collects the questions the shapes left open.
 
 ## Status
 
-Upstream tagged `chatbot-contract-v1.5.0`, and as of 2026-07-31 the packet in `docs/wsuite/` is
-vendored from it. **The widget has not yet been reconciled field-by-field against the shipped
-spec**, so `BUILT_AGAINST` in the api section is deliberately still `'1.4.1'` — it records what
-the *code* implements, not what the docs say.
+**This document is history plus four still-live questions.** It was written against
+`chatbot-contract-v1.5.0`; the packet in `docs/wsuite/` is now **1.7.0** and `BUILT_AGAINST` is
+`'1.7.0'`, in lockstep. The text below is kept as the reasoning each shape was agreed on — read
+the open points at the foot for what is actually still open, because **most of them are not**.
 
-That has one visible consequence: a server reporting `contract_version: "1.5.0"` at init trips
-the widget's one-time contract-drift `console.warn` **by design** until the sync lands. Per
-integration guide §3.1 that warn never gates and never hard-fails — the ignore-unknown rule
-keeps the widget fully functional against a newer server, and the warn is the sole exception to
-the `data-debug` logging gate.
+**Release 2.5.0 closed the sync** (2026-08-02): it reconciled the three renderers field-by-field
+against the shipped spec and moved `BUILT_AGAINST`, closing the two gaps this section used to
+name as known-missing — Book-button dedupe against a card CTA (open point 6) and one-shot
+mid-transcript chip rows (open point 7). Contract **1.6.0** then delivered open points 1 and 2,
+and **1.7.0** delivered open point 9. Anything in this document that the shipped contract text
+contradicts is this widget's bug, not the contract's.
 
-**Release 2.5.0 closes the sync.** It reconciles the three renderers below field-by-field
-against the shipped spec, resolves whatever the open points at the foot of this document turn
-into, and moves `BUILT_AGAINST`. Two gaps are already known and named there: Book-button dedupe
-against a card CTA (open point 6) and one-shot mid-transcript chip rows (open point 7). Anything
-in this document that the shipped 1.5.0 text contradicts is this widget's bug, not the
-contract's.
+**Before sending any of this upstream, check the point is still open.** Four of the nine are
+delivered and marked so below; asking again for `total`/`more` or a price unit would be asking
+for something that shipped a month ago.
 
 Since this document was written, **release 2.4.2** reverted the init-`quick_replies` precedence
 to what 1.5.0 specifies — server chips replace the widget's own prompt block rather than joining
@@ -181,15 +179,33 @@ Stated so the platform knows precisely what a partial payload costs on screen:
 
 ## Open points
 
-These are the live questions. None of them blocks 2.4.0; each one changes what 2.5.0
-implements.
+Written as the live questions at 2.4.0. **Five of the nine are now closed** — 1, 2 and 9 by
+contract 1.6.0/1.7.0, and 6 and 7 by widget 2.5.0 (they were ours) — each marked in place with
+its original text kept below it.
 
-1. **Overflow on `property_cards`.** The widget caps the strip at 8 items and shows no count,
+**Still open:** **3** (an info-row element — an offer to the platform, not an ask), **4** (a
+server-side guideline, recorded so it is not lost — never an ask), **5** (the one surviving
+question: will `location` become required?), and **8** (our own CDN's CORS header on `fonts/`,
+not the platform's).
+
+1. **RESOLVED in contract 1.6.0 (D-044), adopted in widget 2.5.0.** The element gained
+   `total` (matches before the cap) and `more` (`{label, url}`, server-localized label) — the
+   overflow affordance this point asked for, in the shape it asked for. The widget renders a
+   count line from `total` and prefers `more` when both are present. Original point kept below.
+
+   *(as written)* **Overflow on `property_cards`.** The widget caps the strip at 8 items and shows no count,
    because the wire carries neither a `more` link nor a `total` and inventing a number would
    put something unverified on screen. An optional `more: { "label": "…", "url": "…" }` on the
    element would let a >8-item answer end in a real "see all" affordance. Requested; not
    assumed.
-2. **A per-unit hint for `price_from`.** The design mock reads "from €22/night"; the wire
+2. **RESOLVED in contract 1.6.0 (D-044), clarified in 1.6.1.** Delivered as a typed pair
+   rather than the free string this point offered as an alternative: `price_from.period`
+   (`night` | `stay`) and `price_from.basis` (`per_person` | `per_unit`), which the widget maps
+   to its own locale packs. 1.6.1 made them explicitly **per item**, so `cardPrice()` resolves
+   the suffix per card and renders the bare price when they are absent — never inferring
+   "/night". Original point kept below.
+
+   *(as written)* **A per-unit hint for `price_from`.** The design mock reads "from €22/night"; the wire
    carries no unit, so 2.4.0 renders **"from €25"**. Per-night is not a safe widget-side
    assumption — the same element will serve businesses priced per stay, per person or per
    item. An optional server-localized `price_from.unit` string (or a typed enum the widget
@@ -205,7 +221,13 @@ implements.
 5. **`location` on the wire.** Optional today, and the widget handles its absence cleanly. If
    the platform intends it to become required once property records are backfilled, say so —
    the widget's handling would not change, but the mock fixtures would.
-6. **Book-button dedupe is known-missing, and it is ours to close.** The shipped 1.5.0 text
+6. **CLOSED in widget 2.5.0 — ours, never a contract change.** A shared
+   `renderableCardUrl()` gate plus a per-turn rendered-url set now suppresses a
+   `link_button`/`booking_link` whose url matches a card already on screen, and the mock gained
+   the fixture this point notes it lacked (a `link_button` url matching a rendered card's).
+   Original point kept below.
+
+   *(as written)* **Book-button dedupe is known-missing, and it is ours to close.** The shipped 1.5.0 text
    asks for it — *"A card-aware renderer SHOULD suppress a `link_button`/`booking_link` whose
    `url` exactly equals a card item's `url` in the same `actions[]` list"* — and 2.4.0 does not
    do it: `renderAction()` handles each element in isolation and has no memory of the urls a
@@ -214,8 +236,14 @@ implements.
    and never will by accident: its CTA trio deliberately uses three different urls, so the
    fixture is not a regression test for it. Not a contract change — a widget gap, **owned by
    the 2.5.0 contract sync**, alongside a fixture whose `link_button` url matches a card's.
-7. **`quick_replies` is one-shot in the welcome as of 2.4.1; mid-transcript rows still are
-   not.** The shipped text calls a chip row *"one-shot by convention: remove (or disable) the
+7. **CLOSED in widget 2.5.0 — the second half landed.** Mid-transcript rows are now
+   registered in `chipRows` and retired by `retireChipRows()` on any send, with the focus
+   rescue this point warned would be needed: the row is sampled for `document.activeElement`
+   before removal and focus moves to the composer. 1.7.0's `heading` rides inside the row for
+   the same reason, so the question retires with the chips it labels. Original point kept below.
+
+   *(as written)* **`quick_replies` is one-shot in the welcome as of 2.4.1; mid-transcript rows
+   still are not.** The shipped text calls a chip row *"one-shot by convention: remove (or disable) the
    row once a chip is tapped or the guest types instead"*. 2.4.0 kept every chip row standing,
    treating them as transcript content on the same reasoning that keeps a rendered
    `link_button` in place after it is followed. 2.4.1 closes half of that: a row rendered into

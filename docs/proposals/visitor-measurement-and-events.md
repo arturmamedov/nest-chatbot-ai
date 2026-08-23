@@ -57,12 +57,16 @@ the destination already exists.
 The only route that answers "came back next week", "same person, different device", or that
 puts the answer in wSuite's own panel rather than in each host's GA4.
 
-It is deferred because **the returning-guest ceiling is the idle window, and the window has now
-moved**. That was written when `IDLE_MS` was a hardcoded 24h and the widening was a plan; the
-server's window is now **168h — seven days** and, since 2.10.0, the widget reads it from the
-init response instead of guessing. "Came back next week" is answerable from route A alone
-today. Building a cross-session identifier to answer a question that has just answered itself
-is the wrong order, and the argument for deferring is stronger than when it was written.
+It is deferred because **the returning-guest ceiling is the idle window, and the window is
+about to move**. That was written when `IDLE_MS` was a hardcoded 24h and the widening was a
+plan; since 2.10.0 the widget reads the window from the init response instead of guessing, and
+the platform's config carries `WSUITE_CHATBOT_IDLE_HOURS=168` — **seven days**. **Not yet in
+effect:** measured 2026-08-23 the live server still reports `contract_version: 1.6.2` and sends
+no `idle_hours`, so the widget is on its 24h fallback and "came back next week" is *not*
+answerable from route A today. It becomes answerable on the deploy, without building anything.
+Building a cross-session identifier to answer a question that is one deploy from answering
+itself is the wrong order — but if the deploy keeps slipping, that is the thing to chase, not
+this.
 
 It also carries a real decision that should be made deliberately rather than discovered at
 review: a persistent visitor id is **categorically different** from a 24h conversation uuid. It
@@ -195,8 +199,9 @@ Recorded so it is not rediscovered as a surprise:
   consent records nothing. The numbers are "consented guests", not all guests.
 - **Anything after the window expires** — but the window is no longer this widget's guess.
   Since 2.10.0 it comes from the init `201` (`idle_hours`) and rides the stored record, so
-  `ready.returning` automatically sees as far back as the deployment allows. At the current
-  seven days that is most of what route B was wanted for.
+  `ready.returning` automatically sees as far back as the deployment allows. That is 24h while
+  the server is pre-1.7.0, and the configured seven days once it is deployed — at which point
+  it covers most of what route B was wanted for.
 
 ---
 

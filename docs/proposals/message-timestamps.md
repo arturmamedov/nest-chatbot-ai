@@ -147,12 +147,16 @@ solution.
 
 ## Why the grown idle window sharpens this
 
-**This is no longer a forecast.** The server's window is **168h — seven days** (`idle_hours` on
-the live init `201`), and since 2.10.0 the widget follows it instead of a 24h constant. The
-argument below was written while it was still planned; it now describes the current state.
+**Still a forecast, but a funded one.** The mechanism is built — since 2.10.0 the widget follows
+`idle_hours` instead of a 24h constant — and the platform's config carries
+`WSUITE_CHATBOT_IDLE_HOURS=168`, **seven days**. What has *not* happened is the deploy:
+measured 2026-08-23 the live init `201` reports `contract_version: 1.6.2` and carries no
+`idle_hours` at all, so the widget is on its 24h fallback today. Do not read a live window off
+`nest-mind`'s env — that is the local repo's config, and an earlier revision of this very
+section did exactly that. The argument below describes what the deploy turns on.
 
-At 24h, client-side dating is close to unfalsifiable: a transcript spans at most two calendar
-days, the guest is almost certainly in the timezone they started in, and Today/Yesterday is
+At 24h — where the widget still sits — client-side dating is close to unfalsifiable: a
+transcript spans at most two calendar days, the guest is almost certainly in the timezone they started in, and Today/Yesterday is
 right essentially always. At a week the same code dates history across several days for a
 traveller — which is precisely who our guests are, moving between islands and occasionally
 between zones. The error stops being theoretical at exactly the point the window makes the

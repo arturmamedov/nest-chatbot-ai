@@ -165,8 +165,9 @@ GET  {apiBase}{async_result.url}                          → 200 {status, reply
   site's allow-list (body `{"message":"Origin not allowed."}` — guide §7), `404` unknown uuid,
   `410` idled out, `422` config, `429` throttled.
 - **`410` is normal.** Conversations idle out after the server's window — **not a constant
-  any more**: since 2.10.0 the init `201` reports `idle_hours` and the widget stores it with
-  the record (see the persist trap below). Re-init transparently and resend the message once —
+  any more**: since 2.10.0 the widget takes the window from `idle_hours` on the init `201`
+  and stores it with the record (see the persist trap below), falling back to 24h against a
+  server that does not send it — which is every server until 1.7.0 is deployed. Re-init transparently and resend the message once —
   the guest should never see it happen. Already implemented in `sendMessage`.
   On the **turn** endpoint a `404` rides the same branch (guide §5.1: the stored uuid is
   dead — re-init, or this browser retries it for the full retention window). On the
@@ -483,28 +484,33 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   - **`heading`** closed open point 9 of `docs/proposals/response-contract-phase2-elements.md`.
     A chip row can say what it asks; absent still means bare, and substituting our own label
     is still wrong.
-- **The widget half is shipped; the desync is still live because the SERVER half is not
-  deployed.** `nest-mind`'s env carries `WSUITE_CHATBOT_IDLE_HOURS=168` — a **seven-day**
-  window — so a record expiring at hour 24 costs the guest their transcript and opens a second
-  conversation against one the server still holds live, working memory `data-property` and all.
-  2.10.0 removed the widget's hardcoded 24h and 2.10.1 verified it. **But measured against the
-  live deployment on 2026-08-23, `nest-mind.laravel.cloud` still reports
-  `contract_version: 1.6.2` and sends no `idle_hours` and no `server_time` at all.** So
-  2.10.x cannot learn the window yet: it degrades exactly as designed — `idleHours: null`,
-  `clockOffset: 0`, the 24h fallback — which is correct behaviour and *not* a fix. **The fix
-  is inert until the platform deploys 1.7.0**; that deploy, not this release, is what closes
-  the gap. Verify by re-reading `contract_version` on the init `201` before assuming
-  otherwise, and do not re-derive the window from `nest-mind`'s env: that is the *local*
-  repo's config, not the deployed instance's. A spike in `wchat:error {phase:'turn',
-  status:410, retrying:true}` is what the desync looks like from the outside.
+- **The widget half is shipped; the server half is not deployed — and the desync is LATENT,
+  not live.** Measured 2026-08-23, `nest-mind.laravel.cloud` still reports
+  `contract_version: 1.6.2` and sends no `idle_hours` and no `server_time`, so 2.10.x cannot
+  learn the window: it degrades exactly as designed — `idleHours: null`, `clockOffset: 0`, the
+  24h fallback. **Nothing is broken by that today**, and the reason is worth knowing before
+  anyone treats this as urgent: at the deployed contract, `config/chatbot.php` carried
+  `'idle_hours' => 24` as a **hardcoded literal** (`git show
+  chatbot-contract-v1.6.2:modules/chatbot/config/chatbot.php`), and it only became
+  `env('WSUITE_CHATBOT_IDLE_HOURS', 24)` at 1.7.0. So the `168` in `nest-mind`'s env **cannot
+  take effect on the running server** — server and widget are both at 24h and they agree.
+  The bug appears only if the deploy lands while a **pre-1.7.0** widget is still in the field:
+  then the server idles at a week, the widget expires at a day, and a returning guest loses
+  their transcript and opens a second conversation against one still holding the working
+  memory `data-property` seeded. A spike in `wchat:error {phase:'turn', status:410,
+  retrying:true}` is what that looks like from the outside. **Read `contract_version` off a
+  real init `201` before asserting anything here, and never re-derive the window from
+  `nest-mind`'s env** — that is the *local* repo's config, not the deployed instance's. That
+  mistake has now been made twice in these docs, once by the release that fixed it.
 - **A persistent visitor token at init is deliberately NOT asked for yet.** It is the only way
   to answer "same person, cross-device" or "came back after the window", and the only way to
   put the answer in wSuite's own panel rather than in each host's GA4 — but it is a
   cross-session identifier for a person, on EU properties, and needs consent treatment and a
   retention policy before it can ship. The widget's storage today is functional and
-  short-lived, which is much of why it has been uncontroversial. The idle window has now
-  extended (to a week — see above), which answers most of the same question for free; revisit
-  only if a real question survives that.
+  short-lived, which is much of why it has been uncontroversial. Extending the idle window
+  answers most of the same question for free — but note the deferral currently rests on a
+  window that is **configured** at a week and **not yet deployed** (see above), so today the
+  widget still sees 24h. Revisit if a real question survives the deploy, not before it.
   Inferring visitors server-side from IP + user-agent was considered and **rejected**: guide
   §6 names "a hotel's own wifi" as a case where strangers share one bucket, and our guests are
   mostly on property wifi — it would merge strangers and split one guest across their phone
