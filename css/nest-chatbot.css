@@ -1032,6 +1032,22 @@
     gap: 4px;
 }
 
+/* `total` (contract 1.8.0): what the whole party pays for an option, under the
+   per-bed / per-room `price` line it belongs to. It lives inside the option's
+   own block (.nc-option, no rule of its own) so the column's 4px gap above
+   stays "between options" and this line reads as part of the one above it —
+   appended as a flat sibling it would sit exactly as far from its own price as
+   from the next room.
+   600, not 500 — only 400 and 600 faces ship — and it is the total that gets
+   the weight, not the unit price: it is the number the guest asked for. No
+   font-family: a div inherits from #nest-chatbot, so this adds no eleventh site
+   to the two-custom-property typography seam. The figure is the server's string
+   via textContent — nothing here formats, rounds or derives it. */
+#nest-chatbot .nc-option-total {
+    margin-top: 2px;
+    font-weight: 600;
+}
+
 /* ---------------------------------------------------------- property carousel */
 
 /* The wrapper never moves — it is the positioning context the fades and the

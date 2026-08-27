@@ -14,9 +14,11 @@ before changing the shape of it.
 
 Shipped in **2.8.2** as a patch — additive, no `data-*` attribute, nothing new for a host's
 `<script>` tag to say. `BUILT_AGAINST` was `1.6.1` at that release and no transport changed;
-the packet has since moved to **1.6.2** in `2.9.0` (D-047, an emission rule) and to **1.7.0**
-in `2.10.0` (D-050), neither of which changes the event surface — no name moved, no payload
-lost a field.
+the packet has since moved to **1.6.2** in `2.9.0` (D-047, an emission rule), to **1.7.0**
+in `2.10.0` (D-050) and to **1.9.0** in `2.11.0` (D-067, D-071, 2026-08-27) — none of which
+changes the event surface: no name moved, no payload lost a field. One payload *value* changed
+shape: since 1.9.0 `wchat:action.url` carries the server-composed booking url, language
+segment and stay query string included, exactly as the anchor's `href`.
 
 **The upstream ask at the foot of this document was sent, and granted.** `idle_hours` landed in
 contract 1.7.0 and the widget adopted it in 2.10.0, which changes one thing described here for

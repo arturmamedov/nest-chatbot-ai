@@ -55,7 +55,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.7.0';
+    var BUILT_AGAINST = '1.9.0';
 
     // ---- state ---------------------------------------------------------------
     var conversationUuid = null;
@@ -254,6 +254,7 @@
             '.wsc-card-name{font-size:14px;font-weight:600;color:#1f2430}',
             '.wsc-card-loc{font-size:12px;color:#6b7280;margin-top:2px}',
             '.wsc-card-price{font-size:13px;font-weight:600;color:#1f2430;margin-top:4px}',
+            '.wsc-avail{font-size:13px;color:#1f2430;margin:4px 0}',
             '.wsc-card-cta{display:block;text-align:center;margin-top:8px}',
             '.wsc-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}',
             // 1.7.0 quick_replies heading. `flex:0 0 100%` is what lets it live
@@ -423,6 +424,7 @@
         // the guest ends up with two identical Book buttons (1.6.0).
         if (action.type === 'availability' && action.url) {
             if (rendered && rendered[action.url]) { return; }
+            availabilityTotals(action.options); // 1.8.0 -- renders nothing for a pre-1.8.0 option
             linkButton('Book now →', action.url, rendered);
             return;
         }
@@ -672,6 +674,24 @@
         link.setAttribute('rel', 'noopener noreferrer');
         els.body.appendChild(link);
         if (rendered) { rendered[href] = true; }
+        scrollDown();
+    }
+
+    // 1.8.0: an availability option MAY carry `units`/`basis`/`total` -- the price
+    // the PARTY pays; `price` is always for ONE bed or room. Render the total when
+    // present, via textContent, and NEVER compute one from `price`: the server's
+    // number is the honest one. An option without it renders nothing here, exactly
+    // as before 1.8.0 (the reply text already lists the options).
+    function availabilityTotals(options) {
+        if (!options || !options.length) { return; }
+        for (var i = 0; i < options.length; i++) {
+            var o = options[i];
+            if (!o || o.total == null || o.units == null) { continue; }
+            var unit = o.basis === 'per_person' ? 'bed' : 'room';
+            var text = o.units + ' ' + (o.units === 1 ? unit : unit + 's') + ' · ' + (o.room || '')
+                + ' — ' + o.total + (o.currency ? ' ' + o.currency : '') + ' total';
+            els.body.appendChild(el('div', 'wsc-avail', text));
+        }
         scrollDown();
     }
 

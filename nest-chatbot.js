@@ -20,9 +20,9 @@
  *   Element-supplied urls are honoured for http(s) only; tel:/mailto:/wa.me hrefs
  *   are constructed here from channel values, never taken verbatim.
  *
- * Built against response contract 1.7.0 (BUILT_AGAINST, api section), in
- * lockstep with the packet vendored in docs/wsuite/ — release 2.10.0 is the sync
- * that adopted it. BUILT_AGAINST records what this code implements, not
+ * Built against response contract 1.9.0 (BUILT_AGAINST, api section), in
+ * lockstep with the packet vendored in docs/wsuite/ — release 2.11.0 is the sync
+ * that adopted it (D-067, D-071). BUILT_AGAINST records what this code implements, not
  * what the docs say. The server reports its live contract_version at init; the
  * widget warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.10.3';
+    var VERSION = '2.11.0';
 
     /* =========================================================== config ===== */
 
@@ -179,6 +179,13 @@
             priceFrom: 'from %s',
             priceNight: '/night', priceStay: '/stay',
             pricePerPerson: 'per person', pricePerUnit: 'per unit',
+            // Availability options (contract 1.8.0). Four count keys instead of
+            // a plural helper: two nouns × two forms is the whole table, and a
+            // helper would be a third thing to get wrong for one caller. The
+            // German plural of Zimmer is invariant — the table says so, no rule.
+            perBed: 'per bed', perRoom: 'per room',
+            bedsOne: '%s bed', bedsMany: '%s beds', roomsOne: '%s room', roomsMany: '%s rooms',
+            stayTotal: '%s · %s total',
             carousel: 'carousel', carouselPrev: 'Scroll back', carouselNext: 'Scroll forward',
             scrollLatest: 'Scroll down to last message',
             properties: 'Properties', showingOf: 'Showing %s of %s',
@@ -209,6 +216,9 @@
             priceFrom: 'desde %s',
             priceNight: '/noche', priceStay: '/estancia',
             pricePerPerson: 'por persona', pricePerUnit: 'por unidad',
+            perBed: 'por cama', perRoom: 'por habitación',
+            bedsOne: '%s cama', bedsMany: '%s camas', roomsOne: '%s habitación', roomsMany: '%s habitaciones',
+            stayTotal: '%s · %s en total',
             carousel: 'carrusel', carouselPrev: 'Retroceder', carouselNext: 'Avanzar',
             scrollLatest: 'Bajar al último mensaje',
             properties: 'Alojamientos', showingOf: 'Mostrando %s de %s',
@@ -241,6 +251,9 @@
             priceFrom: 'da %s',
             priceNight: '/notte', priceStay: '/soggiorno',
             pricePerPerson: 'a persona', pricePerUnit: 'per unità',
+            perBed: 'per letto', perRoom: 'per camera',
+            bedsOne: '%s letto', bedsMany: '%s letti', roomsOne: '%s camera', roomsMany: '%s camere',
+            stayTotal: '%s · %s in totale',
             carousel: 'carosello', carouselPrev: 'Indietro', carouselNext: 'Avanti',
             scrollLatest: 'Scendi all\'ultimo messaggio',
             properties: 'Strutture', showingOf: 'Mostrati %s di %s',
@@ -271,6 +284,9 @@
             priceFrom: 'ab %s',
             priceNight: '/Nacht', priceStay: '/Aufenthalt',
             pricePerPerson: 'pro Person', pricePerUnit: 'pro Einheit',
+            perBed: 'pro Bett', perRoom: 'pro Zimmer',
+            bedsOne: '%s Bett', bedsMany: '%s Betten', roomsOne: '%s Zimmer', roomsMany: '%s Zimmer',
+            stayTotal: '%s · %s insgesamt',
             carousel: 'Karussell', carouselPrev: 'Zurück', carouselNext: 'Weiter',
             scrollLatest: 'Zur letzten Nachricht springen',
             properties: 'Unterkünfte', showingOf: '%s von %s angezeigt',
@@ -303,6 +319,9 @@
             priceFrom: 'à partir de %s',
             priceNight: '/nuit', priceStay: '/séjour',
             pricePerPerson: 'par personne', pricePerUnit: 'par unité',
+            perBed: 'par lit', perRoom: 'par chambre',
+            bedsOne: '%s lit', bedsMany: '%s lits', roomsOne: '%s chambre', roomsMany: '%s chambres',
+            stayTotal: '%s · %s au total',
             carousel: 'carrousel', carouselPrev: 'Précédent', carouselNext: 'Suivant',
             scrollLatest: 'Aller au dernier message',
             properties: 'Hébergements', showingOf: '%s sur %s affichés',
@@ -826,7 +845,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.7.0';
+    var BUILT_AGAINST = '1.9.0';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -913,18 +932,26 @@
      *   "contact"   → contact_channels (phone + whatsapp + email)
      *   "link"      → three link_buttons (book / website / directions)
      *   "available" → async_result: interim reply now, final reply after polling.
-     *                 The final is an `availability` sharing the interim's url —
-     *                 the ONE interim→poll duplicate 1.6.0 documents, so exactly
-     *                 one Book button must ever be on screen for this turn
-     *   "rooms"     → availability with room options
+     *                 The final is an `availability` sharing the interim's
+     *                 server-composed url byte-for-byte (1.9.0; no `adults`, the
+     *                 party was never stated) — the ONE interim→poll duplicate
+     *                 1.6.0 documents, so exactly one Book button must ever be on
+     *                 screen for this turn. Its option carries the 1.8.0 trio for
+     *                 the assumed party of one (the singular "1 bed" path)
+     *   "rooms"     → availability with room options — the 1.8.0 showcase: a
+     *                 per-bed option and a per-room option each carrying
+     *                 basis/units/total (rendered verbatim, never computed), and
+     *                 one option WITHOUT the trio that must render as before
      *   "tenerife" / "canaria" / "ibiza" → property_cards + promo_card + the CTA
      *                 trio. The rail is also the 1.6.x showcase: per-card
      *                 period/basis (two DIFFERENT suffixes on one rail), a
      *                 cta_label, a name-less item sharing the website button's
      *                 url (the D-043(c) isolator: card dropped, button SURVIVES),
-     *                 a "Book now" whose url equals a rendered card's (suppressed),
-     *                 and `more` + `total` — ibiza sends total only (count line),
-     *                 the other two send both (`more` wins)
+     *                 a "Book now" whose url equals a rendered card's (suppressed
+     *                 — both are 1.9.0 composed strings with a query, so the
+     *                 dedupe is proven through `?`/`&`), and `more` + `total` —
+     *                 ibiza sends total only (count line), the other two send
+     *                 both (`more` wins)
      *   "hostel"    → quick_replies: the three island chips — the SAME payload the
      *                 init response carries, so this keyword also regression-tests
      *                 the welcome block's chip row
@@ -1070,7 +1097,7 @@
                     // what a correct client clock should compute.
                     idle_hours: mockIdleHours(),
                     server_time: new Date().toISOString(),
-                    contract_version: '1.7.0'
+                    contract_version: '1.9.0'
                 }, 700);
             },
 
@@ -1138,7 +1165,12 @@
                     return reply(done, 200, {
                         reply: 'Let me check that for you — one moment.\nIn the meantime you can book directly here.',
                         actions: [
-                            { type: 'booking_link', url: 'https://book.nestshostels.com/las-eras' },
+                            // 1.9.0 (D-071): the server composes the stay onto the
+                            // booking url — language segment, both dates, and
+                            // `adults` ONLY when the guest stated a party size.
+                            // This guest did not, so no `adults` here, and the
+                            // poll's final below carries the SAME string.
+                            { type: 'booking_link', url: 'https://hotels.cloudbeds.com/en/reservation/uudLs6?checkin=2026-10-10&checkout=2026-10-13' },
                             { type: 'async_result', url: '/api/v1/chatbot/conversations/' + uuid + '/turns/' + turn }
                         ],
                         turn: turn
@@ -1146,16 +1178,25 @@
                 }
 
                 if (q.indexOf('rooms') !== -1) {
+                    // The 1.8.0 showcase in ONE card: a dorm sold per bed (2 beds
+                    // for a party of 2), a private room sold per room (1 room for
+                    // the same party), and a type the PMS snapshot cannot say how
+                    // it sells — no basis, no units, no total — which must render
+                    // exactly as before 1.8.0. `total` is price × units as the
+                    // SERVER computed it; the widget prints the string and never
+                    // does the multiplication. `price` is the stay total for ONE
+                    // unit (three nights here), never a per-night figure.
                     return reply(done, 200, {
                         reply: 'Here is what we have for those dates.',
                         actions: [{
                             type: 'availability',
                             available: true,
                             options: [
-                                { room: 'Mixed dorm', price: '25', currency: 'EUR' },
-                                { room: 'Private double', price: '68', currency: 'EUR' }
+                                { room: 'Mixed dorm', price: '100.00', currency: 'EUR', basis: 'per_person', units: 2, total: '200.00' },
+                                { room: 'Private double', price: '204.00', currency: 'EUR', basis: 'per_unit', units: 1, total: '204.00' },
+                                { room: 'Family room', price: '270.00', currency: 'EUR' }
                             ],
-                            url: 'https://book.nestshostels.com/las-eras'
+                            url: 'https://hotels.cloudbeds.com/en/reservation/uudLs6?checkin=2026-10-10&checkout=2026-10-13&adults=2'
                         }],
                         turn: turn
                     });
@@ -1166,8 +1207,11 @@
                         reply: 'Great — Las Eras Nest Hostel has space for those nights.',
                         actions: [{
                             type: 'booking_link',
-                            url: 'https://book.nestshostels.com/las-eras',
-                            summary: { property: 'Las Eras Nest Hostel', check_in: '2026-08-01', check_out: '2026-08-05', adults: 2 }
+                            // Composed from the summary right below it (1.9.0): the
+                            // stay is known and the party was stated, so all three
+                            // ride the url.
+                            url: 'https://hotels.cloudbeds.com/en/reservation/uudLs6?checkin=2026-10-10&checkout=2026-10-13&adults=2',
+                            summary: { property: 'Las Eras Nest Hostel', check_in: '2026-10-10', check_out: '2026-10-13', adults: 2 }
                         }],
                         turn: turn
                     });
@@ -1176,11 +1220,13 @@
                 if (q.indexOf('link') !== -1) {
                     // Since contract 1.4.0 the information path emits three
                     // deterministic link_buttons (booking_url / website / map_url),
-                    // deduped by URL — the fixture mirrors that.
+                    // deduped by URL — the fixture mirrors that. Book now is the
+                    // 1.9.0 shape for a turn that knows no stay: the language
+                    // segment alone, no query.
                     return reply(done, 200, {
                         reply: 'Here is everything for Las Eras — booking, the website, and how to find us.',
                         actions: [
-                            { type: 'link_button', label: 'Book now', url: 'https://book.nestshostels.com', style: 'primary' },
+                            { type: 'link_button', label: 'Book now', url: 'https://hotels.cloudbeds.com/en/reservation/uudLs6', style: 'primary' },
                             { type: 'link_button', label: 'Visit our website', url: 'https://nestshostels.com' },
                             { type: 'link_button', label: 'Get directions', url: 'https://maps.google.com/?q=Las+Eras+Nest+Hostel' }
                         ],
@@ -1209,7 +1255,7 @@
                                 // "from €22.00/night per person".
                                 price_from: { amount: '22.00', currency: 'EUR', period: 'night', basis: 'per_person' },
                                 badge: 'Nest Pass',
-                                url: 'https://hotels.cloudbeds.com/reservation/medano-nest',
+                                url: 'https://hotels.cloudbeds.com/en/reservation/4VPKYG?checkin=2026-10-10&checkout=2026-10-13&adults=2',
                                 // Server-localized Book text (1.6.0) — must beat
                                 // the pack's "Book now" on THIS card only.
                                 cta_label: 'Book a bed'
@@ -1227,7 +1273,7 @@
                                 name: 'Ashavana Nest',
                                 image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/6.jpg',
                                 price_from: { amount: '24.00', currency: 'EUR', period: 'night', basis: 'per_unit' },
-                                url: 'https://hotels.cloudbeds.com/reservation/ashavana-nest'
+                                url: 'https://hotels.cloudbeds.com/en/reservation/VKSq5o?checkin=2026-10-10&checkout=2026-10-13&adults=2'
                             },
                             {
                                 // No period/basis: the bare price. The widget must
@@ -1239,7 +1285,7 @@
                                 image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/1.jpg',
                                 price_from: { amount: '26.00', currency: 'EUR' },
                                 badge: 'Loooong Stay',
-                                url: 'https://hotels.cloudbeds.com/reservation/duque-nest'
+                                url: 'https://hotels.cloudbeds.com/en/reservation/R5Sn9T?checkin=2026-10-10&checkout=2026-10-13&adults=2'
                             },
                             {
                                 // The D-043(c) isolator (reference browser pass,
@@ -1269,11 +1315,13 @@
                         actions: [
                             cards,
                             promoCard(),
-                            // Equals medano's rendered url → suppressed by the
-                            // dedupe pre-scan. The trio used to point at
-                            // book.nestshostels.com, which no card carries — that
-                            // is why the old fixture could never catch D-043(c).
-                            { type: 'link_button', label: 'Book now', url: 'https://hotels.cloudbeds.com/reservation/medano-nest', style: 'primary' },
+                            // Equals medano's rendered url — query string and all,
+                            // since 1.9.0 composes the stay onto both from the
+                            // same inputs → suppressed by the dedupe pre-scan. The
+                            // trio used to point at book.nestshostels.com, which no
+                            // card carries — that is why the old fixture could
+                            // never catch D-043(c).
+                            { type: 'link_button', label: 'Book now', url: 'https://hotels.cloudbeds.com/en/reservation/4VPKYG?checkin=2026-10-10&checkout=2026-10-13&adults=2', style: 'primary' },
                             // Shares the NAME-LESS item's url → must render: a
                             // dropped card suppresses nothing.
                             { type: 'link_button', label: 'Visit our website', url: 'https://nestshostels.com' },
@@ -1316,19 +1364,23 @@
                 if (pollCounts[path] < 3) {
                     return reply(done, 200, { status: 'pending', turn: turn }, 60);
                 }
-                // An `availability` whose url fell back to the property's
-                // booking_url — the same url the interim booking_link already
-                // rendered. This is the ONE interim→poll duplicate 1.6.0
-                // documents, and the per-turn `rendered` set must suppress the
-                // trailing Book button while the options list still renders.
+                // An `availability` whose url is the SAME server-composed string
+                // the interim booking_link already rendered — since 1.9.0 (D-071)
+                // both sides come from one composer fed the same stay, so they
+                // are byte-identical INCLUDING the query string. This is the ONE
+                // interim→poll duplicate 1.6.0 documents, and the per-turn
+                // `rendered` set must suppress the trailing Book button while the
+                // options list — now carrying the 1.8.0 party total — still
+                // renders. The party was never stated, so the server assumed one
+                // (D-068(b)): units 1, total == price, and no `adults` in the url.
                 return reply(done, 200, {
                     status: 'ready',
-                    reply: 'Yes! We have 4 beds free in the mixed dorm for those nights, at 25 € per night.',
+                    reply: 'Yes! We have 4 beds free in the mixed dorm for those nights — 100.00 EUR for the stay, assuming it\'s just you.',
                     actions: [{
                         type: 'availability',
                         available: true,
-                        options: [{ room: 'Mixed dorm', price: '25', currency: 'EUR' }],
-                        url: 'https://book.nestshostels.com/las-eras'
+                        options: [{ room: 'Mixed dorm', price: '100.00', currency: 'EUR', basis: 'per_person', units: 1, total: '100.00' }],
+                        url: 'https://hotels.cloudbeds.com/en/reservation/uudLs6?checkin=2026-10-10&checkout=2026-10-13'
                     }],
                     turn: turn
                 }, 60);
@@ -2236,8 +2288,12 @@
      * Element-supplied urls are honoured ONLY for http(s). Innocent surrounding
      * whitespace is trimmed off the returned href; javascript:, data: and
      * anything hidden behind control characters fails the anchored test and is
-     * dropped. Defence in depth — these urls are code-emitted server-side from
-     * the catalog, never chosen by the model.
+     * dropped. Defence in depth — these urls are composed server-side from the
+     * catalog's booking code and the collected stay (D-071, contract 1.9.0:
+     * language segment, checkin/checkout, adults when stated), never chosen by
+     * the model. That trim() is the ONLY transformation this file ever applies
+     * to one: the contract forbids parsing, normalising or stripping a booking
+     * url, and the raw-string dedupes in renderAction() depend on it.
      */
     function safeHttpUrl(url) {
         if (typeof url !== 'string') { return null; }
@@ -2356,10 +2412,13 @@
 
             // Suppression passes `row` through untouched — a suppressed button must
             // not close the CTA group its siblings share. Raw action.url against a
-            // set of trimmed hrefs: within one payload both are the same catalog
-            // booking_url byte-for-byte (the contract forbids normalizing), so
-            // plain equality is exact; a whitespace-padded near-duplicate simply
-            // renders both, which the contract calls redundant, never harmful.
+            // set of trimmed hrefs: within one payload both are the same
+            // server-composed booking url byte-for-byte — since 1.9.0 (D-071) it
+            // carries the language segment and the stay's query string, built by
+            // one composer from the same inputs, and the contract forbids
+            // normalising either side — so plain equality is exact; a
+            // whitespace-padded near-duplicate simply renders both, which the
+            // contract calls redundant, never harmful.
             case 'link_button':
                 if (cardUrls[action.url]) { return row; } // a card in this list carries the same CTA (D-043(c))
                 return linkButton(action.label, action.url, action.style, row, rendered, 'link_button');
@@ -2411,16 +2470,52 @@
         } else if (action.options && action.options.length) {
             var list = el('div', 'nc-options');
             action.options.forEach(function (option) {
+                if (!option) { return; }
+                // One block per option, so the total below sits WITH its price
+                // rather than a full column-gap away from it (see .nc-option-total).
+                var item = el('div', 'nc-option');
+                // `price` is, as it always was, the stay total for ONE bed or
+                // room. Its label comes from `basis` and ONLY from `basis`
+                // (contract 1.8.0) — strict matches, exactly as cardPrice()
+                // treats price_from.basis: an unknown value contributes nothing,
+                // an absent one leaves the bare figure the widget showed before.
+                var unit = '';
+                if (option.basis === 'per_person') { unit = ' ' + t('perBed'); }
+                else if (option.basis === 'per_unit') { unit = ' ' + t('perRoom'); }
                 var line = (option.room || '') +
-                    (option.price ? ' — ' + option.price + ' ' + (option.currency || '') : '');
-                list.appendChild(el('div', null, line.trim()));
+                    (option.price ? ' — ' + option.price + ' ' + (option.currency || '') + unit : '');
+                item.appendChild(el('div', null, line.trim()));
+                // `total` (1.8.0) is what the PARTY pays, and it is the server's
+                // string VERBATIM — never price × units computed here: a bed price
+                // times a guessed party size is a wrong quote on a link that will
+                // not honour it (response-contract.md, `options[]`). The three
+                // fields come together or not at all, so the guard is the
+                // reference renderer's (total AND units present) plus the strict
+                // basis match above — a count with no noun to give it ("2 ·
+                // 200.00 EUR total") tells the guest nothing, and the reply text
+                // already carries the same numbers. Absent means: exactly the
+                // pre-1.8.0 card.
+                if (unit && option.total != null && option.units != null) {
+                    var many = option.units !== 1;
+                    var countKey = option.basis === 'per_person'
+                        ? (many ? 'bedsMany' : 'bedsOne')
+                        : (many ? 'roomsMany' : 'roomsOne');
+                    var amount = (option.total + ' ' + (option.currency || '')).trim();
+                    item.appendChild(el('div', 'nc-option-total',
+                        tf('stayTotal', tf(countKey, option.units), amount)));
+                }
+                list.appendChild(item);
             });
             els.body.appendChild(list);
         }
         // The ONE contract-scoped interim→poll suppression (1.6.0): an availability
-        // url that fell back to the property's booking_url duplicates the Book
-        // button the interim turn already rendered. Only the trailing button is
-        // deduped — the options list is new content and always renders.
+        // url that duplicates the Book button the interim turn already rendered.
+        // Since 1.9.0 (D-071) both are the SAME server-composed string — language
+        // segment, checkin/checkout, adults when stated — built from the same
+        // inputs, which is exactly why this stays a raw-string comparison:
+        // normalise either side and the dedupe is the thing that breaks. Only the
+        // trailing button is deduped — the options list is new content and always
+        // renders.
         var row = null;
         if (action.url && !(rendered && rendered[action.url])) {
             row = linkButton(t('book'), action.url, 'primary', null, rendered, 'availability');

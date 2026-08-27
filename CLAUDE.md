@@ -124,7 +124,7 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.7.0 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.9.0 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
@@ -135,10 +135,11 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 `BUILT_AGAINST` (api section) moves **only** during a sync — it is a claim about what this
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
-rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-08-22 as
-`docs @ chatbot-contract-v1.7.0 (2b9da82) · widget @ 2b9da82` — the widget SHA is part of the
-packet's identity, because the reference renderer legitimately moves between contract tags.
-`BUILT_AGAINST` is `'1.7.0'`, in lockstep since release 2.10.0 adopted D-050.
+rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-08-27 as
+`docs @ chatbot-contract-v1.9.0 (6a2c085) · widget @ 6a2c085` — the widget SHA is part of the
+packet's identity, because the reference renderer legitimately moves between contract tags
+(here the two halves share a sha because 1.8.0 was a real renderer change in the tag commit).
+`BUILT_AGAINST` is `'1.9.0'`, in lockstep since release 2.11.0 adopted D-067 and D-071.
 
 **The upstream repo drives the sync, and it is local.** The platform is `nest-mind`
 (`modules/chatbot/`). Its `docs/consumer-sync.md` is the operational half: §1 is a registry of
@@ -207,6 +208,16 @@ GET  {apiBase}{async_result.url}                          → 200 {status, reply
   two cards in one rail may differ, so `cardPrice()` resolves the suffix per card and renders
   the **bare** price when they are absent. An invented "/night" on a per-stay figure is a
   guest-facing pricing error, not a cosmetic one.
+- **Never derive `total`, never normalise a booking url.** An `availability` option's `total`
+  (contract 1.8.0) is the server's string, printed verbatim beside a `basis`-derived "per bed" /
+  "per room" label; `price × units` computed here is a wrong quote on a link that will not
+  honour it, so absent means the pre-1.8.0 line. And since 1.9.0 (D-071) every booking `url`
+  is server-composed —
+  `https://hotels.cloudbeds.com/{lang}/reservation/{code}?checkin=YYYY-MM-DD&checkout=YYYY-MM-DD&adults=N`
+  — so the only thing this file may do to one is `safeHttpUrl()`'s `trim()`. The two dedupes
+  (card CTA vs Book button; interim `booking_link` vs async `availability`) are raw-string
+  comparisons that work *because* the server composes both sides from the same inputs: parse,
+  lowercase or strip a query on either side and they stop.
 - **The init response reports `contract_version`.** Compare it to `BUILT_AGAINST` (api
   section) and `console.warn` once when the server is ahead — never gate, never hard-fail
   (guide §3.1); the ignore-unknown rule keeps the widget functional. That warn is the sole
@@ -441,11 +452,11 @@ are shaped exactly like the real envelope. Drive them from the composer:
 |---|---|
 | `book` | `booking_link` with a stay summary |
 | `contact` | `contact_channels` (phone + whatsapp + email) |
-| `rooms` | `availability` with room options |
+| `rooms` | `availability` — the 1.8.0 showcase: a per-bed and a per-room option carrying `basis`/`units`/`total`, rendered verbatim as "2 beds · 200.00 EUR total", plus one option without the trio that must render exactly as before |
 | `link` | three `link_button`s (book / website / directions), one with `style: primary` |
-| `available` | `async_result` — interim reply, then the poll replaces it in place; the final is an `availability` sharing the interim url, so the per-turn dedupe must leave exactly **one** Book button |
+| `available` | `async_result` — interim reply, then the poll replaces it in place; the final is an `availability` sharing the interim's **server-composed** url byte-for-byte (1.9.0, no `adults` — unstated party), so the per-turn dedupe must leave exactly **one** Book button; the final's option is the singular "1 bed" total path |
 | `hostel` | `quick_replies` — the three island chips, carrying the 1.7.0 `heading` (also matches suggested prompt 1); any send retires every row **and its heading** (one-shot) |
-| `tenerife` `canaria` `ibiza` | `property_cards` carousel + `promo_card` + the CTA trio — and the 1.6.x showcase: per-card `period`/`basis` (two different suffixes in one rail), a `cta_label`, the D-043(c) isolator (name-less card sharing the website button's url — card dropped, button survives), a Book button matching a rendered card's url (suppressed), and `total`/`more` (ibiza: `total` only → count line; the others: both → `more` wins) |
+| `tenerife` `canaria` `ibiza` | `property_cards` carousel + `promo_card` + the CTA trio — and the 1.6.x showcase: per-card `period`/`basis` (two different suffixes in one rail), a `cta_label`, the D-043(c) isolator (name-less card sharing the website button's url — card dropped, button survives), a Book button matching a rendered card's url (suppressed) — both 1.9.0 composed strings with a query, so the dedupe is proven through `?`/`&` — and `total`/`more` (ibiza: `total` only → count line; the others: both → `more` wins) |
 | `pass` `offer` | `promo_card` alone (`pass` is word-bounded: "compass" falls through) — Spanish copy with `locale: 'es'` (→ `lang`) and a `\n` in the body (pre-wrap) |
 | `!cap` | the turn-cap reply: `contact_channels` + `conversation_ended` last — composer closes, "start a new chat" appears |
 | `!unknown` | an unrecognised element type (must be ignored, sibling still renders) |
@@ -559,7 +570,8 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
 - **Both halves are deployed, and the window is a live seven days.** Measured 2026-08-23 20:56 UTC
   off a real init `201` against `nest-mind.laravel.cloud`: `contract_version: 1.7.0`,
   `idle_hours: 168`, `server_time` present. So 2.10.x now learns the window from the server on
-  every init and carries it in the record, exactly as designed.
+  every init and carries it in the record, exactly as designed. Re-measured 2026-08-27 00:41 UTC
+  at the 2.11.0 sync, same origin: `contract_version: 1.9.0`, `idle_hours: 168`.
   **The condition this bullet used to warn about was not met.** The bug needed the deploy to land
   while a **pre-1.7.0** widget was still in the field; the widget serving
   `nestshostels.com` is `2.10.3` / `BUILT_AGAINST 1.7.0`, so server and widget agree at 168h.
@@ -669,4 +681,7 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   2.10.3 is the device Back button closing the panel: new UI behaviour, one additive `data-*`
   attribute (`data-back-button`) and one additive `wchat:close` enum value — all three named in
   this rule as patch-shaped, and additive is never breaking.
-  The next is **2.10.4** unless it is a sync.
+  2.11.0 is the 1.9.0 sync (D-067, D-071): a fresh packet and a `BUILT_AGAINST` move — the minor
+  case — plus the one renderer line 1.8.0 asks for, seven pack keys and one CSS rule, all
+  patch-shaped on their own.
+  The next is **2.11.1** unless it is a sync.

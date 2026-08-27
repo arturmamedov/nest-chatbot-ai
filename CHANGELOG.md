@@ -5,6 +5,120 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.11.0 — 2026-08-27
+
+**Contract sync: `BUILT_AGAINST` 1.7.0 → 1.9.0 (D-067, D-071).** A **MINOR**, the case reserved
+for one: a fresh `docs/wsuite/` packet and a `BUILT_AGAINST` move. Packet:
+`docs @ chatbot-contract-v1.9.0 (6a2c085) · widget @ 6a2c085` — the two halves share a sha because
+1.8.0 was a real renderer change in the tag commit.
+
+Three contract rows, one renderer line. **1.7.1** asks nothing: an emission rule — the
+`availability` element now also fires on the deterministic Ready turn — and the branch that renders
+it has been here since the element existed. **1.8.0** is the line. **1.9.0** is adopted by changing
+nothing and stripping nothing, and the audit that proves it is below.
+
+### `basis` / `units` / `total` — the number the guest actually asked for
+
+An availability option may now say what the whole PARTY pays. `price` did not change — it is, as it
+always was, the stay total for ONE bed or room — and `total` is `price × units` as the server
+computed it, in the same currency; `basis` says what one unit is (`per_person`, a bed in a shared
+room; `per_unit`, a whole room) and `units` how many of them the party needs. The three come
+together or not at all, and are absent when the PMS snapshot does not know how the room type is
+sold.
+
+- **Rendered verbatim, never computed.** The total line is the server's string plus the bare
+  currency code, through `textContent` — no `Intl`, no arithmetic. A bed price times a guessed
+  party size is a wrong quote on a link that will not honour it, so absent means exactly the
+  pre-1.8.0 line. The mock suite pins the "never" statically: no `units *` and no `price *`
+  anywhere in the source.
+- **A second line under each option, inside the card — not the reference's loose line.** The
+  reference renderer draws "2 beds · Mixed Dorm — 200.00 EUR total" as a free-standing line above
+  the Book button because it renders no options list at all. This widget already prints one line
+  per option, so repeating the room name would state every room twice and float the figure away
+  from the price it belongs to. Each option is now a `div.nc-option` block: the price line, which
+  gains a `basis`-derived "per bed" / "per room" label (only when `basis` is present — strict
+  matches, exactly as `cardPrice()` treats `price_from.basis`), and under it "2 beds · 200.00 EUR
+  total" at weight 600. The wrapper is what lets the total sit 2px under *its* price while the
+  card's 4px column gap stays "between options".
+- **Strict on `basis`.** The guard is the reference's (`total` and `units` present) plus a known
+  `basis`: a count with no noun to give it ("2 · 200.00 EUR total") tells the guest nothing, and
+  the reply text already carries the same numbers. An unknown value renders the pre-1.8.0 line,
+  which is what ignoring what you do not recognise means for a field *value*.
+- **Seven pack keys in five packs, no plural helper.** `perBed`, `perRoom`, `bedsOne`, `bedsMany`,
+  `roomsOne`, `roomsMany`, `stayTotal` — two nouns × two forms is the whole table, and a helper
+  would be a third thing to get wrong for one caller. German's plural of Zimmer is invariant; the
+  table says so rather than a rule.
+- **One CSS rule**, `#nest-chatbot .nc-option-total`, scoped like every other; `.nc-option` has no
+  rule of its own. Nothing interactive was added or removed, so the focus rule has nothing to say.
+- **One-line hardening on the way past:** a `null` item in `options[]` used to throw on
+  `option.room` and take the whole reply down with it; it is skipped now.
+
+### The booking url carries the stay — adopted by leaving it alone
+
+Since 1.9.0 every booking `url` — `booking_link.url`, `availability.url`, the Book
+`link_button.url`, `property_cards[].url` — is composed server-side from the catalog's CloudBeds
+code and the collected stay: `https://hotels.cloudbeds.com/{lang}/reservation/{code}?checkin=…&checkout=…&adults=N`,
+the language from the turn's locale, dates only when both are known, `adults` only when the guest
+stated it. The contract's one instruction is not to parse, normalise or strip it.
+
+- **The audit.** The only transformation this file applies to any url is `safeHttpUrl()`'s `trim()`
+  plus the anchored `^https?://` test. The three dedupe comparisons — Book `link_button` vs card
+  CTA, `booking_link` vs card CTA, and the async `availability` vs the interim `booking_link` —
+  compare raw `action.url` against those trimmed hrefs by plain equality; `wchat:action.url` reads
+  the anchor's `href` *attribute*, not the resolved property; the persisted transcript stores the
+  action objects verbatim. Nothing splits on `?`, lowercases, or rebuilds a url. The comments at
+  those sites now say why raw-string equality is what keeps the dedupes working: the server
+  composes both sides from the same inputs, so normalising either side is the thing that would
+  break them.
+- **`wchat:action.url` now carries the query string.** It is the same string as the anchor's
+  `href`, and it reaches a host's analytics with `checkin`, `checkout` and, when the visitor stated
+  it, `adults` attached. Contract-correct — element urls are the one string the payload rule lets
+  travel — documented in README, and deliberately not "cleaned": stripping it would be exactly the
+  normalisation D-071 forbids, and would break a host correlating the click url with the card url.
+  No `wchat:*` event was renamed or removed; no payload lost a field.
+
+### Fixtures
+
+`Mock.init` reports `contract_version: '1.9.0'`. `rooms` is the 1.8.0 showcase in one card: a
+dorm sold per bed (2 beds, `total` twice the bed price), a private room sold per room (1 room —
+the singular path), and a type with no `basis`/`units`/`total` that must render exactly as before.
+`available`'s interim `booking_link` and the poll's final `availability` share one composed url
+with **no** `adults` — the party was never stated, so the server assumed one (D-068(b)) and the
+final's option is `units: 1`, `total == price`; the dedupe must still leave exactly one Book
+button. `book` composes from its own summary; `link`'s Book button is the language-only shape a
+turn with no stay gets; the tenerife rail's three cards and its matching Book button are composed
+strings with a query, so the D-043(c) dedupe is now proven through `?` and `&`. The fixture codes
+are the real Nest ones (`uudLs6` Las Eras, `4VPKYG` Médano, `VKSq5o` Ashavana, `R5Sn9T` Duque),
+so the demo's Book buttons open the right pages, pre-filled.
+
+### Verified
+
+**Mock**, served on a fresh port with the source asserted first and the harness now bypassing the
+HTTP cache — the cache trap bit once more before that: a reload served the pre-edit file and every
+new assertion "failed" against code that was never loaded. **277 checks across twelve suites, zero
+failures** — the new `t12-contract190` (55) plus the eleven from 2.10.3 re-run unchanged but for
+the version literals, the fixture-dependent checks included. The drift `console.warn` stays silent
+at 1.9.0, and a **positive control** confirmed it still fires when the mock was temporarily made to
+report 1.9.1.
+
+**Live**, against the deployed API at `nest-mind.laravel.cloud` through the gitignored
+`demo/demo.html`, every value read off the wire: the init `201` reports `contract_version: 1.9.0`
+and `idle_hours: 168`. "I'd like to book Puerto Nest for 2 adults from 14 to 17 September 2026"
+answered on the Ready turn with an `availability` element whose three options each carried
+`basis: per_person`, `units: 2` and a `total` (`148.00` / `130.00` / `112.00` EUR against bed
+prices of `74.00` / `65.00` / `56.00`); the widget rendered "2 beds · 148.00 EUR total" under "Bed
+in Room 4 (Female with 4 beds) — 74.00 EUR per bed" — the payload's string — and the Book button's
+href equalled `availability.url` byte-for-byte:
+`https://hotels.cloudbeds.com/en/reservation/iOPQ1Z?checkin=2026-09-14&checkout=2026-09-17&adults=2`.
+No option in that payload lacked the trio, so the absent path is covered by the mock alone. No
+contract-drift warn. The same stay in Spanish came back as
+`https://hotels.cloudbeds.com/es/reservation/iOPQ1Z?checkin=2026-09-14&checkout=2026-09-17&adults=2`
+under "2 camas · 148.00 EUR en total", and opening it showed CloudBeds in Spanish with "Check-in
+14 sep 2026", "Check-out 17 sep 2026" and "Resultados de búsqueda para 2 adultos". **26 checks,
+zero failures.** One harness lesson worth keeping: `data-locale="auto"` follows the *browser*, and
+the first run's "English" turn came back with `/it/` because the headless profile is Italian —
+correct behaviour, wrong expectation; the suite now pins the locale it tests.
+
 ## 2.10.3 — 2026-08-23
 
 **The device Back button closes the panel instead of leaving the customer's site.** New UI

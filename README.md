@@ -140,7 +140,7 @@ NestChatbot.toggle();
 NestChatbot.setLocale('es');
 NestChatbot.destroy();
 NestChatbot.locale;    // 'es'
-NestChatbot.version;   // '2.10.3'
+NestChatbot.version;   // '2.11.0'
 NestChatbot.state;     // a snapshot — see Measuring it, below
 ```
 
@@ -199,7 +199,12 @@ without the widget changing.
 character count, `elements[]` lists element types. What the visitor wrote and what the assistant
 replied stay in the widget. `wchat:action` carries the `url` of the button that was clicked so
 you can attribute a booking, and deliberately carries **no** `url` for phone and email links —
-`channel` tells you which was used without putting contact details in your analytics.
+`channel` tells you which was used without putting contact details in your analytics. Since
+contract 1.9.0 that url is composed by the server — a language segment plus `checkin`,
+`checkout` and, when the visitor stated it, `adults` as a query string — so it reaches your
+listener with the stay attached, exactly as the anchor's `href`. Pass it through as-is: the
+widget never parses, normalises or strips it, and an attribution pipeline that wants to match
+the page the visitor actually opened should not either.
 
 **Three counting notes.** On the turn that hits the cap, `wchat:ended` arrives *before* that
 turn's `wchat:reply` — the reply event is emitted last so it can report `ended: true`
@@ -232,8 +237,9 @@ NestChatbot.state;
 
 - A branded launcher that expands into a chat panel, full-screen on phones.
 - Replies typed out character by character, with a thinking indicator while the API works.
-- Booking buttons, contact links (phone, WhatsApp, email) and live availability, rendered from
-  the API's structured response — never parsed out of the reply text.
+- Booking buttons, contact links (phone, WhatsApp, email) and live availability — including
+  what the whole party pays, when the server knows it — rendered from the API's structured
+  response, never parsed out of the reply text.
 - Language switching mid-conversation across English, Spanish, Italian, German and French,
   without losing the thread.
 - Conversations that survive a page reload, for as long as the server keeps them alive.

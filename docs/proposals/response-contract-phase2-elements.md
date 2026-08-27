@@ -11,9 +11,10 @@ it collects the questions the shapes left open.
 ## Status
 
 **This document is history plus four still-live questions.** It was written against
-`chatbot-contract-v1.5.0`; the packet in `docs/wsuite/` is now **1.7.0** and `BUILT_AGAINST` is
-`'1.7.0'`, in lockstep. The text below is kept as the reasoning each shape was agreed on — read
-the open points at the foot for what is actually still open, because **most of them are not**.
+`chatbot-contract-v1.5.0`; the packet in `docs/wsuite/` is now **1.9.0** and `BUILT_AGAINST` is
+`'1.9.0'`, in lockstep (2.11.0, 2026-08-27). The text below is kept as the reasoning each shape
+was agreed on — read the open points at the foot for what is actually still open, because **most
+of them are not**.
 
 **Release 2.5.0 closed the sync** (2026-08-02): it reconciled the three renderers field-by-field
 against the shipped spec and moved `BUILT_AGAINST`, closing the two gaps this section used to

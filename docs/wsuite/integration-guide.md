@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | matches `response-contract.md` 1.7.0 (the server reports the live version as `contract_version` — see §3.1) |
+| **Version** | matches `response-contract.md` 1.9.0 (the server reports the live version as `contract_version` — see §3.1) |
 | **Audience** | Any external website embedding a **custom** chat UI on top of the wSuite chatbot API — e.g. the branded `nest-chatbot-ai` microsite. |
 | **Scope** | The **transport + auth** layer: base URL, the three endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS. |
 | **Not in scope** | The **response envelope** (`reply` / typed `actions[]` / element types). That is fully specified in [`response-contract.md`](response-contract.md) — read it alongside this document; do not duplicate its rules here. |
@@ -68,7 +68,7 @@ Content-Type: application/json
 **`201` response:**
 
 ```json
-{ "conversation": { "uuid": "9b2c…" }, "greeting": "Hi! How can I help?", "actions": [], "idle_hours": 24, "server_time": "2026-08-21T09:46:12+00:00", "contract_version": "1.7.0" }
+{ "conversation": { "uuid": "9b2c…" }, "greeting": "Hi! How can I help?", "actions": [], "idle_hours": 24, "server_time": "2026-08-21T09:46:12+00:00", "contract_version": "1.9.0" }
 ```
 
 | Response field | Type | Since | Notes |
