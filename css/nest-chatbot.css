@@ -1019,9 +1019,18 @@
 }
 
 /* Keeps align-self: the availability card hugs its content instead of stretching
-   into a full-width panel. */
+   into a full-width panel.
+
+   max-width is the other half of that and is load-bearing, not tidiness. Hugging
+   means the card is sized by its widest row's max-content, .nc-body > * is
+   flex-shrink: 0, and .nc-body is overflow-x: hidden — so without a ceiling a
+   long vendor name ("Bed in Room 4 (Female with 4 beds)") sizes the card past the
+   panel and the figure at its right edge is CLIPPED, not scrollable. Stating it
+   here also gives the row grid below a definite width to wrap its name column
+   against. */
 #nest-chatbot .nc-options {
     align-self: flex-start;
+    max-width: 100%;
     font-size: 0.85rem;
     color: var(--nc-ink);
     background: var(--nc-surface);
@@ -1032,20 +1041,93 @@
     gap: 4px;
 }
 
-/* `total` (contract 1.8.0): what the whole party pays for an option, under the
-   per-bed / per-room `price` line it belongs to. It lives inside the option's
-   own block (.nc-option, no rule of its own) so the column's 4px gap above
-   stays "between options" and this line reads as part of the one above it —
-   appended as a flat sibling it would sit exactly as far from its own price as
-   from the next room.
-   600, not 500 — only 400 and 600 faces ship — and it is the total that gets
-   the weight, not the unit price: it is the number the guest asked for. No
+/* One option is a two-column row — the vendor's name, then the figure the guest
+   pays — with, for a party, a third line under both. Grid rather than a wrapping
+   flex row, and the phone is why: a wrapping row whose first item is a long
+   vendor name ("Bed in Room 4 (Female with 4 beds)") drops the FIGURE onto a
+   second line instead of wrapping the name, which puts the price under the wrong
+   edge. Two tracks fix the outcome — the name column takes what is left and
+   wraps its own text — and minmax(0, 1fr) is what lets it shrink below its
+   content width at all; a bare 1fr never goes under min-content.
+
+   Baseline-aligned so a two-line name shares its first line with the figure.
+   Each row is its own grid, so the tracks are not shared between rows; what puts
+   every figure on one edge is that rows STRETCH to the card (a column flex
+   child's default) and the figure is right-aligned inside its own track. */
+#nest-chatbot .nc-option {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    align-items: baseline;
+}
+
+/* Vendor-authored, so an unbroken token must break rather than be clipped by the
+   body's overflow-x: hidden — the same reason .nc-card-title declares it. */
+#nest-chatbot .nc-option-name {
+    overflow-wrap: break-word;
+}
+
+/* The number the guest asked for: 600 (only 400 and 600 faces ship), nowrap so a
+   figure never splits from its currency code (ISO 4217 is three letters, so
+   "12345.00 EUR" is as wide as this gets), right-aligned so every figure in the
+   card shares one edge, and tabular numerals so the digits line up down that edge
+   — the difference between a list and a table of prices. The string is the
+   server's, via textContent; nothing here formats, rounds or derives it. No
    font-family: a div inherits from #nest-chatbot, so this adds no eleventh site
-   to the two-custom-property typography seam. The figure is the server's string
-   via textContent — nothing here formats, rounds or derives it. */
-#nest-chatbot .nc-option-total {
-    margin-top: 2px;
+   to the two-custom-property typography seam. */
+#nest-chatbot .nc-option-figure {
     font-weight: 600;
+    white-space: nowrap;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The unit line under a party's total ("2 beds · 100.00 EUR per bed"). Spans both
+   tracks so it sits under the name AND the figure rather than squeezing in beside
+   the figure. Smaller and 400 is what makes it read as the footnote to the 600
+   figure above it. --nc-text, NOT --nc-text-subtle, even though "muted" is the
+   brief: this line sits on the card's --nc-surface grey, where subtle measures
+   2.7:1 (the .nc-day rule records the measurement) — under the 4.5:1 a 12px
+   string that is meant to be READ needs. Size and weight carry the hierarchy;
+   colour is not asked to. */
+#nest-chatbot .nc-option-sub {
+    grid-column: 1 / -1;
+    font-size: 12px;
+    color: var(--nc-text);
+}
+
+/* The group label ("Beds in shared rooms" / "Private rooms") in the voice the
+   welcome block's TRY ASKING label already uses — a category, not a question, so
+   this treatment and not .nc-chip-head's sentence case. Uppercased here and not
+   in the pack, so a screen reader says the words. It carries the unit a
+   single-unit row no longer states, which makes it content rather than
+   decoration: --nc-text for the same contrast reason as the line above, on the
+   same grey. Room above every heading but the card's first — the column's 4px
+   gap is "between rows", and a heading has to read as the start of something. */
+#nest-chatbot .nc-options-heading {
+    margin-top: 6px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--nc-text);
+}
+
+#nest-chatbot .nc-options-heading:first-child {
+    margin-top: 0;
+}
+
+/* The fold's one control. .nc-prompt supplies the outlined pill — the family
+   var, 600, border, cursor, hover, focus ring — so this states only what differs
+   inside a card: it must not stretch into a full-width bar (a column flex child
+   would), it is a secondary control and sits a size under a prompt, and it wants
+   a little room from the row above. A <button>, so the reset block's
+   font-family: inherit is already in force under .nc-prompt's var. */
+#nest-chatbot .nc-options-more {
+    align-self: flex-start;
+    margin-top: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
 }
 
 /* ---------------------------------------------------------- property carousel */

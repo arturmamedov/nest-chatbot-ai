@@ -179,13 +179,19 @@
             priceFrom: 'from %s',
             priceNight: '/night', priceStay: '/stay',
             pricePerPerson: 'per person', pricePerUnit: 'per unit',
-            // Availability options (contract 1.8.0). Four count keys instead of
-            // a plural helper: two nouns × two forms is the whole table, and a
-            // helper would be a third thing to get wrong for one caller. The
-            // German plural of Zimmer is invariant — the table says so, no rule.
+            // Availability options (contract 1.8.0; grouped and folded since
+            // 2.11.1). Two group headings, two unit labels, two count nouns —
+            // PLURAL ONLY, because the unit line exists only for a party above
+            // one — and the fold's pair. showMore's %s is never 1: a group of
+            // exactly OPTIONS_MAX + 1 renders whole, so the hidden count cannot
+            // be one. Drop that slack rule and these five packs owe a
+            // showMoreOne. No plural helper: the table IS the rule, and German's
+            // plural of Zimmer is invariant, which a rule would have to
+            // special-case.
+            bedsHeading: 'Beds in shared rooms', roomsHeading: 'Private rooms',
             perBed: 'per bed', perRoom: 'per room',
-            bedsOne: '%s bed', bedsMany: '%s beds', roomsOne: '%s room', roomsMany: '%s rooms',
-            stayTotal: '%s · %s total',
+            bedsMany: '%s beds', roomsMany: '%s rooms',
+            showMore: 'Show %s more', showLess: 'Show less',
             carousel: 'carousel', carouselPrev: 'Scroll back', carouselNext: 'Scroll forward',
             scrollLatest: 'Scroll down to last message',
             properties: 'Properties', showingOf: 'Showing %s of %s',
@@ -216,9 +222,10 @@
             priceFrom: 'desde %s',
             priceNight: '/noche', priceStay: '/estancia',
             pricePerPerson: 'por persona', pricePerUnit: 'por unidad',
+            bedsHeading: 'Camas en dormitorio compartido', roomsHeading: 'Habitaciones privadas',
             perBed: 'por cama', perRoom: 'por habitación',
-            bedsOne: '%s cama', bedsMany: '%s camas', roomsOne: '%s habitación', roomsMany: '%s habitaciones',
-            stayTotal: '%s · %s en total',
+            bedsMany: '%s camas', roomsMany: '%s habitaciones',
+            showMore: 'Ver %s más', showLess: 'Ver menos',
             carousel: 'carrusel', carouselPrev: 'Retroceder', carouselNext: 'Avanzar',
             scrollLatest: 'Bajar al último mensaje',
             properties: 'Alojamientos', showingOf: 'Mostrando %s de %s',
@@ -251,9 +258,10 @@
             priceFrom: 'da %s',
             priceNight: '/notte', priceStay: '/soggiorno',
             pricePerPerson: 'a persona', pricePerUnit: 'per unità',
+            bedsHeading: 'Letti in dormitorio', roomsHeading: 'Camere private',
             perBed: 'per letto', perRoom: 'per camera',
-            bedsOne: '%s letto', bedsMany: '%s letti', roomsOne: '%s camera', roomsMany: '%s camere',
-            stayTotal: '%s · %s in totale',
+            bedsMany: '%s letti', roomsMany: '%s camere',
+            showMore: 'Mostra altri %s', showLess: 'Mostra meno',
             carousel: 'carosello', carouselPrev: 'Indietro', carouselNext: 'Avanti',
             scrollLatest: 'Scendi all\'ultimo messaggio',
             properties: 'Strutture', showingOf: 'Mostrati %s di %s',
@@ -284,9 +292,10 @@
             priceFrom: 'ab %s',
             priceNight: '/Nacht', priceStay: '/Aufenthalt',
             pricePerPerson: 'pro Person', pricePerUnit: 'pro Einheit',
+            bedsHeading: 'Betten im Schlafsaal', roomsHeading: 'Privatzimmer',
             perBed: 'pro Bett', perRoom: 'pro Zimmer',
-            bedsOne: '%s Bett', bedsMany: '%s Betten', roomsOne: '%s Zimmer', roomsMany: '%s Zimmer',
-            stayTotal: '%s · %s insgesamt',
+            bedsMany: '%s Betten', roomsMany: '%s Zimmer',
+            showMore: '%s weitere anzeigen', showLess: 'Weniger anzeigen',
             carousel: 'Karussell', carouselPrev: 'Zurück', carouselNext: 'Weiter',
             scrollLatest: 'Zur letzten Nachricht springen',
             properties: 'Unterkünfte', showingOf: '%s von %s angezeigt',
@@ -319,9 +328,10 @@
             priceFrom: 'à partir de %s',
             priceNight: '/nuit', priceStay: '/séjour',
             pricePerPerson: 'par personne', pricePerUnit: 'par unité',
+            bedsHeading: 'Lits en dortoir', roomsHeading: 'Chambres privées',
             perBed: 'par lit', perRoom: 'par chambre',
-            bedsOne: '%s lit', bedsMany: '%s lits', roomsOne: '%s chambre', roomsMany: '%s chambres',
-            stayTotal: '%s · %s au total',
+            bedsMany: '%s lits', roomsMany: '%s chambres',
+            showMore: 'Voir %s de plus', showLess: 'Voir moins',
             carousel: 'carrousel', carouselPrev: 'Précédent', carouselNext: 'Suivant',
             scrollLatest: 'Aller au dernier message',
             properties: 'Hébergements', showingOf: '%s sur %s affichés',
@@ -936,12 +946,16 @@
      *                 server-composed url byte-for-byte (1.9.0; no `adults`, the
      *                 party was never stated) — the ONE interim→poll duplicate
      *                 1.6.0 documents, so exactly one Book button must ever be on
-     *                 screen for this turn. Its option carries the 1.8.0 trio for
-     *                 the assumed party of one (the singular "1 bed" path)
-     *   "rooms"     → availability with room options — the 1.8.0 showcase: a
-     *                 per-bed option and a per-room option each carrying
-     *                 basis/units/total (rendered verbatim, never computed), and
-     *                 one option WITHOUT the trio that must render as before
+     *                 screen for this turn. Its single option is the one-row card:
+     *                 a heading, one line, and NO fold button, because nothing is
+     *                 hidden
+     *   "rooms"     → availability with room options — ELEVEN of them, the shape a
+     *                 real Las Palmas turn returns (observed live 2026-08-27):
+     *                 grouped by `basis` in first-appearance order, three per
+     *                 group with the rest behind one "Show 3 more", four privates
+     *                 proving the OPTIONS_MAX + 1 slack path, the party's `total`
+     *                 as the figure with the per-bed price under the name, and one
+     *                 option WITHOUT the trio that must render as before 1.8.0
      *   "tenerife" / "canaria" / "ibiza" → property_cards + promo_card + the CTA
      *                 trio. The rail is also the 1.6.x showcase: per-card
      *                 period/basis (two DIFFERENT suffixes on one rail), a
@@ -1178,22 +1192,35 @@
                 }
 
                 if (q.indexOf('rooms') !== -1) {
-                    // The 1.8.0 showcase in ONE card: a dorm sold per bed (2 beds
-                    // for a party of 2), a private room sold per room (1 room for
-                    // the same party), and a type the PMS snapshot cannot say how
-                    // it sells — no basis, no units, no total — which must render
-                    // exactly as before 1.8.0. `total` is price × units as the
-                    // SERVER computed it; the widget prints the string and never
-                    // does the multiplication. `price` is the stay total for ONE
-                    // unit (three nights here), never a per-night figure.
+                    // The Las Palmas shape (observed live 2026-08-27 on 2.11.0):
+                    // ELEVEN options, room type × rate plan, in the server's own
+                    // order — preferred basis first, snapshot order otherwise,
+                    // never capped, never price-sorted. Four privates for this
+                    // party of two (OPTIONS_MAX + 1: the slack path, shown whole),
+                    // six dorm plans (cut to three, three hidden), and one type
+                    // the snapshot cannot say how it sells — no basis, no units,
+                    // no total — which renders as the pre-1.8.0 line in an
+                    // unlabelled group where the server put it. `total` is
+                    // price × units as the SERVER computed it; the widget prints
+                    // the string and never does the multiplication. `price` is the
+                    // stay total for ONE unit (three nights here), never a
+                    // per-night figure.
                     return reply(done, 200, {
                         reply: 'Here is what we have for those dates.',
                         actions: [{
                             type: 'availability',
                             available: true,
                             options: [
-                                { room: 'Mixed dorm', price: '100.00', currency: 'EUR', basis: 'per_person', units: 2, total: '200.00' },
                                 { room: 'Private double', price: '204.00', currency: 'EUR', basis: 'per_unit', units: 1, total: '204.00' },
+                                { room: 'Private double (Non-refundable)', price: '183.60', currency: 'EUR', basis: 'per_unit', units: 1, total: '183.60' },
+                                { room: 'Private twin', price: '210.00', currency: 'EUR', basis: 'per_unit', units: 1, total: '210.00' },
+                                { room: 'Private triple', price: '246.00', currency: 'EUR', basis: 'per_unit', units: 1, total: '246.00' },
+                                { room: 'Mixed dorm', price: '100.00', currency: 'EUR', basis: 'per_person', units: 2, total: '200.00' },
+                                { room: 'Mixed Dorm (Nest Pass - Weekly)', price: '88.00', currency: 'EUR', basis: 'per_person', units: 2, total: '176.00' },
+                                { room: 'Female Dorm', price: '104.00', currency: 'EUR', basis: 'per_person', units: 2, total: '208.00' },
+                                { room: 'Bed in Room 4 (Female with 4 beds)', price: '96.00', currency: 'EUR', basis: 'per_person', units: 2, total: '192.00' },
+                                { room: 'Edinburgh (3 Bed Male)', price: '92.00', currency: 'EUR', basis: 'per_person', units: 2, total: '184.00' },
+                                { room: 'Male Dorm (Non-refundable)', price: '84.00', currency: 'EUR', basis: 'per_person', units: 2, total: '168.00' },
                                 { room: 'Family room', price: '270.00', currency: 'EUR' }
                             ],
                             url: 'https://hotels.cloudbeds.com/en/reservation/uudLs6?checkin=2026-10-10&checkout=2026-10-13&adults=2'
@@ -1370,9 +1397,12 @@
                 // are byte-identical INCLUDING the query string. This is the ONE
                 // interim→poll duplicate 1.6.0 documents, and the per-turn
                 // `rendered` set must suppress the trailing Book button while the
-                // options list — now carrying the 1.8.0 party total — still
-                // renders. The party was never stated, so the server assumed one
-                // (D-068(b)): units 1, total == price, and no `adults` in the url.
+                // options list still renders. The party was never stated, so the
+                // server assumed one (D-068(b)): units 1, total == price, and no
+                // `adults` in the url — which since 2.11.1 makes this the one-row
+                // card: one heading, one single-line option, and NO fold button,
+                // because a card with nothing hidden must not grow a control that
+                // does nothing.
                 return reply(done, 200, {
                     status: 'ready',
                     reply: 'Yes! We have 4 beds free in the mixed dorm for those nights — 100.00 EUR for the stay, assuming it\'s just you.',
@@ -2462,6 +2492,162 @@
         }
     }
 
+    /* ---------------------------------------------------------- availability */
+
+    /*
+     * The per-GROUP cap on option rows. A bed group and a room group each show
+     * this many; everything past it is folded behind ONE "Show N more" button at
+     * the foot of the card. Per group rather than per card, and that is the whole
+     * point: the server orders "preferred basis first", never collapses and never
+     * price-sorts (observed live 2026-08-27 — Las Palmas Nest, eleven room-type ×
+     * rate-plan options for a solo guest), so a card-wide cap of any size would
+     * show eight dorm plans and zero privates, hiding exactly the alternative the
+     * grouping exists to surface.
+     *
+     * Three is one screen's worth: two capped groups, two headings, the button
+     * and the Book row fit under the reply bubble, so a guest sees the cheapest of
+     * each kind without scrolling. The cut is SKIPPED when it would hide one row
+     * (a group of exactly OPTIONS_MAX + 1 renders whole): the button is taller
+     * than the row it would replace. A side effect worth keeping — the hidden
+     * count is then never 1, so `showMore` needs no singular form.
+     */
+    var OPTIONS_MAX = 3;
+
+    /*
+     * The strict `basis` read, shared by the grouping and the row so they cannot
+     * disagree about what a known value is. Exactly as cardPrice() treats
+     * price_from.basis: an unknown value contributes nothing and falls through to
+     * the pre-1.8.0 rendering, which is what ignoring what you do not recognise
+     * means for a field VALUE rather than a field.
+     */
+    function knownBasis(option) {
+        return (option.basis === 'per_person' || option.basis === 'per_unit') ? option.basis : '';
+    }
+
+    /*
+     * The card's words, one function each: composed here at render time and
+     * RE-derived by setLocale(), which is the only way the two can never drift.
+     * All three are pack strings around payload VALUES — for this element the
+     * contract sends `basis` as a bare enum and no display text at all, so these
+     * words are the widget's own and follow the language switcher like every
+     * other control. What is not ours: `room`, the PMS's vendor name, and the
+     * figures, which are the server's strings.
+     */
+    function optionsHeadingText(basis) {
+        return t(basis === 'per_person' ? 'bedsHeading' : 'roomsHeading');
+    }
+
+    // "2 beds · 100.00 EUR per bed". `each` is the server's price and currency
+    // already joined — locale-independent, which is why it can ride the node as a
+    // stamp for the repaint to read back.
+    function optionSubText(basis, units, each) {
+        return tf(basis === 'per_person' ? 'bedsMany' : 'roomsMany', units) +
+            ' · ' + each + ' ' + t(basis === 'per_person' ? 'perBed' : 'perRoom');
+    }
+
+    function optionsMoreText(count, expanded) {
+        return expanded ? t('showLess') : tf('showMore', count);
+    }
+
+    /*
+     * Options bucketed by `basis`, in order of FIRST APPEARANCE — never
+     * beds-first or rooms-first by our choice. The server puts the basis the
+     * guest asked for first, and keeping that is what keeps the card agreeing
+     * with the reply, which was written from the same list in the same order.
+     * Three buckets at most: per_person, per_unit, and "no basis" — absent, or a
+     * value this build does not know — which renders as the pre-1.8.0 option
+     * where the server put it. The null-item skip is the 2.11.0 hardening, kept.
+     */
+    function groupOptions(options) {
+        var groups = [];
+        var byBasis = Object.create(null);
+        for (var i = 0; i < options.length; i++) {
+            var option = options[i];
+            if (!option) { continue; }
+            var basis = knownBasis(option);
+            if (!byBasis[basis]) {
+                byBasis[basis] = { basis: basis, items: [] };
+                groups.push(byBasis[basis]);
+            }
+            byBasis[basis].items.push(option);
+        }
+        return groups;
+    }
+
+    /*
+     * One option, two columns: the vendor's name and the figure the guest pays.
+     * `price` is, as it always was, the stay total for ONE bed or room; `total`
+     * (1.8.0) is what the PARTY pays, and it is the server's string VERBATIM —
+     * never price × units computed here: a bed price times a guessed party size
+     * is a wrong quote on a link that will not honour it (response-contract.md,
+     * `options[]`). So the figure is `total` exactly when there is a party to pay
+     * it — units above one, with a basis this build knows to name the unit — and
+     * `price` otherwise: for units = 1 the contract makes that the same string,
+     * and for a pre-1.8.0 option it is the only one there is. The contract also
+     * makes `total` null exactly when `price` is, so an option with no rate falls
+     * to the name alone rather than to half a quote.
+     *
+     * A party row adds the unit line under the name; a single-unit row gets no
+     * unit label at all, because the group heading says it once for the whole
+     * group.
+     */
+    function optionRow(option) {
+        var row = el('div', 'nc-option');
+        row.appendChild(el('div', 'nc-option-name', option.room || ''));
+        var basis = knownBasis(option);
+        var party = !!basis && option.units > 1 && option.total != null && option.price != null;
+        var figure = party ? option.total : option.price;
+        if (figure != null) {
+            row.appendChild(el('div', 'nc-option-figure', (figure + ' ' + (option.currency || '')).trim()));
+        }
+        if (party) {
+            var each = (option.price + ' ' + (option.currency || '')).trim();
+            var sub = el('div', 'nc-option-sub', optionSubText(basis, option.units, each));
+            // The values the repaint re-derives from, on the node itself rather
+            // than in a registry there would be nothing to keep in step with —
+            // the data-nc-at precedent.
+            attrs(sub, { 'data-nc-basis': basis, 'data-nc-units': option.units, 'data-nc-each': each });
+            row.appendChild(sub);
+        }
+        return row;
+    }
+
+    /*
+     * The fold's one control, closed over the rows it hides. A closure per CARD,
+     * not per anchor: a transcript carries a handful of these where it carries
+     * dozens of CTAs, which is why linkButton() delegates and this does not.
+     *
+     * Reveals in place and folds again. textContent on the SAME node for the
+     * label, never a replacement (armMenuConfirm()'s rule): the guest is standing
+     * on this button when it changes, and swapping the node would drop them to
+     * <body>. The rows themselves hold no focusable node, so hiding them cannot
+     * strand focus — if a row ever gains one, the collapse branch must sample
+     * document.activeElement against each row first and move focus here before
+     * the class lands (retireChipRows() is the recipe).
+     *
+     * afterRender() and nothing that scrolls: the fold is the guest's own act,
+     * and the anchor pad and the cue are what a height change has to re-measure.
+     * No emit(): no UI toggle in this widget reports itself, and this button
+     * carries no data-wchat-el, so the delegated CTA listener never sees it.
+     */
+    function optionsToggle(hidden) {
+        var more = el('button', 'nc-prompt nc-options-more', optionsMoreText(hidden.length, false));
+        attrs(more, { type: 'button', 'aria-expanded': 'false', 'data-nc-more': hidden.length });
+        more.addEventListener('click', function () {
+            var expanding = more.getAttribute('aria-expanded') !== 'true';
+            for (var i = 0; i < hidden.length; i++) {
+                hidden[i].classList.toggle('nc-hidden', !expanding);
+            }
+            more.setAttribute('aria-expanded', expanding ? 'true' : 'false');
+            // Read from the pack at press time, so a guest who switched language
+            // gets the next label in the new one — the same "handlers read their
+            // label fresh" line setLocale() draws for the prompt pills.
+            more.textContent = optionsMoreText(hidden.length, expanding);
+            afterRender();
+        });
+        return more;
+    }
+
     // The options card closes any open CTA group; the trailing booking button opens a
     // fresh row, which is returned for whatever follows.
     function renderAvailability(action, rendered) {
@@ -2469,43 +2655,35 @@
             els.body.appendChild(el('div', 'nc-options', t('noAvailability')));
         } else if (action.options && action.options.length) {
             var list = el('div', 'nc-options');
-            action.options.forEach(function (option) {
-                if (!option) { return; }
-                // One block per option, so the total below sits WITH its price
-                // rather than a full column-gap away from it (see .nc-option-total).
-                var item = el('div', 'nc-option');
-                // `price` is, as it always was, the stay total for ONE bed or
-                // room. Its label comes from `basis` and ONLY from `basis`
-                // (contract 1.8.0) — strict matches, exactly as cardPrice()
-                // treats price_from.basis: an unknown value contributes nothing,
-                // an absent one leaves the bare figure the widget showed before.
-                var unit = '';
-                if (option.basis === 'per_person') { unit = ' ' + t('perBed'); }
-                else if (option.basis === 'per_unit') { unit = ' ' + t('perRoom'); }
-                var line = (option.room || '') +
-                    (option.price ? ' — ' + option.price + ' ' + (option.currency || '') + unit : '');
-                item.appendChild(el('div', null, line.trim()));
-                // `total` (1.8.0) is what the PARTY pays, and it is the server's
-                // string VERBATIM — never price × units computed here: a bed price
-                // times a guessed party size is a wrong quote on a link that will
-                // not honour it (response-contract.md, `options[]`). The three
-                // fields come together or not at all, so the guard is the
-                // reference renderer's (total AND units present) plus the strict
-                // basis match above — a count with no noun to give it ("2 ·
-                // 200.00 EUR total") tells the guest nothing, and the reply text
-                // already carries the same numbers. Absent means: exactly the
-                // pre-1.8.0 card.
-                if (unit && option.total != null && option.units != null) {
-                    var many = option.units !== 1;
-                    var countKey = option.basis === 'per_person'
-                        ? (many ? 'bedsMany' : 'bedsOne')
-                        : (many ? 'roomsMany' : 'roomsOne');
-                    var amount = (option.total + ' ' + (option.currency || '')).trim();
-                    item.appendChild(el('div', 'nc-option-total',
-                        tf('stayTotal', tf(countKey, option.units), amount)));
+            var hidden = [];
+            var groups = groupOptions(action.options);
+            for (var g = 0; g < groups.length; g++) {
+                var group = groups[g];
+                // A heading for every group WITH a basis, even a lone one: the
+                // single-unit row no longer says "per bed", so the heading is the
+                // only place the card says whether 44.00 buys a bed or a room. No
+                // basis, no heading — the pre-1.8.0 card, where the server put it.
+                if (group.basis) {
+                    var head = el('div', 'nc-options-heading', optionsHeadingText(group.basis));
+                    attrs(head, { 'data-nc-basis': group.basis });
+                    list.appendChild(head);
                 }
-                list.appendChild(item);
-            });
+                var shown = group.items.length > OPTIONS_MAX + 1 ? OPTIONS_MAX : group.items.length;
+                for (var i = 0; i < group.items.length; i++) {
+                    var optionNode = optionRow(group.items[i]);
+                    // Hidden rows stay IN the DOM, in server order, so revealing
+                    // them is a class flip and a replay paints the same card.
+                    // .nc-hidden is display: none — out of the tab order and the
+                    // accessibility tree, and nothing transitions, so the pad and
+                    // the cue measure a settled layout on the next line.
+                    if (i >= shown) { optionNode.classList.add('nc-hidden'); hidden.push(optionNode); }
+                    list.appendChild(optionNode);
+                }
+            }
+            // One button per card, at the foot, only when something is hidden: a
+            // card with nothing to reveal must not grow a control that does
+            // nothing — the `available` poll fixture's single option.
+            if (hidden.length) { list.appendChild(optionsToggle(hidden)); }
             els.body.appendChild(list);
         }
         // The ONE contract-scoped interim→poll suppression (1.6.0): an availability
@@ -4812,6 +4990,36 @@
                 stampBubble(node, at);
             }
         }
+        /*
+         * The availability card is the widget's OWN words around the server's
+         * numbers — group headings, count nouns, unit labels and the fold's
+         * label all come from the pack. For this element the contract sends
+         * `basis` as a bare enum and no display text at all, so localizing them
+         * is ours and they follow the switcher like every other control. What
+         * stays frozen is PAYLOAD: `room` is the PMS's vendor name and the
+         * figures are the server's strings — neither is ours to repaint.
+         *
+         * textContent on the SAME nodes, never replacements (armMenuConfirm()'s
+         * rule): the guest may be standing on the fold button.
+         */
+        var opts = els.body.querySelectorAll('.nc-options-heading, .nc-option-sub, .nc-options-more');
+        for (var oi = 0; oi < opts.length; oi++) {
+            var on = opts[oi];
+            if (on.classList.contains('nc-options-more')) {
+                on.textContent = optionsMoreText(on.getAttribute('data-nc-more'),
+                    on.getAttribute('aria-expanded') === 'true');
+            } else if (on.classList.contains('nc-options-heading')) {
+                on.textContent = optionsHeadingText(on.getAttribute('data-nc-basis'));
+            } else {
+                on.textContent = optionSubText(on.getAttribute('data-nc-basis'),
+                    on.getAttribute('data-nc-units'), on.getAttribute('data-nc-each'));
+            }
+        }
+        // A relabelled card can change height — "Camas en dormitorio compartido"
+        // wraps where "Beds in shared rooms" did not — and the anchor pad and the
+        // cue are what a height change has to re-measure. Guarded, so a
+        // transcript with no options card behaves exactly as it did before.
+        if (opts.length) { afterRender(); }
         els.panel.setAttribute('aria-label', 'Germán — ' + t('assistantRole'));
         // The one control whose label depends on state, not just on locale: it
         // reads "shrink" while the sheet is out.
