@@ -5,6 +5,165 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.11.1 — 2026-08-27
+
+**The availability card folds: one line per option, beds and rooms grouped, three per group.** A
+**PATCH** — new UI behaviour and nothing a host's `<script>` tag has to say: no `data-*` attribute,
+no `window.NestChatbot` method, `BUILT_AGAINST` still `1.9.0` and `docs/wsuite/` untouched.
+
+A live booking turn on nestshostels.com (2.11.0, Italian, Las Palmas Nest, **solo** guest,
+2026-08-27) came back with **eleven** `options[]` — one per room type × rate plan, which is the
+designed output: `StayResolver` puts the basis the guest asked for first and otherwise never caps,
+collapses or price-sorts. 2.11.0 printed **two** lines per option, and for `units: 1` the contract
+makes `total` equal `price`, so the second line said the first again: `Edinburgh (3 Bed Male) —
+44.00 EUR per letto`, then `1 letto · 44.00 EUR in totale`. Twenty-two lines to learn eleven
+numbers, under prose that had already named most of them. Re-measured during this release the same
+property returned **thirteen** — eight beds and five private rooms — so the count is not an outlier
+to design around, it is the shape.
+
+### One line per option, and the figure is the party's
+
+Each option is now a two-column row: the vendor's name, and the one number the guest is asking for.
+That figure is `total` when there is a party to pay it — `units` above one, with a `basis` this
+build knows — and `price` otherwise, which the contract makes the same string at `units: 1` and the
+only one there is without the trio. Still the server's string through `textContent`: no `Intl`, no
+arithmetic, and the suites still pin the "never" statically (no `units *`, no `price *` anywhere in
+the source).
+
+A party row keeps the composition, once, under the name: `2 beds · 100.00 EUR per bed`. A
+single-unit row gets no second line and no unit label at all — the group heading above it says
+whether 44.00 buys a bed or a room, which is why a lone labelled group still gets its heading. And
+because the contract makes `total` null exactly when `price` is, an option with no rate renders its
+name alone rather than half a quote — seen live this release on `La Paz (Private - Double Bed)`.
+
+### Beds and rooms, grouped in the server's order
+
+Options are bucketed by `basis` in **first-appearance** order — never beds-first or rooms-first by
+our choice. The server's order is a preference, not an accident, and keeping it is what keeps the
+card agreeing with the reply, which was written from the same list. Rows keep server order inside
+each group. An option with no `basis`, or a value this build does not know, forms an unlabelled
+group rendered exactly where the server put it, as the pre-1.8.0 line — which is what ignoring what
+you do not recognise means for a field *value*.
+
+### Three per group, the rest behind one button
+
+`OPTIONS_MAX = 3`, applied **per group**, with one `Show N more` at the foot of the card. Per group
+and not per card, and that is the whole point: with eight dorm plans ahead of five privates, a
+card-wide cap of any size shows dorms and zero privates — hiding exactly the alternative the
+grouping exists to surface.
+
+- **The cut is skipped when it would hide one row.** A group of exactly `OPTIONS_MAX + 1` renders
+  whole, because the button is taller than the row it would replace. A side effect worth keeping:
+  the hidden count is then never `1`, so `showMore` needs no singular form in five packs.
+- **Hidden rows stay in the DOM**, in server order, wearing `.nc-hidden` (`display: none`) — out of
+  the tab order and the accessibility tree. Revealing them is a class flip, nothing transitions, so
+  `afterRender()` measures a settled layout, and a replay repaints the same card.
+- **`afterRender()`, never a scroll.** The fold is the guest's own act; the anchor pad and the ⌄ cue
+  are what a height change has to re-measure. No `emit()` either — no UI toggle in this widget
+  reports itself, and the button carries no `data-wchat-el`, so the delegated CTA listener never
+  sees it. Listener counts outside the root are unchanged: 1 `window`, 3 `document`.
+- **`aria-expanded` on the button, and the label changes by `textContent` on the same node** —
+  `armMenuConfirm()`'s rule: the guest is standing on it when it changes, and swapping the node
+  would drop their focus to `<body>`. The hidden rows hold no focusable node, so hiding them cannot
+  strand focus; the day a row grows a link, the collapse branch owes `retireChipRows()`'s recipe.
+- **No `aria-controls`**: it would need ids on scattered rows, and the header ⋯ menu ships
+  `aria-expanded` alone as the reviewed precedent.
+- **Replay comes back collapsed for free.** `persistableActions()` keeps the element verbatim and
+  the renderer rebuilds the hidden set per render — no fold state joins the stored record.
+
+### The row is two columns
+
+`.nc-option` is a grid, `minmax(0, 1fr) auto`, baseline-aligned. A wrapping flex row whose first
+item is a long vendor name ("Bed in Room 4 (Female with 4 beds)") drops the **figure** onto a second
+line, left-aligned under the name — the price under the wrong edge. Two tracks fix the outcome: the
+name column takes what is left and wraps its own text while the figure holds the right edge on the
+name's first line. `minmax(0, …)` is the load-bearing half — a bare `1fr` never shrinks below
+`min-content`. Verified at 360px and at 320px, where this name actually runs out of room.
+
+`.nc-options` now states `max-width: 100%`, which is not tidiness: the card hugs its content,
+`.nc-body > *` is `flex-shrink: 0` and `.nc-body` is `overflow-x: hidden`, so without a ceiling a
+long name sizes the card past the panel and the figure is clipped rather than reachable.
+
+The figure is 600 / `nowrap` / right-aligned / `tabular-nums`; the sub-line and the group heading
+are **`--nc-text`**, not `--nc-text-subtle` — subtle measures ~2.7:1 on the card's `--nc-surface`
+grey (the `.nc-day` rule records it), under the 4.5:1 a 12px string meant to be read needs. Size and
+weight carry the hierarchy. Seven rules, every one scoped under `#nest-chatbot` and `nc-`-prefixed,
+**no `font-family`** — the two-custom-property typography seam still has exactly ten sites.
+
+### The card follows the language switcher
+
+Its headings, count nouns, unit labels and fold label all repaint on `setLocale()`, on cards already
+on screen. That is not a new principle, it is the existing one applied: what stays frozen is
+**payload** — reply text, server-localized `quick_replies` labels, `promo_card` copy — and for this
+element the contract sends no display text at all, only `basis` as a bare enum, with the explicit
+instruction to map it to "a localized suffix of your own". So every word on the card is the widget's
+own and follows the switcher like the close button; `room` (the PMS's vendor name) and the figures
+do not. Three `data-nc-*` stamps carry the payload values the repaint re-derives from, following the
+`data-nc-at` precedent, and one `afterRender()` covers the height a relabelled heading can change.
+
+### Packs: four keys in, three out
+
+**In:** `bedsHeading`, `roomsHeading`, `showMore`, `showLess`. **Kept:** `perBed`, `perRoom`,
+`bedsMany`, `roomsMany`. **Out:** `stayTotal`, `bedsOne`, `roomsOne` — the singular count keys have
+no caller left, because the sub-line exists only for a party above one, and dead keys ship to every
+page. Removing a pack key is not a breaking change: packs are internal, and the embed contract is
+what a host's `<script>` tag has to say. Still no plural helper — the table is the rule, and German's
+plural of Zimmer is invariant, which a rule would have to special-case.
+
+### Fixtures
+
+`rooms` is now the Las Palmas shape: **eleven** options in the server's own order — four `per_unit`
+first (the `OPTIONS_MAX + 1` slack path, shown whole), six `per_person` (cut to three), and one type
+with no trio last, rendered as the pre-1.8.0 line in an unlabelled group. One keyword now exercises
+grouping, first-appearance order, the slack, the cut, the fold, the party figure, the sub-line and
+the pre-1.8.0 fallback at once. `available`'s poll fixture is unchanged and becomes the counterpart
+proof: one `units: 1` option is a heading, one line and **no** button, because a card with nothing
+hidden must not grow a control that does nothing.
+
+### Verified
+
+**Mock — 387 assertions across 13 CDP suites, 0 failures**, served from a fresh port with the HTTP
+cache disabled and the source asserted before any result (CLAUDE.md § "The browser will run your
+last edit's predecessor"). The harness's `openPanel()` now targets `.nc-toggler`: the widget already
+had three `[aria-expanded]` buttons and the fold adds one per card. A new `t14-options.mjs` (90
+assertions) covers grouping, heading order, the per-group cut, the slack, expand ⇄ collapse with
+focus held on the same node and `wchatLog` unchanged, Enter on the focused button, the 360/320px
+grid proof, replay-collapses, the locale repaint of an already-rendered card, and six injected
+payloads the fixture cannot reach — an unlabelled group first, no-basis-only cards at six and at
+four, five-and-five, `price`/`total` both null, and an unknown `basis` value. The collapse asserts
+`scrollTop === min(before, scrollHeight − clientHeight)`: the browser clamps when content shrinks,
+so asserting equality would fail on correct behaviour. `t6-scoping.mjs` still passes — the demo
+page's own `.hidden` / `.message` / `.chat-header` do not move.
+
+**Live — 89 assertions, 0 failures**, against the deployed tenant through `demo/demo.html`. Init
+`201`: `contract_version: 1.9.0`, `idle_hours: 168`, `server_time` present, no drift warn. Las Palmas
+Nest, 14–17 September 2026, answered **thirteen** options both times — eight `per_person`, five
+`per_unit`. Solo (EN): every row single-line, seven hidden, one `Show 7 more`, and the null-rate
+`La Paz` row rendered as its name alone. Party of two (ES): `120.00 EUR` over
+`2 camas · 60.00 EUR por cama`, `CAMAS EN DORMITORIO COMPARTIDO` before `HABITACIONES PRIVADAS` in
+the server's order, `Ver 7 más`, and the Book href equal to `availability.url` byte-for-byte with
+`/es/reservation/`, both dates and `adults=2`.
+
+### Handed upstream
+
+Three items for a `~/Herd/nest-mind` session, written from here and done there
+(`plans/widget-availability-fold-prompt.md` § The other half). Nothing moves in the consumer-sync
+registry: no contract version changes and `BUILT_AGAINST` stays `1.9.0`.
+
+- **An instruction, not a filter.** `TurnPromptRenderer::modeInstruction()` bounds only the stay
+  summary; nothing tells the model the option list is already on screen beside its reply. Ask it to
+  name at most the cheapest bed and the cheapest room by `total` and point at the list for the rest
+  — keeping the option lines in the context, changing what it is told to do with them. **Worth
+  noting from this release's live runs:** both replies already did roughly that, naming only the
+  cheapest of each kind. So the ask is to make it *deterministic*, not to stop a duplication that
+  fires every time — the 2026-08-27 turn that triggered this listed all eleven, and nothing in the
+  prompt currently prevents that.
+- **O-59** (order `options[]` by `total` within each `basis`) now has a stated trigger: thirteen
+  unsorted plans is where "cheapest first" stops being cosmetic. The widget keeps server order
+  inside each group by design, so the day O-59 ships the card sorts itself with no widget change.
+- **Not asked:** `property_cards` on booking turns. D-069 and D-009 keep it off deliberately and the
+  dedupe logic assumes it.
+
 ## 2.11.0 — 2026-08-27
 
 **Contract sync: `BUILT_AGAINST` 1.7.0 → 1.9.0 (D-067, D-071).** A **MINOR**, the case reserved

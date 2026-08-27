@@ -1,11 +1,25 @@
-> **Written 2026-08-27, against widget `2.11.0` / `BUILT_AGAINST` `1.9.0`.** Not implemented —
-> this is the brief plus the findings a scoping pass turned up, so the session that picks it up
-> does not rediscover them. Line numbers are deliberately omitted and will drift anyway;
-> **function names and the section banners in `nest-chatbot.js` are the durable reference**
-> (`renderAvailability()` in `render`, the `Mock` fixtures in `api`, `STRINGS` in `i18n`). The
-> shape below is stated as settled because the owner chose it; everything under "Open decisions"
-> is genuinely open and is the first task. The last section is for the *other* repo — hand it to
-> a session opened at `~/Herd/nest-mind`; nothing in it is done from here.
+> **Written 2026-08-27 against widget `2.11.0`. SHIPPED the same day as `2.11.1`** — see
+> `CHANGELOG.md`. Kept as the design record: the findings below are why the card is shaped the way
+> it is, and re-deriving them is the cost this file exists to avoid. Line numbers are deliberately
+> omitted and will drift anyway; **function names and the section banners in `nest-chatbot.js` are
+> the durable reference** (`renderAvailability()`, `groupOptions()`, `optionRow()`,
+> `optionsToggle()` and `OPTIONS_MAX` in `render`, the `Mock` fixtures in `api`, `STRINGS` in
+> `i18n`).
+>
+> **What shipped differs from the code below in three places**, all recorded in the changelog:
+> the three label strings became functions (`optionsHeadingText()` / `optionSubText()` /
+> `optionsMoreText()`) so `setLocale()` can re-derive them; three `data-nc-*` stamps carry the
+> payload values that repaint reads back; and the loop's row variable is `optionNode`, because
+> `var row` would have redeclared the CTA row in the untouched tail.
+>
+> **"Open decisions" is settled** — (1) the WHOLE card follows `setLocale()`, not just the button:
+> the contract sends no display text for this element, so every word on it is the widget's own and
+> follows the switcher like any other control; (2) no `aria-controls`; (3) the uppercase category
+> heading; (4) `text-align: right`; (5) two commits; (6) `t13-live190.mjs` extended in place.
+>
+> **The last section is still outstanding.** It is for the *other* repo — hand it to a session
+> opened at `~/Herd/nest-mind`; nothing in it is done from here. One update from this release's
+> live runs is folded into item 1 below.
 
 # Task — the availability card: one line per option, beds and rooms grouped, three per group and a fold
 
@@ -742,6 +756,17 @@ list twice.
    Do not solve this by trimming options[] on the wire: the widget, and any
    consumer, needs the full list; the contract says options are display-only
    and the widget's card is what shows them.
+
+   UPDATE from the widget's 2.11.1 live verification (2026-08-27, Las Palmas
+   Nest, 14-17 Sept 2026, THIRTEEN options both times): both replies already did
+   roughly the right thing unprompted. EN, solo: "Cheapest options are a bed in
+   Madrid or Amsterdam (both Mixed 6 Beds) at 60 EUR total, or if you want your
+   own space, Tokyo, Rome, or Ibiza (Private Double) at 109 EUR total." ES, party
+   of 2: "...por ejemplo Quito (privada, bano compartido) a 90EUR la habitacion,
+   o si prefieres algo mas economico compartiendo, Madrid o Amsterdam a 60EUR por
+   cama." So the ask is to make that DETERMINISTIC, not to stop a duplication
+   that fires every time - the turn that triggered this listed all eleven, and
+   nothing in the prompt currently prevents it. The guard test is the point.
 
 2. O-59 — order options[] by `total` within each `basis` (availability contract
    2.2.0, a MINOR, owned by wPms). Not asked for here; record the Las Palmas turn

@@ -209,9 +209,13 @@ GET  {apiBase}{async_result.url}                          → 200 {status, reply
   the **bare** price when they are absent. An invented "/night" on a per-stay figure is a
   guest-facing pricing error, not a cosmetic one.
 - **Never derive `total`, never normalise a booking url.** An `availability` option's `total`
-  (contract 1.8.0) is the server's string, printed verbatim beside a `basis`-derived "per bed" /
-  "per room" label; `price × units` computed here is a wrong quote on a link that will not
-  honour it, so absent means the pre-1.8.0 line. And since 1.9.0 (D-071) every booking `url`
+  (contract 1.8.0) is the server's string, printed verbatim; `price × units` computed here is a
+  wrong quote on a link that will not honour it, so absent means the pre-1.8.0 line. Since 2.11.1
+  it is the **figure** on a party row — units above one, with a known `basis` — and `price` is the
+  figure otherwise, which the contract makes the same string at `units: 1` and the only one there
+  is without the trio; the unit label a single-unit row used to carry now lives once in the group
+  heading. The contract also makes `total` null exactly when `price` is, so an option with no rate
+  renders its name alone rather than half a quote. And since 1.9.0 (D-071) every booking `url`
   is server-composed —
   `https://hotels.cloudbeds.com/{lang}/reservation/{code}?checkin=YYYY-MM-DD&checkout=YYYY-MM-DD&adults=N`
   — so the only thing this file may do to one is `safeHttpUrl()`'s `trim()`. The two dedupes
@@ -684,4 +688,8 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   2.11.0 is the 1.9.0 sync (D-067, D-071): a fresh packet and a `BUILT_AGAINST` move — the minor
   case — plus the one renderer line 1.8.0 asks for, seven pack keys and one CSS rule, all
   patch-shaped on their own.
-  The next is **2.11.1** unless it is a sync.
+  2.11.1 is the folded availability card: new UI behaviour, seven CSS rules, four pack keys in and
+  three **out**, and no `data-*` attribute, no `window.NestChatbot` method and no `BUILT_AGAINST`
+  move — a patch by this rule. Removing a **pack key** is not breaking: packs are internal, and
+  the embed contract is what a host's `<script>` tag has to say.
+  The next is **2.11.2** unless it is a sync.

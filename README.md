@@ -237,9 +237,10 @@ NestChatbot.state;
 
 - A branded launcher that expands into a chat panel, full-screen on phones.
 - Replies typed out character by character, with a thinking indicator while the API works.
-- Booking buttons, contact links (phone, WhatsApp, email) and live availability — including
-  what the whole party pays, when the server knows it — rendered from the API's structured
-  response, never parsed out of the reply text.
+- Booking buttons, contact links (phone, WhatsApp, email) and live availability — beds and
+  private rooms grouped, three of each with the rest one tap away, and what the whole party pays
+  when the server knows it — rendered from the API's structured response, never parsed out of the
+  reply text.
 - Language switching mid-conversation across English, Spanish, Italian, German and French,
   without losing the thread.
 - Conversations that survive a page reload, for as long as the server keeps them alive.
