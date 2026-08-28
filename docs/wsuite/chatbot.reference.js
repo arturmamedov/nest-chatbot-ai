@@ -55,7 +55,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.9.0';
+    var BUILT_AGAINST = '1.10.0';
 
     // ---- state ---------------------------------------------------------------
     var conversationUuid = null;
@@ -419,12 +419,18 @@
             return;
         }
 
-        // A poll's availability url falls back to the property's booking_url, which
-        // the interim turn already anchored as booking_link -- so without this check
-        // the guest ends up with two identical Book buttons (1.6.0).
-        if (action.type === 'availability' && action.url) {
-            if (rendered && rendered[action.url]) { return; }
+        // The option rows ALWAYS render -- they are new content, and since 1.9.1
+        // the reply text points at them instead of listing them. Only the trailing
+        // Book button is deduped: against a card in THIS list carrying the same
+        // CTA (1.10.0 -- the booking-turn card, D-073), and against a url this
+        // turn already anchored -- a poll's availability url repeats the interim
+        // booking_link (1.6.0). Before 1.10.0 the whole branch returned early on
+        // the second case and lost the rows with it.
+        if (action.type === 'availability') {
             availabilityTotals(action.options); // 1.8.0 -- renders nothing for a pre-1.8.0 option
+            if (!action.url) { return; }
+            if (cardUrls && cardUrls[action.url]) { return; }
+            if (rendered && rendered[action.url]) { return; }
             linkButton('Book now →', action.url, rendered);
             return;
         }
@@ -681,7 +687,9 @@
     // the PARTY pays; `price` is always for ONE bed or room. Render the total when
     // present, via textContent, and NEVER compute one from `price`: the server's
     // number is the honest one. An option without it renders nothing here, exactly
-    // as before 1.8.0 (the reply text already lists the options).
+    // as before 1.8.0 -- and since 1.9.1 the reply text lists the options ONLY
+    // when one of them lacks a total, which is exactly that case (D-072); on a
+    // list where every option carries one, these lines are the guest's list.
     function availabilityTotals(options) {
         if (!options || !options.length) { return; }
         for (var i = 0; i < options.length; i++) {

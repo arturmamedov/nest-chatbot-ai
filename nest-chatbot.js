@@ -20,9 +20,9 @@
  *   Element-supplied urls are honoured for http(s) only; tel:/mailto:/wa.me hrefs
  *   are constructed here from channel values, never taken verbatim.
  *
- * Built against response contract 1.9.0 (BUILT_AGAINST, api section), in
- * lockstep with the packet vendored in docs/wsuite/ — release 2.11.0 is the sync
- * that adopted it (D-067, D-071). BUILT_AGAINST records what this code implements, not
+ * Built against response contract 1.10.0 (BUILT_AGAINST, api section), in
+ * lockstep with the packet vendored in docs/wsuite/ — release 2.12.0 is the sync
+ * that adopted it (D-072, D-073). BUILT_AGAINST records what this code implements, not
  * what the docs say. The server reports its live contract_version at init; the
  * widget warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.11.1';
+    var VERSION = '2.12.0';
 
     /* =========================================================== config ===== */
 
@@ -855,7 +855,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.9.0';
+    var BUILT_AGAINST = '1.10.0';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -949,6 +949,16 @@
      *                 screen for this turn. Its single option is the one-row card:
      *                 a heading, one line, and NO fold button, because nothing is
      *                 hidden
+     *   "cardstay"  → the 1.10.0 pair (D-073): [property_cards (ONE item),
+     *                 availability] on one booking turn, card FIRST, the card's
+     *                 CTA and availability.url the SAME composed string. Exactly
+     *                 one Book affordance may render — the card's — and every
+     *                 option row must survive it (three groups, one row each, no
+     *                 fold). Suppression path: the per-turn `rendered` set
+     *   "cardbook"  → the other arm of the same pair: [property_cards,
+     *                 booking_link], equal urls, no cta_label so both would have
+     *                 said "Book now". Suppression path: the `cardUrls` pre-scan.
+     *                 Must be tested BEFORE "book" — indexOf, not word-bounded
      *   "rooms"     → availability with room options — ELEVEN of them, the shape a
      *                 real Las Palmas turn returns (observed live 2026-08-27):
      *                 grouped by `basis` in first-appearance order, three per
@@ -1111,7 +1121,7 @@
                     // what a correct client clock should compute.
                     idle_hours: mockIdleHours(),
                     server_time: new Date().toISOString(),
-                    contract_version: '1.9.0'
+                    contract_version: '1.10.0'
                 }, 700);
             },
 
@@ -1171,6 +1181,113 @@
                             whatsapp: '+34 600 111 222',
                             email: 'hola@nestshostels.com'
                         }],
+                        turn: turn
+                    });
+                }
+
+                // ---- the 1.10.0 pair (D-073) ------------------------------
+                // The booking turn's card beside the element it shares a Book url
+                // with. Two fixtures because the suppression travels two DIFFERENT
+                // code paths: `availability` is caught by the per-turn `rendered`
+                // set that renderPropertyCards() fills, `booking_link` by the
+                // order-independent `cardUrls` pre-scan. Only the first of those
+                // has ever fired in this repo before now.
+                //
+                // BOTH must sit above the `book` test below: these are substring
+                // matches, and 'cardbook' contains 'book'.
+                //
+                // Unreachable against the live API until the site's owner switches
+                // `chatbot.cards.on_booking` on — which is exactly why they exist
+                // here.
+                if (q.indexOf('cardstay') !== -1) {
+                    // The card CTA and availability.url are ONE string, query
+                    // included: since 1.9.0 (D-071) the server composes both from
+                    // the same stay, and on the provider path it overwrites the
+                    // card's catalog url with the element's own so they cannot
+                    // drift. Byte-identical is the contract's guarantee and the
+                    // only reason a raw-string dedupe is exact.
+                    var stayUrl = 'https://hotels.cloudbeds.com/en/reservation/Lp7RtQ?checkin=2026-09-14&checkout=2026-09-17&adults=2';
+                    return reply(done, 200, {
+                        // 1.9.1 prose (D-072): the reply names the two cheapest and
+                        // POINTS at the rows instead of listing them. That is what
+                        // makes "never suppress options[]" load-bearing — this text
+                        // is not a fallback for the list any more.
+                        reply: 'For those three nights the cheapest beds are 120.00 EUR for the two of you, and the cheapest private room is 109.00 EUR — the full list is just below.',
+                        actions: [
+                            // FIRST in actions[], per rule 5. One item: the booking
+                            // turn cards the RESOLVED property, never a rail.
+                            {
+                                type: 'property_cards',
+                                total: 1,
+                                items: [{
+                                    key: 'laspalmas',
+                                    name: 'Las Palmas Nest',
+                                    location: 'Las Palmas, Gran Canaria',
+                                    image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/4.jpg',
+                                    price_from: { amount: '20.00', currency: 'EUR', period: 'night', basis: 'per_person' },
+                                    badge: 'Nest Pass',
+                                    cta_label: 'Book now',
+                                    url: stayUrl
+                                }]
+                            },
+                            {
+                                type: 'availability',
+                                available: true,
+                                // Three groups, one row each, nothing hidden — so
+                                // no fold button. A party row (units 2: total is
+                                // the figure, the per-bed price the line under the
+                                // name), a single-unit row, and one option the
+                                // snapshot cannot place — no basis, no units, no
+                                // total — in its own unlabelled group. Every one of
+                                // them must survive the card beside it.
+                                options: [
+                                    { room: 'Mixed dorm', price: '60.00', currency: 'EUR', basis: 'per_person', units: 2, total: '120.00' },
+                                    { room: 'Private double', price: '109.00', currency: 'EUR', basis: 'per_unit', units: 1, total: '109.00' },
+                                    { room: 'Family room', price: '150.00', currency: 'EUR' }
+                                ],
+                                // Suppressed: the card above already anchored this
+                                // exact string. Exactly ONE Book affordance may be
+                                // on screen for this turn — the card's.
+                                url: stayUrl,
+                                summary: { property: 'Las Palmas Nest', check_in: '2026-09-14', check_out: '2026-09-17', adults: 2 }
+                            }
+                        ],
+                        turn: turn
+                    });
+                }
+
+                if (q.indexOf('cardbook') !== -1) {
+                    // The other arm: [property_cards, booking_link]. No cta_label
+                    // on the card on purpose, so the CTA falls back to the pack's
+                    // t('book') — the same words the suppressed booking_link would
+                    // have used. If the dedupe ever regresses, the failure is two
+                    // identical "Book now" buttons rather than something subtle.
+                    var bookUrl = 'https://hotels.cloudbeds.com/en/reservation/R5Sn9T?checkin=2026-09-14&checkout=2026-09-17&adults=1';
+                    return reply(done, 200, {
+                        reply: 'Duque Nest has space for those nights — you can book it straight from the card.',
+                        actions: [
+                            {
+                                type: 'property_cards',
+                                total: 1,
+                                items: [{
+                                    key: 'duque',
+                                    name: 'Duque Nest',
+                                    location: 'Costa Adeje, Tenerife',
+                                    image: 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/1.jpg',
+                                    // No period/basis: the bare price. The widget
+                                    // must not invent "/night" beside a card here
+                                    // any more than it does on the information turn.
+                                    price_from: { amount: '26.00', currency: 'EUR' },
+                                    badge: 'Loooong Stay',
+                                    url: bookUrl
+                                }]
+                            },
+                            {
+                                type: 'booking_link',
+                                url: bookUrl,
+                                summary: { property: 'Duque Nest', check_in: '2026-09-14', check_out: '2026-09-17', adults: 1 }
+                            }
+                        ],
                         turn: turn
                     });
                 }
@@ -2454,8 +2571,14 @@
                 return linkButton(action.label, action.url, action.style, row, rendered, 'link_button');
 
             case 'booking_link':
-                // Reference parity; cannot co-occur with cards today (one handler
-                // per turn, D-009), so this branch of the check is dormant.
+                // LIVE since 1.10.0 (D-073), and dormant for every release before
+                // it: the pair could not exist while one handler ran per turn
+                // (D-009) and the booking handler emitted no card. It does now —
+                // the Ready booking turn of a site with the card switched on sends
+                // [property_cards, booking_link] with byte-identical urls — so this
+                // is the check that leaves the guest one Book affordance, the
+                // card's. `cardUrls` rather than `rendered` because the pre-scan
+                // does not care which of the two came first in actions[].
                 if (cardUrls[action.url]) { return row; }
                 return linkButton(t('book'), action.url, 'primary', row, rendered, 'booking_link');
 
@@ -2686,14 +2809,26 @@
             if (hidden.length) { list.appendChild(optionsToggle(hidden)); }
             els.body.appendChild(list);
         }
-        // The ONE contract-scoped interim→poll suppression (1.6.0): an availability
-        // url that duplicates the Book button the interim turn already rendered.
-        // Since 1.9.0 (D-071) both are the SAME server-composed string — language
-        // segment, checkin/checkout, adults when stated — built from the same
-        // inputs, which is exactly why this stays a raw-string comparison:
-        // normalise either side and the dedupe is the thing that breaks. Only the
-        // trailing button is deduped — the options list is new content and always
-        // renders.
+        // TWO contract-scoped suppressions now ride this one `rendered` test, and
+        // the second arrived with 1.10.0:
+        //   1. interim→poll (1.6.0) — a poll's availability url repeating the Book
+        //      button the interim turn already rendered.
+        //   2. the booking-turn card (D-073) — [property_cards, availability] in
+        //      ONE actions[], card first by contract, so renderPropertyCards() has
+        //      already entered its CTA here by the time this line runs. That
+        //      ordering is why the same-list case needs no `cardUrls` pass: the
+        //      pre-scan exists for a button that PRECEDES its card, which the
+        //      contract does not emit. booking_link takes the pre-scan instead.
+        // Since 1.9.0 (D-071) every one of those urls is the SAME server-composed
+        // string — language segment, checkin/checkout, adults when stated — built
+        // from the same inputs, which is exactly why this stays a raw-string
+        // comparison: normalise either side and the dedupe is the thing that breaks.
+        //
+        // Only the trailing button is ever deduped. The options list above is new
+        // content and renders unconditionally — since 1.9.1 (D-072) the reply prose
+        // names the two cheapest and POINTS at these rows instead of listing them,
+        // so a card that swallowed them would leave the guest no list at all. The
+        // reference widget returned early here until 1.10.0 and did exactly that.
         var row = null;
         if (action.url && !(rendered && rendered[action.url])) {
             row = linkButton(t('book'), action.url, 'primary', null, rendered, 'availability');

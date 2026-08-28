@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Version** | 1.9.0 (see [Versioning](#versioning) · [Changelog](#changelog)) |
-| **Date** | 2026-08-26 |
+| **Version** | 1.10.0 (see [Versioning](#versioning) · [Changelog](#changelog)) |
+| **Date** | 2026-08-28 |
 | **Status** | Frozen envelope — the shared artifact the in-repo preview widget and the external `nest-chatbot-ai` widget build against. Governed by `docs/decisions.md` (D-020, D-029, D-036). |
 | **Endpoint** | `POST /api/v1/chatbot/conversations/{uuid}/messages` (route `chatbot.v1.conversations.messages.store`) |
 
@@ -145,6 +145,8 @@ Emitted from the bound PMS `AvailabilityProvider` (`Wsuite\Contracts\Availabilit
 
 `basis`, `units` and `total` come **together or not at all**, and are absent when the PMS snapshot does not know how the room type is sold. A consumer renders `total` when present and **never derives one from `price`** — a bed price times a guessed party size is a wrong quote on a link that will not honour it. Absent means: show `price` exactly as before 1.8.0.
 
+**The reply prose defers to this list (since 1.9.1 — D-072).** When every option carries `total`, the reply no longer enumerates the options: it names at most the cheapest bed and the cheapest whole room by `total` and points the guest to the list for the rest. That makes `options[]` the guest's only complete view of what is offered, so a renderer **must draw it** — one row per option: `room` always, `total` (with `units`/`basis`) when present, `price` otherwise. When any option lacks `total` the prose lists the rows itself, exactly as before 1.9.1 — the case the reference widget draws nothing for. `options`/`available` remain display-only in the 1.2.0 sense (never a booking action); that was never the same as optional to render.
+
 ### `async_result` — this turn's final reply is being generated asynchronously
 Emitted by a **gated booking tool turn** (D-037(f)): a deterministic code gate (never the LLM's choice) hands the tools-capable respond call to a queued job, so the POST returns immediately with a localized **interim** `reply` (written to read as a complete standalone answer), the deterministic `booking_link`/`contact_channels` fallbacks, **and** this element. A consumer that does not recognise `async_result` simply ignores it and keeps the interim reply + fallbacks — fully functional, no polling. A poll-aware consumer fetches `url` until the final reply is ready.
 
@@ -191,7 +193,7 @@ provider (D-062); the Ready-turn emission is synchronous and never reaches a pol
 async tool path can produce this pair.
 
 ### `property_cards` — a carousel of catalog property cards
-Emitted deterministically by the information path (D-043(a)). Every item field comes straight from the tenant's `properties` catalog row (D-020, never RAG, never LLM-composed); a property without a `booking_url` yields no card (the CTA is mandatory).
+Emitted deterministically by the information path (D-043(a)) and, **since 1.10.0, by the booking path when the site switches it on** (rule 5 below — D-073). Every item field comes straight from the tenant's `properties` catalog row (D-020, never RAG, never LLM-composed); a property without a `booking_url` yields no card (the CTA is mandatory).
 
 **When it is emitted (revised in 1.6.2 — D-047).** A card asserts *this turn is about this hostel*, so the turn must carry a this-turn signal for it. In precedence order:
 
@@ -199,8 +201,9 @@ Emitted deterministically by the information path (D-043(a)). Every item field c
 2. **Several hostels named** — the guest's own message names more than one catalog property: one card each, in the order the server ranked them. **This is new in 1.6.2**: before, such a turn collapsed to a single arbitrary card.
 3. **One hostel named or referred to** — including a widget conversation seeded with `data-property`, which cards its hostel **once** per conversation: the single card, exactly as before.
 4. **Otherwise, no card.** In particular, a property the server merely *remembers* from an earlier turn no longer produces one. Before 1.6.2 it did, so a guest who mentioned one hostel on turn 4 kept seeing its card under unrelated answers for the rest of the conversation.
+5. **On a booking turn, when the site switches it on (since 1.10.0 — D-073).** The Ready turn of the booking flow — the one carrying [`availability`](#availability--live-availability) or [`booking_link`](#booking_link--the-booking-deep-link-mvp-fallback) — also carries the resolved property's single card, **first** in `actions[]`, when the tenant has enabled it for the site (off by default). `items[0].url` is **byte-identical** to the `availability.url` / `booking_link.url` beside it — both are composed from the same stay (D-071) — so the [dedupe rule](#compatibility-and-the-book-button-dedupe-d-043c) collapses the two Book affordances into one. The single-card richness gate of rule 3 applies. Before 1.10.0 no booking turn carried a card at all; D-069 had moved every "is it free / price for these dates" question onto that turn, which is where the hostel's image, location and from-price had gone missing.
 
-A renderer needs no change for any of this — it is strictly *when* the element appears, never its shape.
+A renderer needs no change for any of this — it is strictly *when* the element appears, never its shape. Rule 5 asks one thing of a dedupe that only ever compared `link_button` urls: compare `availability.url` and `booking_link.url` the same way.
 
 ```json
 { "type": "property_cards", "items": [ { "key": "duque", "name": "Duque Nest", "location": "Costa Adeje, Tenerife", "image": "https://…/duque.jpg", "price_from": { "amount": "25.00", "currency": "EUR", "period": "night", "basis": "per_person" }, "badge": "Nest Pass", "cta_label": "Book now", "url": "https://book.example/duque" } ], "total": 14, "more": { "label": "See all our properties", "url": "https://…/hostels" } }
@@ -306,9 +309,14 @@ redundant, never harmful. Three things that sentence needs to be safe:
 - **A card you dropped suppresses nothing.** Build the comparison set from the items you will
   *actually render*, after your own gates. Recording the `url` of an item you rejected — because its
   scheme failed, or it had no `name` — would silently remove the guest's only Book button.
-- **`availability` and `booking_link` are deliberately out of scope of this rule.** One handler runs
-  per turn (D-009), so neither can share an `actions[]` list with `property_cards`. The duplicate that
-  *can* happen is across the interim→poll boundary and is covered under
+- **`availability` and `booking_link` are in scope since 1.10.0 — for their Book button only.** Before
+  1.10.0 neither could share an `actions[]` list with `property_cards` (one handler runs per turn,
+  D-009, and the booking handler emitted no card); a site that switches the booking-turn card on
+  (rule 5 under [`property_cards`](#property_cards--a-carousel-of-catalog-property-cards)) now emits
+  the pair, card first, with the card CTA and the booking element's `url` byte-identical. Apply the
+  same rule: suppress the `availability` / `booking_link` Book button whose `url` equals a rendered
+  card's, and **never suppress `options[]`** — the rows are new content and the reply prose points at
+  them (1.9.1). The other duplicate, across the interim→poll boundary, is unchanged and covered under
   [the poll endpoint](#async_result--this-turns-final-reply-is-being-generated-asynchronously).
 
 ### `promo_card` — a tenant-authored promotional block
@@ -532,6 +540,8 @@ Each version is tagged in the platform repo as **`chatbot-contract-v<X.Y.Z>`**, 
 
 | Version | Date | Breaking | Change | Element / field | Consumer action |
 |---|---|---|---|---|---|
+| `1.10.0` | 2026-08-28 | No | **The hostel card beside the booking element, per site** (D-073). When a tenant switches it on for a site (`chatbot.cards.on_booking`, off by default), the Ready booking turn carries the resolved property's `property_cards` (one item) **first** in `actions[]`, before its `availability` or `booking_link`; the card's `url` is byte-identical to that element's. D-069 had moved every "is it free / price for these dates" question onto the booking path, where no card had ever been emitted, so the hostel's image, location and from-price vanished from exactly the turns guests ask that on. No element or field is added, removed or renamed — a known element on a turn it never appeared on. Reference widget: the `availability` branch now draws `options[]` unconditionally and dedupes only its Book button — against a card CTA in the same list and against a url already anchored this turn. | `property_cards` (emission) · `availability` / `booking_link` (co-occurrence) | **Extend your Book-button dedupe** to `availability.url` and `booking_link.url` against the card CTAs you actually render (raw string equality, D-043(c)), and keep drawing `options[]` regardless. A renderer that already dedupes every Book affordance against rendered card urls needs only the constant move. Nothing reaches the wire until the tenant switches the card on. |
+| `1.9.1` | 2026-08-28 | No | **Prose rule only, no wire effect** (PATCH, D-072). On a Ready turn whose every option carries `total`, the reply names at most the cheapest bed and the cheapest whole room and points the guest to the option list instead of re-typing it — measured on live turns, a three-to-six-option list was being read twice, once as bullets in the reply and once as the widget's rows. The same disclosure closes the async tool result. Shape unchanged. | *(none — prose)* `availability.options[]` | **None if you draw `options[]`** — one row per option, which both registered renderers do. If you skipped the `availability` branch since 1.2.0 on the strength of "the reply lists them anyway", add it: the reply now points at rows only your renderer can show. |
 | `1.9.0` | 2026-08-26 | No | **The booking URL carries the stay** (D-071). Every booking `url` the server emits is now composed from the catalog's CloudBeds booking code and the collected stay: the language segment for the guest's locale, `checkin`/`checkout` when both are known, and `adults` only when the guest stated a party size (an assumed one is never sent — D-068(b)). Applies to `booking_link.url`, `availability.url` (sync and async — the async final is byte-identical to the interim `booking_link` for the same stay), the information turn's Book `link_button.url`, and `property_cards[].url` (still the same string as the Book button beside it). A catalog whose booking URL is not a CloudBeds one is unchanged. No element or field is added, removed or renamed; this is the value-change lane §Versioning now names. | `booking_link.url` · `availability.url` · `link_button.url` (Book) · `property_cards[].url` | **None** — render as before. If you parse, normalise or strip a booking `url` anywhere (dedupe, analytics, display), stop: it now carries a language segment and query parameters, and the card-vs-button dedupe compares raw strings. |
 | `1.8.0` | 2026-08-26 | No | **Three additive option fields** (D-067, KI-020): `availability.options[]` may carry `basis` (`per_person` \| `per_unit`), `units` and `total` — the price the PARTY pays for the stay, where `price` was and remains the stay total for ONE bed or room. Emitted only when the PMS snapshot knows how the room type is sold (a dorm sells beds, a private room sells rooms — availability contract 2.1.0 §6); absent otherwise, and the three come together or not at all. The reference widget renders "2 beds · Mixed Dorm — 200.00 EUR total" above the Book button; the reply text carries the same numbers. | `availability` → `options[].basis`, `options[].units`, `options[].total` | **None** — optional. Render `total` (with `units` + `basis`) via `textContent` if present; never derive it from `price`; an option without it renders as before. |
 | `1.7.1` | 2026-08-26 | No | **Emission rule only, no wire effect** (PATCH, the `1.6.2` lane): the `availability` element is now also emitted on the deterministic **Ready** turn — `wsuite/pms` binds `AvailabilityProvider` process-wide since Phase 1b (D-062), answering from a scheduled snapshot of the PMS rates. Shape unchanged; `options[].room` carries the vendor's room-type name, plus the plan name for a named plan ("Mixed Dorm (Nest Pass - Weekly)"). The "dormant at MVP / until a PMS provider binds" statements in §[`availability`](#availability--live-availability) and the poll section are retired. | `availability` | **None** — the existing `availability` branch (render `url` as a booking button; `options`/`available` display-only) already handles it; a consumer without the branch ignores the element and still gets the reply text. |

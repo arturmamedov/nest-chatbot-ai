@@ -124,7 +124,7 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.9.0 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.10.0 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
@@ -135,11 +135,19 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 `BUILT_AGAINST` (api section) moves **only** during a sync — it is a claim about what this
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
-rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-08-27 as
-`docs @ chatbot-contract-v1.9.0 (6a2c085) · widget @ 6a2c085` — the widget SHA is part of the
+rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-08-28 as
+`docs @ chatbot-contract-v1.10.0 (31ff82b) · widget @ 31ff82b` — the widget SHA is part of the
 packet's identity, because the reference renderer legitimately moves between contract tags
-(here the two halves share a sha because 1.8.0 was a real renderer change in the tag commit).
-`BUILT_AGAINST` is `'1.9.0'`, in lockstep since release 2.11.0 adopted D-067 and D-071.
+(here the two halves share a sha because 1.10.0 was a real renderer change in the tag commit).
+`BUILT_AGAINST` is `'1.10.0'`, in lockstep since release 2.12.0 adopted D-072 and D-073.
+
+**The widget is currently AHEAD of the deployment, and that is the quiet direction.** Measured
+2026-08-28 17:28 UTC off a real init `201` against `nest-mind.laravel.cloud`:
+`contract_version: 1.9.0`, `idle_hours: 168`. The 1.10.0 tag exists locally in `nest-mind` and has
+not shipped. Nothing is wrong — the drift warn fires only when the **server** is ahead, and the
+ignore-unknown rule covers the other direction — but it means the one thing 2.12.0 adopted cannot
+be seen live yet, so do not read a card-less booking turn as a defect. Re-read `contract_version`
+off a `201` before concluding anything, exactly as the idle-window entry under Open items insists.
 
 **The upstream repo drives the sync, and it is local.** The platform is `nest-mind`
 (`modules/chatbot/`). Its `docs/consumer-sync.md` is the operational half: §1 is a registry of
@@ -232,6 +240,21 @@ what `setLocale()` may repaint.
   (card CTA vs Book button; interim `booking_link` vs async `availability`) are raw-string
   comparisons that work *because* the server composes both sides from the same inputs: parse,
   lowercase or strip a query on either side and they stop.
+- **A card can now sit on the booking turn, and the dedupe takes the BUTTON — never the rows.**
+  Since 1.10.0 (D-073) the Ready booking turn of a site with `chatbot.cards.on_booking` switched
+  on sends `[property_cards (one item), availability | booking_link, promo_card?]`, card
+  **first**, the card's `items[0].url` byte-identical to the booking element's. That kills the old
+  guarantee that one handler per turn (D-009) keeps the two apart — the `booking_link` branch's
+  `cardUrls` check was dormant for five releases and is live now. Two things must stay true.
+  **One Book affordance:** the card's CTA, which the guest sees; the booking element's trailing
+  button is the one that goes. **Every option row, always:** since 1.9.1 (D-072) the reply prose
+  names the two cheapest and *points at the rows* instead of listing them, so a card that
+  swallowed them leaves the guest no list at all. That is precisely the bug 1.10.0 fixed in the
+  reference, whose `availability` branch used to `return` early behind an anchored url. Here the
+  guard has always been on the button alone — keep it there. The same-list case needs no
+  `cardUrls` pass in `renderAvailability()` because the card renders first and enters `rendered`
+  before the branch runs; the pre-scan exists for a button that **precedes** its card, which the
+  server does not emit. `cardstay` and `cardbook` in the mock are the two arms.
 - **The init response reports `contract_version`.** Compare it to `BUILT_AGAINST` (api
   section) and `console.warn` once when the server is ahead — never gate, never hard-fail
   (guide §3.1); the ignore-unknown rule keeps the widget functional. That warn is the sole
@@ -468,6 +491,8 @@ are shaped exactly like the real envelope. Drive them from the composer:
 | `contact` | `contact_channels` (phone + whatsapp + email) |
 | `rooms` | `availability` — the 1.8.0 showcase: a per-bed and a per-room option carrying `basis`/`units`/`total`, rendered verbatim as "2 beds · 200.00 EUR total", plus one option without the trio that must render exactly as before |
 | `link` | three `link_button`s (book / website / directions), one with `style: primary` |
+| `cardstay` | the 1.10.0 pair (D-073): `[property_cards (one item), availability]` on one turn, card **first**, CTA url == `availability.url`. Exactly **one** Book affordance may render — the card's — and all three option rows must survive it (a party row, a single-unit row, one option with no `basis`/`units`/`total`; three groups of one, so no fold button). Suppression path: the per-turn `rendered` set |
+| `cardbook` | the other arm: `[property_cards, booking_link]`, equal urls, and **no** `cta_label` so both would have said "Book now". Suppression path: the `cardUrls` pre-scan — the branch that was dormant from 2.5.0 until 1.10.0. Tested **above** `book`: these are `indexOf` matches and `cardbook` contains `book` |
 | `available` | `async_result` — interim reply, then the poll replaces it in place; the final is an `availability` sharing the interim's **server-composed** url byte-for-byte (1.9.0, no `adults` — unstated party), so the per-turn dedupe must leave exactly **one** Book button; the final's option is the singular "1 bed" total path |
 | `hostel` | `quick_replies` — the three island chips, carrying the 1.7.0 `heading` (also matches suggested prompt 1); any send retires every row **and its heading** (one-shot) |
 | `tenerife` `canaria` `ibiza` | `property_cards` carousel + `promo_card` + the CTA trio — and the 1.6.x showcase: per-card `period`/`basis` (two different suffixes in one rail), a `cta_label`, the D-043(c) isolator (name-less card sharing the website button's url — card dropped, button survives), a Book button matching a rendered card's url (suppressed) — both 1.9.0 composed strings with a query, so the dedupe is proven through `?`/`&` — and `total`/`more` (ibiza: `total` only → count line; the others: both → `more` wins) |
@@ -706,4 +731,9 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   three **out**, and no `data-*` attribute, no `window.NestChatbot` method and no `BUILT_AGAINST`
   move — a patch by this rule. Removing a **pack key** is not breaking: packs are internal, and
   the embed contract is what a host's `<script>` tag has to say.
-  The next is **2.11.2** unless it is a sync.
+  2.12.0 is the 1.10.0 sync (D-072, D-073): a fresh packet and a `BUILT_AGAINST` move — the minor
+  case — and **nothing else that would have earned a number**. No renderer changed, no `wchat:*`
+  name moved; what moved besides the constant was two comments the contract falsified and two mock
+  fixtures. That is the shape a sync is allowed to be: the rule keys on the packet and the
+  constant, not on how much code the row happened to ask for.
+  The next is **2.12.1** unless it is a sync.

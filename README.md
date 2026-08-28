@@ -140,7 +140,7 @@ NestChatbot.toggle();
 NestChatbot.setLocale('es');
 NestChatbot.destroy();
 NestChatbot.locale;    // 'es'
-NestChatbot.version;   // '2.11.0'
+NestChatbot.version;   // '2.12.0'
 NestChatbot.state;     // a snapshot — see Measuring it, below
 ```
 

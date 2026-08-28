@@ -5,6 +5,147 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.12.0 — 2026-08-28
+
+**Contract sync: `BUILT_AGAINST` 1.9.0 → 1.10.0 (D-072, D-073).** A **MINOR**, the case reserved
+for one: a fresh `docs/wsuite/` packet and a `BUILT_AGAINST` move. Packet:
+`docs @ chatbot-contract-v1.10.0 (31ff82b) · widget @ 31ff82b` — the two halves share a sha because
+1.10.0 was a real renderer change in the tag commit.
+
+Two contract rows and **no renderer change**. Nothing on screen moved; what moved is the constant,
+two comments that had become false, and the harness that can now prove the claim. Yesterday's 2.11.1
+entry closed with "**Not asked:** `property_cards` on booking turns. D-069 and D-009 keep it off
+deliberately and the dedupe logic assumes it." D-073 landed the next day and removed both halves of
+that assumption — which is the whole reason this release is a verification rather than a shrug.
+
+### 1.9.1 — the reply stopped re-listing the options (D-072)
+
+A PATCH with no wire effect. On a Ready turn where every option carries a `total`, the reply now
+names at most the cheapest bed and the cheapest whole room and points the guest at the list, instead
+of enumerating three-to-six options the widget was already drawing underneath. It asks nothing of a
+consumer that draws `options[]` — but it changes what happens to one that does not, and that is the
+half worth recording: **the rows are now the guest's only complete view**. This widget has drawn
+them since 1.2.0 and grouped and folded them since 2.11.1, so the row is adopted by changing
+nothing. It is also why the suppression below had to be re-read rather than assumed.
+
+### 1.10.0 — the hostel card beside the booking element (D-073)
+
+No element and no field is added. A **known** element appears on a turn it never appeared on: the
+Ready booking turn may now carry the resolved property's `property_cards` — exactly one item,
+**first** in `actions[]` — beside the `availability` or `booking_link` it shares a Book url with.
+D-069 had routed every "is it free / price for these dates" question onto the booking path, where
+no card had ever been emitted, so the hostel's image, location and from-price had gone missing from
+exactly the turns guests ask that on. Per site and off by default (`chatbot.cards.on_booking`):
+nothing reaches the wire until a tenant switches it on.
+
+**All three rules the contract asks for already held here, and each was read back out of the code
+rather than assumed:**
+
+- **One Book affordance.** `renderActions()` walks `actions[]` in payload order, so
+  `renderPropertyCards()` runs first and enters every card that *actually reached the DOM* into the
+  per-turn `rendered` set — the D-043(c) rule, enforced by the `renderableCardUrl()` gate the
+  pre-scan and the card renderer share. `renderAvailability()` then guards **only** its trailing
+  button against that set. The card's CTA survives; the availability button never renders.
+- **`booking_link` is deduped the same way, through the other set.** Its branch tests the
+  order-independent `cardUrls` pre-scan, identical to `link_button`'s. So both booking elements
+  suppress against a rendered card CTA — they simply arrive by different routes, `cardUrls` for
+  `booking_link` and `rendered` for `availability`. **That `booking_link` check had never once
+  fired in this repo's history**; it was written for reference parity in 2.5.0 and documented as
+  dormant. It is live now, and there is a fixture for it.
+- **The rows always render.** The options list is built before any dedupe test and nothing returns
+  early past it. The reference widget was not so lucky: its `availability` branch returned early
+  behind an already-anchored url and lost the rows along with the button — which it had *already*
+  been doing on the async poll — and 1.10.0 is the release that fixed it there. This widget put the
+  check on the button in 1.6.0 and never had the defect.
+
+**Nothing was normalised, then or now.** `safeHttpUrl()` applies `trim()` and an anchored
+`^https?://` test and nothing else. Both dedupes stay raw-string comparisons, which is exactly what
+makes them exact: since 1.9.0 the server composes both sides of every pair from the same inputs, so
+parsing, lowercasing or stripping a query on either side is the thing that would break them.
+
+### Two comments that 1.10.0 made false
+
+Both were true when written and are the only prose in the file that had to move:
+
+- **`booking_link`'s check was documented as dormant** — "cannot co-occur with cards today (one
+  handler per turn, D-009)". D-073 ends that: the booking handler emits the card itself. The comment
+  now says what the branch catches and why it uses `cardUrls` rather than `rendered`.
+- **`renderAvailability()` called its guard "the ONE contract-scoped interim→poll suppression".**
+  There are two cases riding that one `rendered` test now — the poll repeating the interim's Book
+  url (1.6.0), and the same-list card CTA that `renderPropertyCards()` entered moments earlier. The
+  comment states both, states that the same-list case needs no `cardUrls` pass *because the contract
+  puts the card first* (the pre-scan exists for a button that **precedes** its card, which the
+  server does not emit), and states why the rows sit outside the guard at all.
+
+**No `cardUrls` argument was added to `renderAvailability()`.** It would change nothing observable
+on any conformant payload, and the behaviour is already correct; the reason is now written down
+where the next reader will find it instead of being encoded in a parameter list.
+
+### Two fixtures — the pair, both arms
+
+The keyword table gains `cardstay` and `cardbook`, modelled on the reference's lab scenario
+`booking-card`. Two and not one, because the suppression travels two different code paths and only
+one of them had ever executed:
+
+- **`cardstay`** → `[property_cards (one item), availability]`, card first, the card CTA and
+  `availability.url` one byte-identical composed string with a query. Three option groups of one row
+  each — a party row (`units: 2`, total as the figure and the per-bed price beneath), a single-unit
+  row, and one option the snapshot cannot place (no `basis`/`units`/`total`) in its own unlabelled
+  group. Nothing hidden, so no fold button. Exercises `rendered`.
+- **`cardbook`** → `[property_cards, booking_link]`, equal urls, and **no `cta_label`** on purpose:
+  the card falls back to the pack's "Book now", the same words the suppressed `booking_link` would
+  have used, so a regression shows up as two identical buttons rather than something subtle.
+  Exercises `cardUrls`.
+
+Both are tested above the `book` keyword, because these are `indexOf` matches and `cardbook`
+contains `book`.
+
+### Verified
+
+Headless Chrome over CDP, served from a **fresh port** so nothing was cached, and the running source
+asserted for the new keywords before anything was measured — the habit CLAUDE.md records costing a
+verification pass once already.
+
+- **`cardstay`**: `wchat:reply` reports `elements: ['property_cards','availability']`; the turn
+  contributes exactly **one** `[data-wchat-el]` anchor, `property_card`, carrying
+  `…/reservation/Lp7RtQ?checkin=2026-09-14&checkout=2026-09-17&adults=2`. Zero `availability`
+  anchors. All three option rows present, two headings, no fold button.
+- **`cardbook`**: `elements: ['property_cards','booking_link']`; one anchor, `property_card`, label
+  "Prenota ora" from the pack. Zero `booking_link` anchors. **First execution of that branch.**
+- **No regressions**: `rooms` still draws eleven rows with one fold and its own Book button (no card
+  in that payload); `tenerife` still drops the name-less card, suppresses the "Book now" matching a
+  rendered card and keeps "Visit our website" sharing the dropped card's url (the D-043(c)
+  isolator); `available` still resolves its poll into exactly one Book affordance; `link` unchanged.
+- **Drift warn**: silent with the mock reporting 1.10.0 against `BUILT_AGAINST 1.10.0`. **Positive
+  control** — the mock temporarily set to 1.11.0 fired it once, reading "built against 1.10.0",
+  which is also how the constant move was confirmed from the outside. Reverted and diffed byte-for-
+  byte afterwards.
+
+**Live, off `demo/demo.html` against `nest-mind.laravel.cloud` (2026-08-28 17:28 UTC): the 1.10.0
+deploy has NOT landed.** A real init `201` reports `contract_version: 1.9.0`, `idle_hours: 168`,
+`server_time` present. A booking turn ("Las Palmas Nest, 14 to 17 September, 1 person") returned
+`actions: ['availability']` with thirteen options and **no** `property_cards` — expected twice over,
+since neither the deploy nor the per-site toggle is in place. The widget rendered them grouped into
+beds and private rooms with one fold button, `La Paz (Private - Double Bed)` correctly showing its
+name alone (`price` and `total` both null), and one Book button on the 1.9.0 composed url
+`…/it/reservation/AhkCX3?checkin=2026-09-14&checkout=2026-09-17&adults=1`. No console warn, which is
+correct: the warn fires only when the **server** is ahead, and after this release the widget is the
+one in front. **The pair itself is therefore unverified live and stays that way until the deploy
+lands and the owner switches the card on** — the same "deliberately unverified" state the upstream
+1.10.0 commit records on its own side.
+
+### Not changed
+
+`docs/rendering-ownership.md` is untouched, and that is a decision rather than an oversight: 1.10.0
+moves no text ownership at all. `property_cards` keeps its split (raw catalog `name`/`location`,
+server-localized `cta_label`, widget-composed price suffix) and `availability` keeps its ("no display
+text" in, every word out). Which elements may share a turn is not a question that file answers.
+
+No `wchat:*` name was renamed, removed or given a new payload field, and `NestChatbot.state` is
+untouched — the surface 2.8.2 made public is a **major** to disturb. `wchat:action` fires for the
+card CTA and not for the suppressed button, which is the existing information-turn behaviour arriving
+unchanged on the booking turn.
+
 ## 2.11.1 — 2026-08-27
 
 **The availability card folds: one line per option, beds and rooms grouped, three per group.** A
