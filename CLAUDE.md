@@ -169,6 +169,16 @@ POST {apiBase}/api/v1/chatbot/conversations/{uuid}/messages → 200 {reply, acti
 GET  {apiBase}{async_result.url}                          → 200 {status, reply?, actions?, turn}
 ```
 
+**Which of the things a guest sees comes down the wire, and which the widget makes up, is
+`docs/rendering-ownership.md`** — a per-element table plus the rule behind it. Read it before
+changing a renderer or adding an element type. The short version: the server sends display text when
+the text is **tenant-authored content** (a promo, a chip, a property's name or CTA label), and the
+widget composes it when it is **chrome around structured data** the server deliberately sent as data
+— which is why `promo_card` uses no pack string at all and `availability` uses nothing but. Two
+traps live there too: "from the server" and "in the guest's language" are different questions (a
+card's `name` is raw catalog, its `cta_label` is localized), and the split is exactly the rule for
+what `setLocale()` may repaint.
+
 ### Things that will bite you
 
 - **A turn always returns `200`.** Provider, budget and LLM failures degrade server-side to a
@@ -645,7 +655,11 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
 - Comments explain **why**, not what. The code says what.
 - Comments and identifiers in English. The old codebase mixed Italian and Spanish comments.
 - Keep the section banners in `nest-chatbot.js` — they are the file's table of contents.
-- Anything user-visible goes through `t()` / `tf()`, never a hardcoded string.
+- Anything user-visible goes through `t()` / `tf()`, never a hardcoded string. **The converse is
+  equally a rule and is the half that gets forgotten:** anything **payload**-supplied reaches the DOM
+  through `textContent` and is never re-derived from a pack — repainting a tenant's string from our
+  own table is inventing a translation they did not write. Which is which, per element, is
+  `docs/rendering-ownership.md`.
 - **Anything that removes or hides a node checks `document.activeElement` first.** If the node
   contains it, move focus somewhere still visible inside `#nest-chatbot` before the node goes.
   A removed or `display: none` element drops focus to `<body>`, so the guest's next Tab
