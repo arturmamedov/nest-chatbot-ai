@@ -148,8 +148,13 @@
             <code>cardstay</code> and <code>cardbook</code> are the 1.10.0 pair — the hostel card
             beside the booking element it shares a Book url with, card first. Exactly one Book
             affordance may appear (the card's), and every option row has to survive it.
+            <code>human</code> is the 1.12.0 handoff that does not know the hostel — no contact
+            details, just a question over thirteen hostel chips that have to wrap whole; tap one
+            and that hostel's contacts arrive.
             <code>!xss</code>, <code>!unknown</code>, <code>!410</code>, <code>!403</code>,
-            <code>!429</code> and <code>!500</code> drive the defensive paths.
+            <code>!429</code> and <code>!500</code> drive the defensive paths — and
+            <code>!429 60</code> / <code>!429 80000</code> send a <code>Retry-After</code>, so a
+            minute's wait and a daily cap read differently.
         </p>
 
         <p>

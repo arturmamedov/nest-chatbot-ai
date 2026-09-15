@@ -173,7 +173,7 @@ Events bubble from the widget's own container, so a listener on `document` or `w
 | `wchat:message` | the visitor sends a message | `source` (`composer` \| `prompt` \| `chip` \| `welcome-chip`), `length`, `turns`, `locale` |
 | `wchat:reply` | a reply arrives | `turn`, `length`, `elements[]`, `async`, `resolved`, `ended`, `latencyMs` |
 | `wchat:action` | a booking / contact / card button is clicked | `element`, `url`, `channel`, `style`, `index` |
-| `wchat:error` | a request fails | `phase` (`init` \| `turn` \| `poll`), `status`, `retrying` |
+| `wchat:error` | a request fails | `phase` (`init` \| `turn` \| `poll`), `status`, `retrying`, `retryAfter` |
 | `wchat:ended` | the conversation hits its turn cap | `turns` |
 | `wchat:restart` | the visitor starts a new chat | `source` (`menu` \| `ended`), `turns` |
 | `wchat:locale` | the language is switched | `from`, `to` |
@@ -213,6 +213,15 @@ once for the interim answer, once when the final one lands with `resolved: true`
 you are counting replies. And `wchat:error` with `retrying: true` is not a visitor-visible
 failure: the widget is transparently reopening an expired conversation and the visitor still gets
 their answer.
+
+**Telling a busy minute from a daily cap.** A `status: 429` means the chat refused a message for
+being over a limit, and `retryAfter` says for how long, in seconds. About a minute is the
+per-minute limit, and the visitor was asked to try again in a moment. Hours mean a daily cap, and
+the visitor was told to come back later. Visitors on one shared network (a hostel's own wifi) count
+as one visitor, so a run of long ones from a single property usually means that building's
+guests have used the day's share between them. `retryAfter` is `null` on every other error, and on
+a `429` whose wait the browser could not read — which is also when the visitor sees the
+"in a moment" message.
 
 **Consent is yours to handle.** These are DOM events on your page, so gate the listener behind
 your own consent tooling like any other tag. Nothing is recorded until you record it.

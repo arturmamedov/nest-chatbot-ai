@@ -20,9 +20,9 @@
  *   Element-supplied urls are honoured for http(s) only; tel:/mailto:/wa.me hrefs
  *   are constructed here from channel values, never taken verbatim.
  *
- * Built against response contract 1.10.0 (BUILT_AGAINST, api section), in
- * lockstep with the packet vendored in docs/wsuite/ — release 2.12.0 is the sync
- * that adopted it (D-072, D-073). BUILT_AGAINST records what this code implements, not
+ * Built against response contract 1.12.0 (BUILT_AGAINST, api section), in
+ * lockstep with the packet vendored in docs/wsuite/ — release 2.13.0 is the sync
+ * that adopted it (D-078, D-079). BUILT_AGAINST records what this code implements, not
  * what the docs say. The server reports its live contract_version at init; the
  * widget warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
@@ -31,7 +31,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.12.0';
+    var VERSION = '2.13.0';
 
     /* =========================================================== config ===== */
 
@@ -115,6 +115,7 @@
     var busy = false;       // a request is in flight
     var removed = false;    // torn down (403)
     var lastInitStatus = 0; // most recent init outcome — 429 turns "error" into "retry"
+    var lastInitRetryAfter = null; // ...and its Retry-After seconds, which decide WHICH retry copy (1.11.0)
     var initWaiters = null; // callbacks queued behind an in-flight init
     var sendQueue = [];     // turns queued behind an in-flight turn — one at a time
     var replyCount = 0;     // real assistant turn replies this session — see maybeAutoExpand
@@ -204,6 +205,11 @@
             noAvailability: 'No availability for those dates.',
             error: 'Sorry, something went wrong. Please try again, or reach us directly and we\'ll be glad to help.',
             retry: 'We\'re getting a lot of messages right now — please try again in a moment.',
+            // A 429 whose Retry-After runs past RETRY_LATER_S (contract 1.11.0):
+            // a daily cap, up to 24 hours. "In a moment" would be untrue, so this
+            // promises no time at all — and names no culprit, because the header
+            // cannot say whether the visitor's network or the whole site tripped.
+            retryLater: 'We\'ve reached our message limit for now — please come back later.',
             timeout: 'This is taking longer than expected — please use the booking link above, or ask me again in a moment.'
         },
         es: {
@@ -238,6 +244,7 @@
             noAvailability: 'No hay disponibilidad para esas fechas.',
             error: 'Lo siento, algo ha ido mal. Inténtalo de nuevo o escríbenos directamente y te ayudamos encantados.',
             retry: 'Estamos recibiendo muchos mensajes ahora mismo — inténtalo de nuevo en un momento.',
+            retryLater: 'Hemos alcanzado el límite de mensajes por ahora — vuelve a intentarlo más tarde.',
             timeout: 'Esto está tardando más de lo esperado — usa el enlace de reserva de arriba o pregúntame de nuevo en un momento.'
         },
         it: {
@@ -274,6 +281,7 @@
             noAvailability: 'Nessuna disponibilità per quelle date.',
             error: 'Mi dispiace, qualcosa è andato storto. Riprova o scrivici direttamente, saremo felici di aiutarti.',
             retry: 'Stiamo ricevendo molti messaggi in questo momento — riprova tra poco.',
+            retryLater: 'Abbiamo raggiunto il limite di messaggi per ora — riprova più tardi.',
             timeout: 'Ci sta mettendo più del previsto — usa il link di prenotazione qui sopra, o richiedimelo tra poco.'
         },
         de: {
@@ -308,6 +316,7 @@
             noAvailability: 'Keine Verfügbarkeit für diese Daten.',
             error: 'Entschuldigung, da ist etwas schiefgelaufen. Bitte versuche es erneut oder kontaktiere uns direkt.',
             retry: 'Wir bekommen gerade sehr viele Nachrichten — bitte versuche es gleich noch einmal.',
+            retryLater: 'Wir haben unser Nachrichtenlimit vorerst erreicht — bitte versuche es später noch einmal.',
             timeout: 'Das dauert länger als erwartet — nutze bitte den Buchungslink oben oder frag mich gleich noch einmal.'
         },
         fr: {
@@ -344,6 +353,7 @@
             noAvailability: 'Aucune disponibilité pour ces dates.',
             error: 'Désolé, une erreur est survenue. Réessaie ou contacte-nous directement, nous serons ravis de t\'aider.',
             retry: 'Nous recevons beaucoup de messages en ce moment — réessaie dans un instant.',
+            retryLater: 'Nous avons atteint notre limite de messages pour le moment — réessaie plus tard.',
             timeout: 'Cela prend plus de temps que prévu — utilise le lien de réservation ci-dessus, ou redemande-moi dans un instant.'
         }
     };
@@ -855,7 +865,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.10.0';
+    var BUILT_AGAINST = '1.12.0';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -891,7 +901,13 @@
      * and an unparseable body parses to null — the flow section handles both. No
      * timeout, matching the reference: a stalled connection pins `busy` until the
      * browser gives up; adding xhr.timeout needs a double-callback guard, so it
-     * stays a documented follow-up rather than a quick add. */
+     * stays a documented follow-up rather than a quick add.
+     *
+     * The callback's third argument is the Retry-After of a 429, in seconds, and
+     * null on every other status (contract 1.11.0, guide §6). Only the init and
+     * turn flows read it: they are the guest bucket, the one with a daily cap that
+     * can refuse for up to 24 hours. A poll 429 stays a transient backoff, so the
+     * poll callback takes two arguments and ignores the third. */
     function request(method, path, body, done) {
         var xhr = new XMLHttpRequest();
         // The whole setup is guarded, not just send(): open() throws
@@ -907,12 +923,32 @@
                 if (xhr.readyState !== 4) { return; }
                 var parsed = null;
                 try { parsed = JSON.parse(xhr.responseText); } catch (e) { parsed = null; }
-                done(xhr.status, parsed);
+                done(xhr.status, parsed, xhr.status === 429 ? retryAfterSeconds(xhr) : null);
             };
             xhr.send(body == null ? null : JSON.stringify(body));
         } catch (e) {
-            done(0, null);
+            done(0, null, null);
         }
+    }
+
+    /*
+     * Retry-After off a 429, as whole seconds, or null. Read from
+     * getAllResponseHeaders() and NOT getResponseHeader('Retry-After'), and the
+     * difference is the host's console: asked by name for a header the response
+     * does not expose cross-origin (a pre-1.11.0 server, a proxy that strips
+     * Access-Control-Expose-Headers), Chromium logs a red "Refused to get unsafe
+     * header" on the customer's page — output data-debug cannot gate, because it
+     * is the browser's. The full list comes back already CORS-filtered and says
+     * nothing about what it left out.
+     *
+     * Delta-seconds only, which is what the platform's throttle sends. The
+     * HTTP-date form, an empty value and an absent header all read as null, and
+     * null keeps the pre-1.11.0 copy exactly — unknown never becomes "come back
+     * later".
+     */
+    function retryAfterSeconds(xhr) {
+        var m = /^retry-after:[ \t]*(\d+)\s*$/im.exec(xhr.getAllResponseHeaders() || '');
+        return m ? parseInt(m[1], 10) : null;
     }
 
     var API = {
@@ -981,13 +1017,24 @@
      *                 the welcome block's chip row
      *   "pass" / "offer" → promo_card on its own ("pass" is word-bounded, so
      *                 "passport" and "compass" fall through to the plain reply)
+     *   "human"     → the 1.12.0 unbound handoff (D-079): a reply that asks which
+     *                 hostel, a quick_replies row with id property_choice and
+     *                 THIRTEEN chips, and NO contact_channels. Tapping a chip
+     *                 sends "It's about <name>", which answers with that hostel's
+     *                 channels — the turn the real server gives the right phone
      *   "!cap"      → the turn-cap reply: contact_channels + conversation_ended
      *                 (emitted last, per contract) — composer closes, restart
      *                 button appears
      *   "!unknown"  → an unrecognised element type (must be ignored silently)
      *   "!xss"      → a hostile reply and a javascript: url (must both be inert)
-     *   "!410" "!403" "!429" "!500" → force that status
+     *   "!410" "!403" "!429" "!500" → force that status. A number after it is
+     *                 sent as Retry-After (1.11.0): "!429 60" is a per-minute
+     *                 refusal, "!429 80000" a daily one, and bare "!429" the
+     *                 header-less control that must read exactly as before
      *   anything else → a plain reply
+     *
+     * ?nc-init-429=<seconds> on the page URL makes init itself answer 429 with
+     * that Retry-After — the only way to reach the init half of the throttle copy.
      *
      * The init response carries two chip rows (promptChips + islandChips), and
      * both of promptChips' messages land on a branch above rather than in the
@@ -997,8 +1044,12 @@
         var pollCounts = {};
         var turn = 0;
 
-        function reply(done, status, body, delay) {
-            setTimeout(function () { done(status, body); }, delay == null ? 550 : delay);
+        // retryAfter is the transport's third argument (see request()): a header
+        // the mock has no headers to carry, so it rides the callback directly.
+        function reply(done, status, body, delay, retryAfter) {
+            setTimeout(function () {
+                done(status, body, retryAfter == null ? null : retryAfter);
+            }, delay == null ? 550 : delay);
         }
 
         /*
@@ -1016,6 +1067,17 @@
             var m = /[?&]nc-idle=([0-9.]+)/.exec(window.location.search);
             var hours = m ? parseFloat(m[1]) : NaN;
             return (isFinite(hours) && hours > 0) ? hours : 24;
+        }
+
+        // Same kind of knob as mockIdleHours(), for the same reason: an init 429
+        // is otherwise unreachable, because every guest keyword runs on the TURN
+        // endpoint and init has already succeeded by the time one can be typed.
+        // ?nc-init-429=80000 refuses every init with that Retry-After, so both the
+        // opening init and the re-init a guest's first send triggers come back
+        // throttled. Unset (or not a number) means init succeeds as always.
+        function mockInitRetryAfter() {
+            var m = /[?&]nc-init-429=(\d+)/.exec(window.location.search);
+            return m ? parseInt(m[1], 10) : null;
         }
 
         // Two fixtures serve the same promo — the island answer and the
@@ -1071,6 +1133,32 @@
             };
         }
 
+        // The 1.12.0 row (D-079): what an unbound handoff offers instead of a
+        // guessed hostel's phone number. Same terms as islandChips() — server
+        // text, catalog names as labels, so NO locale — and two differences worth
+        // exercising: no heading (the reply already asks the question), and
+        // thirteen chips, the first live tenant's count, which is the whole point.
+        // The contract caps nothing here and says wrap or scroll; a three-chip
+        // fixture could never show a row that does neither.
+        //
+        // Alphabetical, as the server orders it. Each message is the server's
+        // localized "It's about :property" with the name verbatim — the server
+        // recognises the answer by the name inside the sentence, so the widget
+        // sends it byte-for-byte, which the chip path already does for any row.
+        var HANDOFF_PROPERTIES = [
+            'Adeje Nest', 'Aguere Nest', 'Arena Nest', 'Ashavana Nest', 'Cisne by Nest',
+            'Duque Nest', 'La Isleta Nest', 'Las Eras Nest', 'Las Palmas Nest',
+            'Los Amigos Nest', 'Médano Nest', 'Pura Vida by Nest', 'Puerto Nest'
+        ];
+
+        function propertyChoiceChips() {
+            var items = [];
+            for (var i = 0; i < HANDOFF_PROPERTIES.length; i++) {
+                items.push({ label: HANDOFF_PROPERTIES[i], message: 'It\'s about ' + HANDOFF_PROPERTIES[i] });
+            }
+            return { type: 'quick_replies', id: 'property_choice', items: items };
+        }
+
         // The tenant-authored "try asking" row — a site's chatbot.quick_prompts
         // setting, which is the other thing contract 1.5.0 says an init
         // quick_replies row carries. English literals on purpose: payload is
@@ -1098,6 +1186,10 @@
 
         return {
             init: function (done) {
+                var throttled = mockInitRetryAfter();
+                if (throttled !== null) {
+                    return reply(done, 429, { message: 'Too Many Attempts.' }, 700, throttled);
+                }
                 reply(done, 201, {
                     conversation: { uuid: 'mock-' + Math.random().toString(36).slice(2, 10) },
                     greeting: t('greeting'),
@@ -1121,7 +1213,7 @@
                     // what a correct client clock should compute.
                     idle_hours: mockIdleHours(),
                     server_time: new Date().toISOString(),
-                    contract_version: '1.10.0'
+                    contract_version: '1.12.0'
                 }, 700);
             },
 
@@ -1129,8 +1221,14 @@
                 var q = text.toLowerCase();
                 turn += 1;
 
-                var forced = q.match(/^!(\d{3})$/);
-                if (forced) { return reply(done, parseInt(forced[1], 10), null); }
+                // "!429 80000" → a 429 whose Retry-After is 80000. The number is
+                // passed for any forced status, as the transport does not: only a
+                // 429 carries one there, so only "!429 <n>" is a realistic case.
+                var forced = q.match(/^!(\d{3})(?:\s+(\d+))?$/);
+                if (forced) {
+                    return reply(done, parseInt(forced[1], 10), null, null,
+                        forced[2] ? parseInt(forced[2], 10) : null);
+                }
 
                 if (q.indexOf('!xss') === 0) {
                     return reply(done, 200, {
@@ -1168,6 +1266,37 @@
                             },
                             { type: 'conversation_ended', reason: 'turn_cap' }
                         ],
+                        turn: turn
+                    });
+                }
+
+                // ---- the 1.12.0 unbound handoff (D-079) ---------------------
+                // The answer FIRST, and above every content branch below: a
+                // property_choice message carries a hostel's name, and these are
+                // indexOf matches — a name that ever contained "ibiza", "hostel"
+                // or "book" would otherwise be answered as that keyword instead.
+                // This is the turn that carries the right hostel's channels.
+                if (q.indexOf('it\'s about ') === 0) {
+                    return reply(done, 200, {
+                        reply: 'Thanks — the ' + text.slice('It\'s about '.length) + ' team has your message and will get back to you. You can also reach them directly:',
+                        actions: [{
+                            type: 'contact_channels',
+                            phone: '+34 928 123 456',
+                            whatsapp: '+34 600 333 444',
+                            email: 'hola@nestshostels.com'
+                        }],
+                        turn: turn
+                    });
+                }
+
+                // The question. NO contact_channels — before 1.12.0 this turn
+                // carried the alphabetically-first hostel's, which is exactly the
+                // wrong phone number this fixture exists to prove the widget does
+                // not miss. The reply is the server's own en string.
+                if (q.indexOf('human') !== -1) {
+                    return reply(done, 200, {
+                        reply: 'I\'ve passed your message to our team. Which property is this about, so the right team can help?',
+                        actions: [propertyChoiceChips()],
                         turn: turn
                     });
                 }
@@ -4313,7 +4442,7 @@
         // requests: this init belongs to the conversation live at its start.
         var epoch = chatEpoch;
 
-        API.init(function (status, body) {
+        API.init(function (status, body, retryAfter) {
             // A restart while this was on the wire released initWaiters and
             // fired its OWN init (see restartConversation). Checked BEFORE the
             // waiters are taken below, and that order is the point: a stale
@@ -4329,10 +4458,11 @@
             if (removed) { return; }
             log('init', status, body);
             lastInitStatus = status;
+            lastInitRetryAfter = retryAfter;
 
             // Before teardown() — see the same branch in sendMessage() for why.
             if (status === 403) {
-                emit('error', { phase: 'init', status: 403, retrying: false });
+                emit('error', { phase: 'init', status: 403, retrying: false, retryAfter: null });
                 teardown();
                 return;
             }
@@ -4370,8 +4500,9 @@
                 intro.greeting = t('greeting');
                 // Invisible on screen by design (the guest gets a greeting and no
                 // error), which is exactly why it is worth reporting: a site whose
-                // key is wrong looks fine and answers nothing.
-                emit('error', { phase: 'init', status: status, retrying: false });
+                // key is wrong looks fine and answers nothing. A 429's
+                // retryAfter says which kind: a minute's wait or a daily cap.
+                emit('error', { phase: 'init', status: status, retrying: false, retryAfter: retryAfter });
             }
             for (var i = 0; i < waiters.length; i++) { waiters[i](); }
         });
@@ -4451,16 +4582,43 @@
         sendGuestText(text, 'composer');
     }
 
+    /*
+     * Which throttle copy a 429 earns (contract 1.11.0, guide §6). The guest
+     * bucket now caps per day as well as per minute, and the body cannot tell the
+     * two apart — Retry-After can. A per-minute limit never asks for more than 60
+     * seconds; 120 is that plus slack for rounding, and past it "try again in a
+     * moment" stops being true whichever limit refused.
+     *
+     * Keyed on the WAIT, never on guessing the limiter: a daily cap with a minute
+     * left really is "a moment", and saying so is correct. A missing or
+     * unreadable header is null and keeps the pre-1.11.0 copy — this widget has
+     * never retried a 429 on its own, and neither branch starts now.
+     *
+     * Our guests are mostly on a hostel's own wifi, one IP for a building full of
+     * strangers, so the per-visitor DAILY cap is the one this copy is for.
+     */
+    var RETRY_LATER_S = 120;
+
+    function isLongThrottle(retryAfter) {
+        return typeof retryAfter === 'number' && retryAfter > RETRY_LATER_S;
+    }
+
+    function throttleCopy(retryAfter) {
+        return isLongThrottle(retryAfter) ? t('retryLater') : t('retry');
+    }
+
     function sendMessage(text, isRetry) {
         if (!conversationUuid) {
-            // A failed re-init lands here; a throttled one deserves "try again
-            // shortly", not a hard error.
-            addBubble('bot', lastInitStatus === 429 ? t('retry') : t('error'));
+            // A failed re-init lands here; a throttled one deserves the
+            // throttle copy — "try again shortly" or, past a daily cap, "come
+            // back later" — not a hard error.
+            addBubble('bot', lastInitStatus === 429 ? throttleCopy(lastInitRetryAfter) : t('error'));
             // Status 0 — no HTTP exchange happened on the TURN endpoint. The
             // init failure that put us here emitted its own {phase:'init'}
             // event; this one says it cost the guest a turn, which is the part
-            // that matters and is not derivable from the other.
-            emit('error', { phase: 'turn', status: 0, retrying: false });
+            // that matters and is not derivable from the other. retryAfter null
+            // for the same reason: the init event already carries the header.
+            emit('error', { phase: 'turn', status: 0, retrying: false, retryAfter: null });
             return;
         }
 
@@ -4480,7 +4638,7 @@
         // claim pollResult() has always made about its poll.
         var epoch = chatEpoch;
 
-        API.send(conversationUuid, text, function (status, body) {
+        API.send(conversationUuid, text, function (status, body, retryAfter) {
             // BEFORE busy, and the order is load-bearing. A restart (the header
             // menu, mid-conversation) already cleared busy, and a guest who has
             // since sent into the NEW conversation has set it again - clearing
@@ -4584,7 +4742,7 @@
                 // and we did not" — it means these browsers are judging by the
                 // IDLE_MS fallback: an older server that sends no idle_hours, or
                 // records written by one that have not been rewritten since.
-                emit('error', { phase: 'turn', status: status, retrying: true });
+                emit('error', { phase: 'turn', status: status, retrying: true, retryAfter: null });
                 startConversation(function () { sendMessage(text, true); });
                 return;   // the retry's own callback drains the queue
             }
@@ -4594,19 +4752,27 @@
             // an unregistered origin (guide §7) takes the widget off their page
             // silently, and this event is the only trace on the client.
             if (status === 403) {
-                emit('error', { phase: 'turn', status: 403, retrying: false });
+                emit('error', { phase: 'turn', status: 403, retrying: false, retryAfter: null });
                 teardown();
                 return;
             }
             if (status === 429) {
-                addBubble('bot', t('retry'));
-                emit('error', { phase: 'turn', status: 429, retrying: false });
+                addBubble('bot', throttleCopy(retryAfter));
+                emit('error', { phase: 'turn', status: 429, retrying: false, retryAfter: retryAfter });
+                // Past a daily cap every turn queued behind this one is refused
+                // too, for hours, and each would paint the same "come back later"
+                // under the last. One answer covers them — their guest bubbles
+                // are already on screen and in the record — the same way
+                // endConversation() empties the queue when nothing more can be
+                // answered. A short wait keeps draining: a minute's limit may
+                // well have reopened by the time the next one goes.
+                if (isLongThrottle(retryAfter)) { sendQueue = []; }
                 drainSend();
                 return;
             }
 
             addBubble('bot', t('error'));
-            emit('error', { phase: 'turn', status: status, retrying: false });
+            emit('error', { phase: 'turn', status: status, retrying: false, retryAfter: null });
             drainSend();
         });
     }
@@ -4846,7 +5012,7 @@
                 // Status 0: nothing failed on the wire, we stopped asking. The
                 // interim reply and its fallback links are still on screen, so
                 // this is a delay the guest noticed, never a dead end.
-                emit('error', { phase: 'poll', status: 0, retrying: false });
+                emit('error', { phase: 'poll', status: 0, retrying: false, retryAfter: null });
                 return;
             }
             setTimeout(tick, delay);
@@ -4861,7 +5027,7 @@
                 if (removed || epoch !== chatEpoch) { return; }
                 log('poll', status, body);
                 if (status === 403) {
-                    emit('error', { phase: 'poll', status: 403, retrying: false });
+                    emit('error', { phase: 'poll', status: 403, retrying: false, retryAfter: null });
                     teardown();
                     return;
                 }
@@ -4871,7 +5037,7 @@
                 // emit NOTHING: they are the backoff working, not a failure, and
                 // reporting each one would drown the real errors.
                 if (status === 410) {
-                    emit('error', { phase: 'poll', status: 410, retrying: false });
+                    emit('error', { phase: 'poll', status: 410, retrying: false, retryAfter: null });
                     return;
                 }
 

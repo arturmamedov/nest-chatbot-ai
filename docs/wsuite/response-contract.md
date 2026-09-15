@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Version** | 1.10.0 (see [Versioning](#versioning) · [Changelog](#changelog)) |
-| **Date** | 2026-08-28 |
+| **Version** | 1.12.0 (see [Versioning](#versioning) · [Changelog](#changelog)) |
+| **Date** | 2026-09-15 |
 | **Status** | Frozen envelope — the shared artifact the in-repo preview widget and the external `nest-chatbot-ai` widget build against. Governed by `docs/decisions.md` (D-020, D-029, D-036). |
 | **Endpoint** | `POST /api/v1/chatbot/conversations/{uuid}/messages` (route `chatbot.v1.conversations.messages.store`) |
 
@@ -13,7 +13,7 @@ This is the response shape of a single guest turn. Element **content is determin
 
 The contract is versioned **`MAJOR.MINOR.PATCH`** (semver):
 
-- **MINOR** — an **additive** element or field (the common case). By the [extension rule](#extension-rule-the-dry-seam) + "ignore unknown types", adding an element or an optional field is **backwards-compatible**: an existing consumer keeps working untouched, so this is never a breaking change. **This also covers an additive optional *request* field** (e.g. `locale` on the turn endpoint in 1.3.0): a consumer tracks **one** version number for the whole guest API surface, so a new opt-in request field it may want to send bumps the same number. It is likewise backwards-compatible — omitting the field keeps the previous behavior exactly. **It also covers a change to the *value* an existing field carries** when that value stays within the field's documented type and anchor rule — `1.9.0` (every booking `url` gaining the guest's language and stay, D-071) is the precedent: nothing is added or renamed and a consumer that renders the field as before keeps working, but the number moves so a consumer that *inspects* the value finds out.
+- **MINOR** — an **additive** element or field (the common case). By the [extension rule](#extension-rule-the-dry-seam) + "ignore unknown types", adding an element or an optional field is **backwards-compatible**: an existing consumer keeps working untouched, so this is never a breaking change. **This also covers an additive optional *request* field** (e.g. `locale` on the turn endpoint in 1.3.0): a consumer tracks **one** version number for the whole guest API surface, so a new opt-in request field it may want to send bumps the same number. It is likewise backwards-compatible — omitting the field keeps the previous behavior exactly. **It also covers a change to the *value* an existing field carries** when that value stays within the field's documented type and anchor rule — `1.9.0` (every booking `url` gaining the guest's language and stay, D-071) is the precedent: nothing is added or renamed and a consumer that renders the field as before keeps working, but the number moves so a consumer that *inspects* the value finds out. **It also covers a change to transport behaviour a consumer can act on** — `1.11.0` is the precedent: a `429` that can now last up to a day, and its `Retry-After` header made readable cross-origin so a consumer can tell that apart from a one-minute wait. No body changes, and a consumer that ignores the header keeps working.
 - **MAJOR** — an **envelope** change (a rename/removal/retype of `reply` / `actions` / `turn`, or a change to how elements are discriminated). This should never happen; the envelope is frozen.
 - **PATCH** — a wording/clarification fix with no wire effect.
 
@@ -23,7 +23,7 @@ The version is emitted at runtime as `contract_version` on the **init** response
 
 ## Envelope
 
-A turn always returns HTTP `200` (the orchestrator degrades provider/budget failures to a busy reply at `200`, never a 5xx — see `docs/runtime/chatbot.md`). Resolution failures are the only non-200s: `404` (unknown/foreign uuid), `410` (idled-out — the widget re-inits), `403` (site/key revoked), `429` (throttled).
+A turn always returns HTTP `200` (the orchestrator degrades provider/budget failures to a busy reply at `200`, never a 5xx — see `docs/runtime/chatbot.md`). Resolution failures are the only non-200s: `404` (unknown/foreign uuid), `410` (idled-out — the widget re-inits), `403` (site/key revoked), `429` (throttled). A `429` carries `Retry-After`, the seconds until the limit that refused it reopens — about a minute for a per-minute limit, up to 24 hours for a daily cap — readable cross-origin since `1.11.0` (see `integration-guide.md` §6).
 
 ```json
 {
@@ -92,7 +92,7 @@ Emitted deterministically by the information path for a resolved property (a Boo
 | `style` | `string` | no | Presentation hint (`primary`). The renderer may honour or ignore it. |
 
 ### `contact_channels` — the property's contact channels
-Emitted by a human-handoff turn (normalizes the former `handoff_ack`). Each present channel becomes a native link.
+Emitted by a human-handoff turn whose property is known (normalizes the former `handoff_ack`). Each present channel becomes a native link. **Since 1.12.0** (D-079) a handoff turn that has not yet identified the property emits **no** `contact_channels` — its `reply` says staff were notified and asks which property the request is about, over a [`property_choice`](#quick_replies--tap-to-send-question-chips) chip row; the next turn that names one carries that property's channels. Never assume a handoff turn carries this element.
 
 ```json
 { "type": "contact_channels", "phone": "+34123456789", "whatsapp": "+34600111222", "email": "hola@laseras.example" }
@@ -393,7 +393,7 @@ for in a ~420px panel, not guarantees you may rely on:
   itself, keyed on `id`; nothing about that is visible to the server.
 
 ### `quick_replies` — tap-to-send question chips
-Emitted on the init response from the site's `chatbot.quick_prompts` setting (the "try asking" chips) and by deterministic clarification turns (e.g. island choice — D-043(f)). Tapping a chip sends its `message` as an **ordinary guest turn** through the normal message endpoint — nothing new to implement. **Items never carry URLs** (contract rule): chips are buttons that send text, never anchors, so the URL security surface is unchanged.
+Emitted on the init response from the site's `chatbot.quick_prompts` setting (the "try asking" chips) and by deterministic clarification turns (island choice — D-043(f); **since 1.12.0** property choice on a human-handoff turn that has not yet identified the property — D-079). Tapping a chip sends its `message` as an **ordinary guest turn** through the normal message endpoint — nothing new to implement. **Items never carry URLs** (contract rule): chips are buttons that send text, never anchors, so the URL security surface is unchanged.
 
 ```json
 { "type": "quick_replies", "id": "quick_prompts", "heading": "Which island are you going to?", "items": [ { "label": "Nest Pass", "message": "What is the Nest Pass?" } ], "locale": "en" }
@@ -402,7 +402,7 @@ Emitted on the init response from the site's `chatbot.quick_prompts` setting (th
 | Element field | Type | Required | Notes |
 |---|---|---|---|
 | `items` | `array` | yes | The chips, in order (below). Never empty — the element is not emitted with no chips. |
-| `id` | `string` | no | **Since 1.6.0.** The row's provenance, and the whole vocabulary is `quick_prompts` (the tenant-authored init row) \| `island_choice` (the deterministic clarification row). This is how you tell tenant text from server text — see [language](#language-1) below. |
+| `id` | `string` | no | **Since 1.6.0.** The row's provenance, and the whole vocabulary is `quick_prompts` (the tenant-authored init row) \| `island_choice` (the deterministic island clarification row) \| `property_choice` (**since 1.12.0** — the deterministic "which property is this about?" row of a handoff turn). This is how you tell tenant text from server text — see [language](#language-1) below. |
 | `heading` | `string` | no | **Since 1.7.0.** A short line saying **what the row is asking**, rendered above the chips. Tenant-authored and server-localized like every other payload string — put it in the DOM via `textContent`. Absent is normal and means render no heading; it is **never** a cue to substitute your own label (see below). |
 | `locale` | `string` | no | **Since 1.6.0.** The language of the chip **labels**, as a 2-letter primary subtag. Absent means unknown or language-neutral; see [language](#language-1). |
 
@@ -443,6 +443,10 @@ Chip rows come from two sources and `id` tells them apart:
 - **`island_choice`** — server-generated. Its `message` **is** localized to the guest, but its
   `label` is a catalog island name — a proper noun — so the row **omits `locale`** rather than
   claiming a language for text that has none.
+- **`property_choice`** *(since 1.12.0)* — server-generated, on the same terms as `island_choice`:
+  each `label` is a catalog property name, each `message` is a localized sentence carrying that
+  name verbatim ("It's about Cisne by Nest"), and the row **omits `locale`**. Send the `message`
+  exactly as given — the server recognises the answer by the property name inside it.
 
 #### How many, and in what order
 
@@ -450,8 +454,12 @@ Chip rows come from two sources and `id` tells them apart:
 - **`island_choice` is not capped** — it emits one chip per distinct island in the tenant's catalog
   (at least two, or the row is not emitted at all). A consumer **must** wrap or scroll the row rather
   than assume it fits one line.
-- **Order is meaningful — render as given.** Tenant chips are in authoring order; island chips are
-  alphabetical.
+- **`property_choice` is not capped either** — one chip per bookable property, or per property on
+  the island the guest named when that island offers at least two (at least two, or the row is not
+  emitted). A multi-property tenant's row is long (13 chips for the first live tenant), so the same
+  wrap-or-scroll rule applies.
+- **Order is meaningful — render as given.** Tenant chips are in authoring order; island and
+  property chips are alphabetical.
 
 #### The one-shot rule
 
@@ -540,6 +548,8 @@ Each version is tagged in the platform repo as **`chatbot-contract-v<X.Y.Z>`**, 
 
 | Version | Date | Breaking | Change | Element / field | Consumer action |
 |---|---|---|---|---|---|
+| `1.12.0` | 2026-09-15 | No | **A handoff that does not know the property asks, instead of guessing** (D-079, closes KI-010's guest and mail halves). Until now a human-handoff turn with no identified property borrowed the tenant's alphabetically-first property: its `contact_channels` went in front of every such guest and, since per-property handoff mail (D-048), its inbox received their request — 15 of 25 live handoffs over 30 days, measured 2026-09-15. Such a turn now emits **no** `contact_channels`; its deterministic `reply` says staff were notified and asks which property the request is about, over a **`quick_replies` row with the new `id` `property_choice`** (one chip per bookable property, labels are catalog names, no `locale`, uncapped). The request is still raised. The next message that names one property — a tapped chip or a typed name — is answered as that handoff: the property's channels appear, and its own inbox is told once. Additive by the ignore-unknown rule: a new value in the documented `id` vocabulary, a known element on a turn it never appeared on, and a known element that a turn can now omit. Reference widget: a constant move plus one comment — it already renders any chip row on any turn and does not switch on `id`. | `quick_replies` (`id: property_choice`; emission on a handoff turn) · `contact_channels` (not emitted while the property is unknown) | **None required.** Two checks: (1) if you switch on `quick_replies.id`, treat `property_choice` like `island_choice` (server text, proper-noun labels, send `message` verbatim); (2) if anything in your widget assumes a handoff turn always carries `contact_channels` — a "call the hostel" affordance keyed on it, say — let it be absent. Rows can be long: wrap or scroll. |
+| `1.11.0` | 2026-09-14 | No | **A `429` can last a day, and says so** (D-078). The guest bucket (init + turn) gains two **daily** ceilings beside its per-minute ones — per visitor (key + IP) and per key (the whole site), a rolling 24 hours — so an IP-rotating flood can no longer spend a month's AI budget in minutes. A `429` from a daily cap can therefore last up to 24 hours, and `Retry-After` is now in CORS `exposed_headers` so a browser consumer can read how long. The body is unchanged (`{"message":"Too Many Attempts."}`), no element or field moves, and polls are untouched. Reference widget: a constant move — its soft retry copy is unchanged. | `429` response · `Retry-After` header (newly readable) | **Optional.** Read `Retry-After` on a `429`; when it is more than about a minute, show a "come back later / contact the hostel" message instead of "try again in a moment", and do not retry automatically. A consumer that changes nothing keeps working and shows its existing retry copy. |
 | `1.10.0` | 2026-08-28 | No | **The hostel card beside the booking element, per site** (D-073). When a tenant switches it on for a site (`chatbot.cards.on_booking`, off by default), the Ready booking turn carries the resolved property's `property_cards` (one item) **first** in `actions[]`, before its `availability` or `booking_link`; the card's `url` is byte-identical to that element's. D-069 had moved every "is it free / price for these dates" question onto the booking path, where no card had ever been emitted, so the hostel's image, location and from-price vanished from exactly the turns guests ask that on. No element or field is added, removed or renamed — a known element on a turn it never appeared on. Reference widget: the `availability` branch now draws `options[]` unconditionally and dedupes only its Book button — against a card CTA in the same list and against a url already anchored this turn. | `property_cards` (emission) · `availability` / `booking_link` (co-occurrence) | **Extend your Book-button dedupe** to `availability.url` and `booking_link.url` against the card CTAs you actually render (raw string equality, D-043(c)), and keep drawing `options[]` regardless. A renderer that already dedupes every Book affordance against rendered card urls needs only the constant move. Nothing reaches the wire until the tenant switches the card on. |
 | `1.9.1` | 2026-08-28 | No | **Prose rule only, no wire effect** (PATCH, D-072). On a Ready turn whose every option carries `total`, the reply names at most the cheapest bed and the cheapest whole room and points the guest to the option list instead of re-typing it — measured on live turns, a three-to-six-option list was being read twice, once as bullets in the reply and once as the widget's rows. The same disclosure closes the async tool result. Shape unchanged. | *(none — prose)* `availability.options[]` | **None if you draw `options[]`** — one row per option, which both registered renderers do. If you skipped the `availability` branch since 1.2.0 on the strength of "the reply lists them anyway", add it: the reply now points at rows only your renderer can show. |
 | `1.9.0` | 2026-08-26 | No | **The booking URL carries the stay** (D-071). Every booking `url` the server emits is now composed from the catalog's CloudBeds booking code and the collected stay: the language segment for the guest's locale, `checkin`/`checkout` when both are known, and `adults` only when the guest stated a party size (an assumed one is never sent — D-068(b)). Applies to `booking_link.url`, `availability.url` (sync and async — the async final is byte-identical to the interim `booking_link` for the same stay), the information turn's Book `link_button.url`, and `property_cards[].url` (still the same string as the Book button beside it). A catalog whose booking URL is not a CloudBeds one is unchanged. No element or field is added, removed or renamed; this is the value-change lane §Versioning now names. | `booking_link.url` · `availability.url` · `link_button.url` (Book) · `property_cards[].url` | **None** — render as before. If you parse, normalise or strip a booking `url` anywhere (dedupe, analytics, display), stop: it now carries a language segment and query parameters, and the card-vs-button dedupe compares raw strings. |

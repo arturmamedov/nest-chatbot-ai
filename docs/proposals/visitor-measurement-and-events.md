@@ -118,7 +118,7 @@ Dispatched from `els.root`, never `window`: events bubble, so a host listener on
 | `wchat:message` | `sendGuestText()` | `source`, `length`, `turns`, `locale` | **engagement** — read-only vs typed; whether the prompt pills and server chips earn their space | what they asked |
 | `wchat:reply` | `sendMessage()` 200; again on poll resolution | `turn`, `length`, `elements[]`, `async`, `resolved`, `ended`, `latencyMs` | **how slow the bot is**; which element types actually reach guests | reply quality; whether it was right |
 | `wchat:action` | delegated click in `els.body` | `element`, `url`, `channel`, `style`, `index` | **the conversion** — which Book / WhatsApp / card was clicked | whether the booking completed |
-| `wchat:error` | every non-200 branch | `phase`, `status`, `retrying` | **429s on shared hostel wifi**, 403 origin refusals, transport failures — all invisible before this | why the server failed |
+| `wchat:error` | every non-200 branch | `phase`, `status`, `retrying`, `retryAfter` (since 2.13.0) | **429s on shared hostel wifi** — and, through `retryAfter`, whether one was a minute's wait or a daily cap (contract 1.11.0) — 403 origin refusals, transport failures — all invisible before this | why the server failed |
 | `wchat:ended` | `endConversation()` | `turns` | how often the turn cap bites | whether the guest minded |
 | `wchat:restart` | `restartConversation()` | `source`, `turns` | whether "start a new chat" is used, and **whether it was chosen or forced** (`source`) | why they wanted a fresh thread |
 | `wchat:locale` | `setLocale()` | `from`, `to` | **whether the language switcher earns its space** | whether detection would have got it right |

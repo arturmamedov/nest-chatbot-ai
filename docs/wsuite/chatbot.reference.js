@@ -55,7 +55,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.10.0';
+    var BUILT_AGAINST = '1.12.0';
 
     // ---- state ---------------------------------------------------------------
     var conversationUuid = null;
@@ -639,7 +639,8 @@
         row.setAttribute('aria-label', heading || 'Suggested questions');
         row.setAttribute('aria-live', 'off'); // announced by the reply, not by itself
         // Tenant-authored labels may be in the tenant's language, not the guest's;
-        // the island_choice row omits `locale` because its labels are proper nouns.
+        // the island_choice and property_choice rows omit `locale` because their
+        // labels are proper nouns.
         if (typeof action.locale === 'string' && /^[a-z]{2}$/.test(action.locale)) {
             row.setAttribute('lang', action.locale);
         }

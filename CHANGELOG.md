@@ -5,6 +5,152 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.13.0 — 2026-09-15
+
+**Contract sync: `BUILT_AGAINST` 1.10.0 → 1.12.0 (D-078, D-079).** A **MINOR**, for the usual
+reason: a fresh `docs/wsuite/` packet and a `BUILT_AGAINST` move. Packet:
+`docs @ chatbot-contract-v1.12.0 (43101a6) · widget @ cb8005b`. This time the two halves have
+different shas. The renderer last moved in `cb8005b`, the 1.12.0 feature commit. The tag sits on
+`43101a6`, a later fix that changed one line of the contract and nothing in the renderer. All three
+vendored files byte-match `git show chatbot-contract-v1.12.0:<path>` upstream.
+
+Two rows came in one hand-over. **1.11.0 was optional, and this release adopts it. 1.12.0 asked for
+nothing, and got nothing but a fixture.**
+
+### 1.11.0 — a `429` can last a day, and `Retry-After` says so (D-078)
+
+The turn bucket (init and turn, never poll) now also caps **per day**: 100 per visitor (key + IP)
+and 300 per site, over a rolling 24 hours. A `429` from a daily cap can last up to 24 hours. The
+body is the same `{"message":"Too Many Attempts."}` either way; only `Retry-After` tells the two
+apart, and 1.11.0 exposes that header cross-origin.
+
+**Why adopt an optional row.** Our guests are mostly on the hostel's own wifi. That is one IP, and
+therefore one visitor bucket, for a whole building of strangers. So the **daily** visitor cap is the
+one a busy property can realistically trip, and the widget used to answer it with "please try again
+in a moment". That message would stay wrong for hours.
+
+- **`request()` passes a `429`'s `Retry-After` to its callback** as a third argument, in whole
+  seconds, and passes `null` on every other status. Only the init and turn callbacks read it. A
+  poll 429 stays a transient backoff, because the poll bucket has no daily cap.
+- **Past `RETRY_LATER_S` (120 seconds), the guest sees a new pack string, `retryLater`**: "We've
+  reached our message limit for now — please come back later.", in all five locales, next to
+  `retry` and in the same register. A per-minute limit never asks for more than 60 seconds, and
+  120 leaves slack for rounding. The choice depends on the length of the wait, not on guessing
+  which limiter refused: a daily cap with one minute left really is "a moment". This applies on both
+  paths — the turn `429` branch, and the no-uuid branch a refused init leads to (`lastInitRetryAfter`
+  sits next to `lastInitStatus`).
+- **The header is read through `getAllResponseHeaders()`, not `getResponseHeader('Retry-After')`.**
+  Measured, not assumed: asked by name for a header the response does not expose, Chromium logs
+  `Refused to get unsafe header "Retry-After"` in red on the **host's** console. That is browser
+  output, so `data-debug` cannot gate it, and today's deployment does not expose the header. The
+  full header list is filtered silently. An absent, unexposed, empty or date-form value reads as
+  `null`, and `null` keeps the pre-1.11.0 message exactly.
+- **Nothing retries a `429` automatically.** That was already true, and nothing here changes it. A
+  long wait also empties `sendQueue`: every turn queued behind the refused one would be refused the
+  same way, and each would add another identical "come back later" underneath. One answer covers
+  them. Their guest bubbles are already on screen and in the stored transcript, which is how
+  `endConversation()` treats the queue as well.
+
+**`wchat:error` gains `retryAfter`** (seconds, or `null`) on **every** emission — all ten sites — so
+the payload has one shape for host schemas. It carries a number only on a `429` whose header was
+readable. The `phase: 'turn', status: 0` event that follows a refused init stays `null`, because no
+turn request happened; the `phase: 'init'` event before it carries the number. This is an additive
+payload field. No event name changed, and neither did `NestChatbot.state`.
+
+### 1.12.0 — a handoff that does not know the hostel asks (D-079)
+
+Before 1.12.0, a human-handoff turn with no identified property borrowed the alphabetically-first
+hostel's `contact_channels`, which gave most such guests the wrong phone number. That turn now sends
+**no** `contact_channels`. Its `reply` says the team was notified and asks which property, over a
+`quick_replies` row with the new `id` **`property_choice`**: one chip per bookable property, labelled
+with catalog names, with no `locale`, uncapped, 13 on the first tenant. Tapping a chip sends
+"It's about <name>" as a normal turn, and that turn carries the right hostel's channels.
+
+**The contract's three checks all held, read from the code:**
+
+- **A row renders whatever its `id`.** `renderAction()`'s `quick_replies` case calls
+  `renderQuickReplies()` (`nest-chatbot.js:3033`), which never reads `action.id`. The file does not
+  switch on `id` anywhere.
+- **Nothing assumes a handoff turn carries `contact_channels`.** The element is read in exactly one
+  place, its `renderAction()` case → `renderChannels()` (`:2969`). No affordance keys on it, and
+  nothing in the file knows what a handoff is.
+- **A long row wraps.** `.nc-chip-row` is `display: flex; flex-wrap: wrap` (`css/nest-chatbot.css:877`),
+  and each `.nc-prompt` has `max-width: 100%; overflow-wrap: break-word` (`:842`). This was
+  measured below, not only read.
+
+The chip already sends its `message` byte-for-byte through `sendGuestText()`, which is what the
+contract requires ("the server recognises the answer by the property name inside it").
+
+### Fixtures
+
+- **`human`** → the unbound handoff: the server's own English `reply`, and one `quick_replies` row
+  with `id: 'property_choice'`, thirteen catalog names in alphabetical order, no `locale`, no
+  `heading`, and **no** `contact_channels`. Sending "It's about <name>" answers with that hostel's
+  channels. That branch sits **above** every content keyword, because an `indexOf` test on a word
+  inside a hostel name must never catch it.
+- **`!429 <seconds>`** → a `429` carrying that `Retry-After`. Bare `!429` stays the header-less
+  control.
+- **`?nc-init-429=<seconds>`** → every mock init answers `429` with that `Retry-After`. It is the
+  only way to reach the init half, and like `?nc-idle` it is unreachable without `data-mock`.
+- `Mock.init` reports `contract_version: '1.12.0'`.
+
+### Verified
+
+Headless Chrome over a dependency-free CDP driver, on a **fresh port** with the cache disabled. The
+running source was checked for the new strings before anything was measured. **75 checks across
+four suites, all passing** (three runs needed an assertion fixed; none needed a code fix):
+
+- **Mock throttle copy (30).**
+  - `!429 60` → `retry`, `retryAfter: 60`; `!429 80000` → `retryLater`, `80000`; bare `!429` → `retry`, `null`.
+  - `!429 120` → `retry`; `!429 121` → `retryLater`, so the boundary sits where the constant says.
+  - `es`/`de` packs resolve.
+  - Two turns queued behind an in-flight init: a long throttle paints **one** bubble and emits one
+    turn error; a short one paints and emits two.
+  - `?nc-init-429=80000`: opening emits `{phase:'init', status:429, retryAfter:80000}`, and a send
+    shows `retryLater` with a `{phase:'turn', status:0, retryAfter:null}` event.
+    `?nc-init-429=60` shows `retry`.
+  - Every `wchat:error` carries `retryAfter`.
+- **Real XHR, cross-origin (17).** The mock never runs `request()`, so a node fake served the host page
+  on one origin and the API on another.
+  - Exposed `Retry-After: 60` → `retry`; exposed `80000` → `retryLater`; no header → `retry`/`null`.
+  - Header sent but **not** exposed → `retry`/`null`, with **nothing** on the host console. A direct
+    probe on the same response showed `getResponseHeader` logging the "unsafe header" error and
+    `getAllResponseHeaders()` logging nothing.
+  - An exposed init `429` of 80000 shows `retryLater`.
+- **Handoff and regressions at 400px (25).**
+  - `human`: `wchat:reply.elements` is exactly `['quick_replies']`, with zero `.nc-channels`.
+  - One row of 13 buttons in the given order: no `lang`, no heading, `aria-label` "Quick replies",
+    no anchors.
+  - Row `scrollWidth` 370 = `clientWidth` 370, the body never scrolls horizontally, every chip is
+    inside the body, and the row wraps onto 7 lines.
+  - Tapping "Cisne by Nest" sends that exact text as a guest bubble (`wchat:message.source: 'chip'`),
+    retires the row at once, and the answer renders three channel links.
+  - Unchanged: `hostel` (headed island row), `cardstay` (one card anchor, zero availability anchors,
+    three option rows), `available` (one Book affordance after the poll), `!unknown`, `!xss`.
+- **Drift warn (3).** Positive control: the served script was rewritten **in flight** so the mock
+  init reported 1.13.0, with no repo edit. The warn fired exactly once and read "built against
+  1.12.0". It stays silent against a matching or older server.
+
+**Live, off `demo/demo.html` against `nest-mind.laravel.cloud` (2026-09-15 15:15 UTC): neither
+1.11.0 nor 1.12.0 has deployed.**
+- A real init `201` reports `contract_version: 1.10.0`, `idle_hours: 168`, `server_time` present,
+  and `Access-Control-Expose-Headers: X-Chatbot-Contract` — **no `Retry-After`**.
+- One turn ("What is the Nest Pass?") returned `200` with a 285-character reply, no elements, and no
+  `wchat:error`.
+- No console warning. That is correct: the widget is now the one ahead, and the warn fires only
+  when the server is.
+- A live `429` would therefore read `retryAfter: null` and show the old copy today, which is the
+  unexposed case the fake measured. Neither adoption can be seen live until the deploy lands. No
+  cap was tripped and no person was asked for, deliberately: a daily cap on the live site refuses
+  real guests for up to a day, and a handoff emails staff.
+
+### Not changed
+
+`docs/rendering-ownership.md`: a `property_choice` label is a catalog name, on exactly the terms of
+`island_choice`, and `retryLater` is widget-owned text for a transport outcome, like `retry` before
+it. Neither moves ownership. No CSS changed, and no `data-*` attribute or `window.NestChatbot`
+method was added.
+
 ## 2.12.0 — 2026-08-28
 
 **Contract sync: `BUILT_AGAINST` 1.9.0 → 1.10.0 (D-072, D-073).** A **MINOR**, the case reserved

@@ -124,7 +124,7 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.10.0 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.12.0 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
@@ -135,19 +135,23 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 `BUILT_AGAINST` (api section) moves **only** during a sync — it is a claim about what this
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
-rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-08-28 as
-`docs @ chatbot-contract-v1.10.0 (31ff82b) · widget @ 31ff82b` — the widget SHA is part of the
+rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-09-15 as
+`docs @ chatbot-contract-v1.12.0 (43101a6) · widget @ cb8005b` — the widget SHA is part of the
 packet's identity, because the reference renderer legitimately moves between contract tags
-(here the two halves share a sha because 1.10.0 was a real renderer change in the tag commit).
-`BUILT_AGAINST` is `'1.10.0'`, in lockstep since release 2.12.0 adopted D-072 and D-073.
+(here the halves differ: the renderer last moved in `cb8005b`, the 1.12.0 feature commit, and the
+tag sits on `43101a6`, a later fix that touched one line of the contract and none of the renderer).
+`BUILT_AGAINST` is `'1.12.0'`, in lockstep since release 2.13.0 adopted D-078 and D-079.
 
 **The widget is currently AHEAD of the deployment, and that is the quiet direction.** Measured
-2026-08-28 17:28 UTC off a real init `201` against `nest-mind.laravel.cloud`:
-`contract_version: 1.9.0`, `idle_hours: 168`. The 1.10.0 tag exists locally in `nest-mind` and has
-not shipped. Nothing is wrong — the drift warn fires only when the **server** is ahead, and the
-ignore-unknown rule covers the other direction — but it means the one thing 2.12.0 adopted cannot
-be seen live yet, so do not read a card-less booking turn as a defect. Re-read `contract_version`
-off a `201` before concluding anything, exactly as the idle-window entry under Open items insists.
+2026-09-15 15:15 UTC off a real init `201` against `nest-mind.laravel.cloud`:
+`contract_version: 1.10.0`, `idle_hours: 168`, and `Access-Control-Expose-Headers: X-Chatbot-Contract`
+— **no `Retry-After`**. Both 1.11.0 and 1.12.0 are tagged locally in `nest-mind` and neither has
+shipped. Nothing is wrong — the drift warn fires only when the **server** is ahead, and the
+ignore-unknown rule covers the other direction — but it means neither thing 2.13.0 adopted can be
+seen live yet: every live `429` still reads `retryAfter: null` and shows the old "in a moment" copy
+(correct for a header the browser cannot read), and no handoff turn carries `property_choice`. Do
+not read either as a defect. Re-read `contract_version` **and** the expose header off a `201` before
+concluding anything, exactly as the idle-window entry under Open items insists.
 
 **The upstream repo drives the sync, and it is local.** The platform is `nest-mind`
 (`modules/chatbot/`). Its `docs/consumer-sync.md` is the operational half: §1 is a registry of
@@ -268,8 +272,22 @@ what `setLocale()` may repaint.
 - **Every request faces two rate limits** (guide §6), on two independent buckets: a
   per-**visitor** budget keyed on key + client IP (20/min turn, 60/min poll) and a
   per-**key** site ceiling (300/min turn, 900/min poll); a `429` means whichever tripped.
-  Visitors sharing an egress IP (a hostel's own wifi, corporate NAT, carrier CGNAT) share
-  **one** visitor bucket — our guests are mostly on property wifi, so budget for that.
+  Since contract 1.11.0 (D-078) the **turn** bucket (init + turn, never poll) also caps **per
+  day** — 100/day per visitor, 300/day per site, a rolling 24 hours from the first counted
+  request. Visitors sharing an egress IP (a hostel's own wifi, corporate NAT, carrier CGNAT) share
+  **one** visitor bucket — our guests are mostly on property wifi, so budget for that, and note
+  it is the **daily** visitor cap such a building trips, not the per-minute one.
+- **A `429` can last a day, and only `Retry-After` says so** (1.11.0). The body is identical for a
+  minute's wait and a daily cap. `request()` hands a 429's `Retry-After` seconds to the init and
+  turn callbacks; above `RETRY_LATER_S` (120) the guest sees `t('retryLater')` instead of
+  `t('retry')`, and `wchat:error` carries the number as `retryAfter`. Three things to keep:
+  **read it through `getAllResponseHeaders()`, never `getResponseHeader('Retry-After')`** —
+  asked by name for a header the response does not expose cross-origin, Chromium logs a red
+  `Refused to get unsafe header "Retry-After"` on the host's console (measured 2.13.0; the full list
+  is filtered silently), which `data-debug` cannot gate. **Absent, unexposed or a date form is
+  `null` and keeps the old copy** — unknown never becomes "come back later". And **nothing retries
+  a 429 automatically**, then or now; a long one also empties `sendQueue`, since every queued turn
+  would be refused the same way.
 - **`actions[]` is always an array**, never null. Render elements in order.
 - **Ignore unknown element types silently.** The server ships new types ahead of any given
   widget. Throwing on one would take the whole reply down. Adding support for a new type is
@@ -497,10 +515,12 @@ are shaped exactly like the real envelope. Drive them from the composer:
 | `hostel` | `quick_replies` — the three island chips, carrying the 1.7.0 `heading` (also matches suggested prompt 1); any send retires every row **and its heading** (one-shot) |
 | `tenerife` `canaria` `ibiza` | `property_cards` carousel + `promo_card` + the CTA trio — and the 1.6.x showcase: per-card `period`/`basis` (two different suffixes in one rail), a `cta_label`, the D-043(c) isolator (name-less card sharing the website button's url — card dropped, button survives), a Book button matching a rendered card's url (suppressed) — both 1.9.0 composed strings with a query, so the dedupe is proven through `?`/`&` — and `total`/`more` (ibiza: `total` only → count line; the others: both → `more` wins) |
 | `pass` `offer` | `promo_card` alone (`pass` is word-bounded: "compass" falls through) — Spanish copy with `locale: 'es'` (→ `lang`) and a `\n` in the body (pre-wrap) |
+| `human` | the 1.12.0 unbound handoff (D-079): the reply asks which hostel, over a `quick_replies` row with `id: 'property_choice'` and **thirteen** chips (catalog names, alphabetical, no `locale`, no `heading`) — and **no** `contact_channels`. The row must wrap whole inside a 400px panel. A chip sends `It's about <name>` verbatim, which answers with that hostel's `contact_channels`; that answer branch sits **above** every content keyword, because a hostel name inside it must never be caught by an `indexOf` test |
 | `!cap` | the turn-cap reply: `contact_channels` + `conversation_ended` last — composer closes, "start a new chat" appears |
 | `!unknown` | an unrecognised element type (must be ignored, sibling still renders) |
 | `!xss` | a hostile reply and a `javascript:` url (both must be inert) |
 | `!410` `!403` `!429` `!500` | forces that status |
+| `!429 60` `!429 80000` | a `429` carrying that `Retry-After` (1.11.0): 60 keeps "try again in a moment", 80000 shows "come back later". Bare `!429` is the header-less control and must read as `60` does, with `retryAfter: null` |
 
 `Mock.init` returns **two** `quick_replies` rows — the tenant's "try asking" prompts and the
 island chips — mirroring a real welcome payload; both prompt messages chain into the table above
@@ -514,6 +534,14 @@ the fallback means temporarily setting `Mock.init`'s `actions: []`.
 get a window short enough to actually cross (`?nc-idle=0.005` is 18 seconds, where a real
 server's smallest step is an hour). A harness knob and only ever that: the whole `Mock` object
 is unreachable without `data-mock`, which a production page never sets.
+
+**`?nc-init-429=<seconds>` makes every mock init answer `429` with that `Retry-After`** — the
+other half of the throttle copy, unreachable from the composer because every keyword runs on the
+turn endpoint after init has already succeeded. Open the panel (the `init` `wchat:error` carries
+`retryAfter`), then send anything: the re-init is refused again and the guest sees the copy the
+number earns. Same knob rules as `?nc-idle`. **The mock never exercises `request()`** — the
+header-reading line itself is only proven over a real XHR, so a change there wants a
+cross-origin fake that sends `Retry-After` both exposed and **un**exposed.
 
 The demo page also carries the host-side half of the events seam — one listener on the
 umbrella `wchat` event, logging to the console and to `window.wchatLog`. Driving the table
@@ -736,4 +764,10 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   name moved; what moved besides the constant was two comments the contract falsified and two mock
   fixtures. That is the shape a sync is allowed to be: the rule keys on the packet and the
   constant, not on how much code the row happened to ask for.
-  The next is **2.12.1** unless it is a sync.
+  2.13.0 is the 1.11.0 + 1.12.0 sync (D-078, D-079): a fresh packet and a `BUILT_AGAINST` move —
+  the minor case once more. It is also the first sync to **adopt an optional row** rather than
+  only move the constant: the `Retry-After` copy (one pack key, `retryLater`) and one additive
+  `wchat:error` field, `retryAfter`. Neither would have earned more than a patch on its own, and
+  neither changes the number: the packet and the constant already made it a minor. 1.12.0 asked
+  for nothing and got nothing but a fixture.
+  The next is **2.13.1** unless it is a sync.

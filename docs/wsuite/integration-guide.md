@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | matches `response-contract.md` 1.10.0 (the server reports the live version as `contract_version` — see §3.1) |
+| **Version** | matches `response-contract.md` 1.12.0 (the server reports the live version as `contract_version` — see §3.1) |
 | **Audience** | Any external website embedding a **custom** chat UI on top of the wSuite chatbot API — e.g. the branded `nest-chatbot-ai` microsite. |
 | **Scope** | The **transport + auth** layer: base URL, the three endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS. |
 | **Not in scope** | The **response envelope** (`reply` / typed `actions[]` / element types). That is fully specified in [`response-contract.md`](response-contract.md) — read it alongside this document; do not duplicate its rules here. |
@@ -186,7 +186,7 @@ The element types (`link_button`, `contact_channels`, `booking_link`, `availabil
 | `404` | **Endpoint-specific — see below.** Turn: unknown/foreign `uuid`. Poll: the turn row is not visible to this request (or is not an async turn). | Turn: treat the conversation as gone → **re-init** (as for `410`). Poll: treat as **transient** → keep backing off until give-up. |
 | `410` | Conversation idled out (24h since last activity). **Endpoint-specific — see below.** | Turn: **re-init transparently** (open a new conversation, optionally resend the last message once) — the reference widget does this automatically. Poll: **stop polling and do not re-init** — keep the interim reply. |
 | `422` | Init: no site resolved for the key. | Configuration error. |
-| `429` | Rate limit exceeded (§6). | Back off; show a soft "one moment" message and retry. |
+| `429` | Rate limit exceeded (§6). | Read `Retry-After`: about a minute → back off, show a soft "one moment" message and retry; much longer (a daily cap, up to 24h) → say "come back later" and do not retry. |
 
 Note: turn/poll **content** is always `200`; the non-200s above are resolution/auth failures only.
 
@@ -205,14 +205,16 @@ The reference widget implements all four: `sendMessage` treats `404` like `410` 
 
 ## 6. Rate limits
 
-Two independent buckets (turns and polls never eat each other's budget). **Each enforces two limits per request** — a **per-visitor** budget and a **per-key site ceiling** — and a `429` means whichever one tripped:
+Two independent buckets (turns and polls never eat each other's budget). **Each enforces a per-visitor budget and a per-key site ceiling**, and the guest bucket also enforces both **per day** — a `429` means whichever limit tripped:
 
 | Bucket | Per visitor (key + IP) | Per key (whole site) | Route |
 |---|---|---|---|
-| `chatbot-guest` | **20 / min** | **300 / min** | init + turn |
+| `chatbot-guest` | **20 / min** and **100 / day** | **300 / min** and **300 / day** | init + turn |
 | `chatbot-poll` | **60 / min** | **900 / min** | poll |
 
-Tunable per deployment via `WSUITE_CHATBOT_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_POLL_PER_MINUTE` and `WSUITE_CHATBOT_SITE_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_SITE_POLL_PER_MINUTE`. These HTTP throttles are the abuse layer; the real per-provider AI cost limiting lives inside the platform gateway and is invisible to consumers.
+Tunable per deployment via `WSUITE_CHATBOT_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_POLL_PER_MINUTE`, `WSUITE_CHATBOT_SITE_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_SITE_POLL_PER_MINUTE`, and `WSUITE_CHATBOT_THROTTLE_PER_DAY` / `WSUITE_CHATBOT_SITE_THROTTLE_PER_DAY`.
+
+**A daily `429` is long — read `Retry-After` (since 1.11.0).** The daily windows are a rolling 24 hours from the first counted request, not a calendar day. Every `429` carries `Retry-After` (seconds until the limit that refused it reopens), readable cross-origin: about a minute means a per-minute limit — back off and retry; hours mean a daily cap — tell the guest to come back later (or offer the hostel's contact channels) instead of "try again in a moment", and stop retrying. A refused request is never counted against any limit. The site daily ceiling exists to stop an automated flood spending the tenant's AI budget; reaching it alerts the platform operator, and real traffic sits far below it. These HTTP throttles are the abuse layer; the real per-provider AI cost limiting lives inside the platform gateway and is invisible to consumers.
 
 **What "per visitor" honestly means.** The embed key is public and identical for every visitor, so the per-visitor bucket is keyed on **key + client IP** — the only visitor signal available at throttle time. Consequences worth designing around:
 
@@ -226,7 +228,7 @@ Tunable per deployment via `WSUITE_CHATBOT_THROTTLE_PER_MINUTE` / `WSUITE_CHATBO
 
 Two independent layers apply to `api/v1/chatbot/*`:
 
-**CORS (transport).** Static and permanent: `allowed_origins: ['*']`, methods `POST, GET, OPTIONS`, request headers `Content-Type, Authorization`, **exposed response header `X-Chatbot-Contract`** (so a browser can read the contract version off the header as well as the init body — §3.1), `supports_credentials: false`. It stays `*` because CORS preflights are unauthenticated (no key ⇒ the platform can't know which site, so it can't pick a per-site policy). CORS is **not** the access control — the origin lockdown below is.
+**CORS (transport).** Static and permanent: `allowed_origins: ['*']`, methods `POST, GET, OPTIONS`, request headers `Content-Type, Authorization`, **exposed response headers `X-Chatbot-Contract`** (so a browser can read the contract version off the header as well as the init body — §3.1) **and `Retry-After`** (how long a `429` lasts — §6, since 1.11.0), `supports_credentials: false`. It stays `*` because CORS preflights are unauthenticated (no key ⇒ the platform can't know which site, so it can't pick a per-site policy). CORS is **not** the access control — the origin lockdown below is.
 
 **Origin allow-list (per-site access control).** A server-side `Origin` check (the `EnsureOriginAllowed` middleware), opt-in per site:
 
