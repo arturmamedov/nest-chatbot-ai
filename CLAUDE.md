@@ -736,10 +736,12 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   which keeps the version-bump rule below and the subject line answering the same question. The
   body is where this repo does its real work: say *why*, name the precedent commits, and record
   what was measured rather than assumed.
-- Version bumps err small: **patch unless the embed contract changes.** Everything
-  non-breaking is a patch — a bug fix, new UI behaviour, a new `data-*` attribute, a new
-  runtime-API method, a whole new stored surface. Reserve **minor** for a contract sync (a
-  fresh `docs/wsuite/` packet and a `BUILT_AGAINST` move), and **major** for breaking the
+- Version bumps err small: **patch unless a host has to act.** Everything non-breaking is a
+  patch: a bug fix, new UI behaviour, a new `data-*` attribute, a new runtime-API method, a whole
+  new stored surface, **and a contract sync** (a fresh `docs/wsuite/` packet and a
+  `BUILT_AGAINST` move; see the 2026-09-15 note at the end of this bullet). Reserve **minor**
+  for a release that asks a host to change something on their side without breaking them yet,
+  such as deprecating a `data-*` attribute ahead of its removal. Use **major** for breaking the
   embed contract: renaming or removing a `data-*` attribute, dropping a `window.NestChatbot`
   method, or changing what a host's `<script>` tag has to say. Additive is never breaking.
   Releases through 2.8.0 predate this rule and are **not** renumbered — 2.6.0, 2.7.0 and
@@ -770,4 +772,8 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   `wchat:error` field, `retryAfter`. Neither would have earned more than a patch on its own, and
   neither changes the number: the packet and the constant already made it a minor. 1.12.0 asked
   for nothing and got nothing but a fixture.
-  The next is **2.13.1** unless it is a sync.
+  **Since 2026-09-15 a contract sync is a patch too** (asked for right after 2.13.0). The
+  widget's line had been gaining a minor with every sync, yet a sync asks no host to do anything:
+  `BUILT_AGAINST` is a claim about this file, not about their page. The syncs 2.9.0 through
+  2.13.0 keep their numbers. An upstream sync prompt that asks for a minor is overruled by this
+  rule, so say so in the report. The next release is **2.13.1**, sync or not.
