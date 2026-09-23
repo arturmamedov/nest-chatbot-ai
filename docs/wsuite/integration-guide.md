@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | matches `response-contract.md` 1.12.0 (the server reports the live version as `contract_version` — see §3.1) |
+| **Version** | matches `response-contract.md` 1.14.0 (the server reports the live version as `contract_version` — see §3.1) |
 | **Audience** | Any external website embedding a **custom** chat UI on top of the wSuite chatbot API — e.g. the branded `nest-chatbot-ai` microsite. |
 | **Scope** | The **transport + auth** layer: base URL, the three endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS. |
 | **Not in scope** | The **response envelope** (`reply` / typed `actions[]` / element types). That is fully specified in [`response-contract.md`](response-contract.md) — read it alongside this document; do not duplicate its rules here. |
@@ -62,7 +62,7 @@ Content-Type: application/json
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `locale` | `string` (≤5) | no | The guest's language hint — send `navigator.language`. Drives the greeting's language, and **since 1.6.0** also selects per-locale tenant content (the init promo card and quick-prompt chips) where the tenant has supplied translations. |
+| `locale` | `string` (≤5) | no | The guest's language hint — send `navigator.language`. Drives the greeting's language, and **since 1.6.0** also selects per-locale tenant content (the init promo card and quick-prompt chips) where the tenant has supplied translations. **Since 1.13.0** it is also the visitor's preferred language for every turn that sends no `locale` of its own, until the guest writes theirs (§3.2). |
 | `property` | `string` (≤255) | no | A **soft** property-name lookup within the key's tenant. An unknown name is not an error — it simply yields a conversation with no property pre-scoped. No DB `exists` check; the site/tenant always come from the key, never the body. A **matched** name also seeds the conversation's working memory, so answers — from turn 1 — are scoped to that property until the guest names another one; send it whenever your page is about one specific property (the bundled widget does via `data-property`). |
 
 **`201` response:**
@@ -125,18 +125,19 @@ Content-Type: application/json
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `message` | `string` | yes | Max length = `wsuite.chatbot.message.max_length` (default **2000**). |
-| `locale` | `string` (≤5) | no | **Since 1.3.0.** An explicit reply-language override for **this turn only**. |
+| `locale` | `string` (≤5) | no | **Since 1.3.0; its meaning changed in 1.13.0.** The visitor's **preferred** language — it answers until the guest writes theirs. See below. |
 
-#### `locale` — override vs. detection
+#### `locale` — the visitor's preference vs. the guest's own language
 
-**You usually do not need this.** The server **detects the guest's language on every turn** and replies in it, so a guest who switches from English to Spanish mid-conversation is already answered in Spanish — the init `locale` (§3.1) is only a hint for the pre-first-message greeting, not a lock.
+**The server answers in the language the guest writes** (since 1.13.0 — D-083). It detects the language of every message; once a message *shows* one — 12 or more letters once hostel, island and town names are removed, or any non-Latin letter — that language is used and remembered for the conversation. A message that shows none (`ok`, `2`, a date, a hostel name, or a chip the bot just offered, sent back) keeps the remembered language, and a later sentence in another language switches it.
 
-Send a per-turn `locale` when **your UI owns the language**, i.e. you have a language switcher and the user's choice must win over what the text looks like. It is the fix for the case detection cannot get right: short or ambiguous messages (`ok`, `2`, a date, a property name) where there is nothing to detect from.
+`locale` is the visitor's **preferred** language, and it answers only where the guest has not yet shown theirs: the turns before their first message that does. Sending the browser's language on every turn is fine and is what it is for — its primary subtag (`navigator.language.split('-')[0]`), since a full tag can exceed 5 characters (`es-419`, see Format); it no longer overrides what the guest writes, as it did from 1.3.0 until 1.13.0. When a turn carries none, the conversation's stored locale (the init `locale`, §3.1) is the preference.
 
-- **Stateless / per turn.** It applies to the turn you send it on. If you have a switcher, **resend it on every turn** — dropping it silently hands the next turn back to detection.
-- **Format.** Send a full tag if that is what you have — only the 2-letter primary subtag is used (`es-ES` → `es`), and the field is capped at 5 characters (longer → `422`, so truncate a long tag yourself). Validation is by **shape, not by registry**: any two ASCII letters are accepted and passed straight to the model, deliberately — the reply language is not restricted to a fixed list. A value that yields no 2-letter primary subtag (`spa`, `1`, empty) is ignored and the turn falls back to detection rather than erroring. Sending a code that is not a real language (`zz`) is therefore honored, not corrected — send what your switcher actually offers.
-- **Scope.** It sets the reply language: the generated prose and the server-localized element labels ("Book now"). It does not translate the guest's own message or re-translate the transcript.
-- The reference widget does **not** send it — it has no switcher, and hardcoding one would override the very detection that makes mid-conversation switching work.
+- **Any language.** The reply language is not restricted to a fixed list: a guest who writes Ukrainian is answered in Ukrainian. Server-localized strings (canned lines, chip messages, "Book now") exist in en/es/it/de/fr and fall back to English for any other language, and tenant content falls back to its base locale. You may therefore send the browser's primary language unclamped (`uk`) rather than the nearest language your UI supports — the server records it and answers the pre-writing turns in it.
+- **A UI language switcher** no longer forces the reply language once the guest has written in another one. If you keep one, it sets the preference: the first turns' language and your own chrome.
+- **Format.** Send a full tag if that is what you have — only the 2-letter primary subtag is used (`es-ES` → `es`), and the field is capped at 5 characters (longer → `422`, so truncate a long tag yourself). Validation is by **shape, not by registry**: any two ASCII letters are accepted and passed straight to the model, deliberately — the reply language is not restricted to a fixed list. A value that yields no 2-letter primary subtag (`spa`, `1`, empty) is ignored rather than erroring, and the conversation's stored locale serves as the preference instead. Sending a code that is not a real language (`zz`) is therefore honored as a preference, not corrected — send what the browser actually reports.
+- **Scope.** The turn's resolved language — the preference, or the guest's own — sets the generated prose and the server-localized element labels ("Book now") together. It does not translate the guest's own message or re-translate the transcript.
+- The reference widget sends `locale` only at init; the server uses the conversation's stored locale as the preference on every turn that carries none.
 
 **`200` response** — the frozen envelope from [`response-contract.md`](response-contract.md):
 
@@ -144,7 +145,7 @@ Send a per-turn `locale` when **your UI owns the language**, i.e. you have a lan
 { "reply": "Yes, free wifi throughout.", "actions": [ … ], "turn": 3 }
 ```
 
-A turn **always returns `200`** on success — the orchestrator degrades any LLM/provider/budget failure to a localized "busy" reply at `200`, never a 5xx. Render `reply`, then render each element of `actions` **in order** (§4). A conversation may also hit a server-side **turn cap**: past it, the turn returns a canned "message limit reached" reply in the same `200 {reply, actions, turn}` shape — the envelope never changes — and the guest should start a new conversation to continue. That reply carries two elements you already handle per §4: **since 1.6.0** a `conversation_ended` element (read it if you want to offer "start a new chat" at exactly the right moment; ignore it and the reply text still says so), and **optionally** a `contact_channels` element with the property's call/WhatsApp/email.
+A turn **always returns `200`** on success — the orchestrator degrades any LLM/provider/budget failure to a localized "busy" reply at `200`, never a 5xx. Render `reply`, then render each element of `actions` **in order** (§4). A conversation may also hit a server-side **turn cap**: past it, the turn returns a canned "message limit reached" reply in the same `200 {reply, actions, turn}` shape — the envelope never changes — and the guest should start a new conversation to continue. That reply carries two elements you already handle per §4: **since 1.6.0** a `conversation_ended` element (read it if you want to offer "start a new chat" at exactly the right moment; ignore it and the reply text still says so), and **optionally** a `contact_channels` element with the property's call/WhatsApp/email. **Since 1.14.0** a busy reply can carry `contact_channels` too — when the failure came after a handoff request was already raised — so render `actions[]` on every `200`, busy or not.
 
 ### 3.3 Poll — resolve an async turn
 
@@ -173,7 +174,7 @@ The element types (`link_button`, `contact_channels`, `booking_link`, `availabil
 
 1. **Ignore unknown `type`s.** New element types ship server-side ahead of any given UI. Skip a type you don't render; never break on it.
 2. **`async_result.url` must be treated as relative.** It always begins with `/`. Resolve it against `{API_BASE}` (§1) and **reject any non-relative value.** This structurally keeps the Bearer key on your own origin.
-3. **Render as text, links and images only for `http(s)`.** Put all guest/LLM/element strings into the DOM via `textContent` / `setAttribute` / created nodes — **never `innerHTML`** (XSS). Honor element **`url` *and* `image`** fields only for `http`/`https` schemes — that means `link_button`, `booking_link`, `availability`, `property_cards` items (`url` **and** `image`) and its element-level `more.url`, and `promo_card` (`image` **and** `cta.url`, which is tenant-authored). Anything else is dropped. Construct `tel:` / `mailto:` / `https://wa.me/<digits>` yourself from `contact_channels` values, never verbatim. `quick_replies` items carry no URLs at all. The authoritative inventory is [`response-contract.md`](response-contract.md)'s security rule — every URL-bearing field it adds inherits this.
+3. **Render as text, links and images only for `http(s)`.** Put all guest/LLM/element strings into the DOM via `textContent` / `setAttribute` / created nodes — **never `innerHTML`** (XSS). Honor element **`url` *and* `image`** fields only for `http`/`https` schemes — that means `link_button`, `booking_link`, `availability`, `property_cards` items (`url` **and** `image`) and its element-level `more.url`, and `promo_card` (`image` **and** `cta.url`, which is tenant-authored). Anything else is dropped. Construct `tel:` / `mailto:` / `https://wa.me/<digits>` yourself from `contact_channels` values, never verbatim — and **since 1.14.0**, if you append `contact_channels.prefill` (the handoff's pre-written message) to those links, show its text before the guest can leave the page, percent-encode it into the `text` / `subject` / `body` query value only, and keep it out of analytics and logs (the contract's `prefill` rules). `quick_replies` items carry no URLs at all. The authoritative inventory is [`response-contract.md`](response-contract.md)'s security rule — every URL-bearing field it adds inherits this.
 
 ---
 

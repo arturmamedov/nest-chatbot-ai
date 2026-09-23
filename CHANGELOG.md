@@ -5,6 +5,241 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.13.1 — 2026-09-23
+
+**Contract sync: `BUILT_AGAINST` 1.12.0 → 1.14.0 (D-083, D-084).** A **patch** — the first sync
+numbered by the rule `64ccaa2` set, and the upstream prompt asked for 2.13.1 too, so nothing was
+overruled. Packet: `docs @ chatbot-contract-v1.14.0 (58d534b) · widget @ 58d534b`. The halves share a
+sha because 1.14.0 changed the renderer in the tag commit. All three vendored files byte-match both
+`nest-packet-1.14.0/` and `git show chatbot-contract-v1.14.0:<path>` upstream.
+
+Two rows in one hand-over. **1.13.0 asked nothing of the renderer, but it took away the one thing
+the flag switcher did, so the owner removed the switcher. 1.14.0 was optional, and this release
+adopts it** — with one deliberate departure from the hand-over, recorded below.
+
+### 1.13.0 — the reply follows the language the guest writes (D-083)
+
+The request `locale` is now the visitor's **preferred** language: it answers only until the guest
+writes a message that shows their own (12+ letters once place names are removed, or any non-Latin
+letter), and from then on the server keeps to theirs and remembers it. It used to be an override
+that beat detection on every turn — which is exactly why the widget had a switcher.
+
+- **The flag switcher is gone.** It lived in the **footer**, left of the composer (not the header).
+  Removed, as read at `64ccaa2`:
+  - the `nc-lang` block in `build()` (`nest-chatbot.js:1995-2014`), `controls.appendChild(lang)`
+    (`:2030`) and the `els` fields `langToggle`, `langOptions`, `optionButtons` and `controls`
+    (`:2059-2060`);
+  - `closeLanguageMenu()` / `toggleLanguageMenu()` with `LANG_AUTO_CLOSE_MS` and `langOpenToken`
+    (`:5182-5226`), and every caller: `close()` (`:4224`), the composer keydown collapse
+    (`:5445-5449`), the two listeners in `wire()` (`:5456-5468`), `onDocumentClick()` (`:5484`);
+  - `setLocale()`'s own switcher writes (`:5239-5240`, `:5334-5337`) and the Escape comment in
+    `onDocumentKeydown()` (`:5499-5502`);
+  - the flag SVG helpers `flagUid`, `FLAG_FIT`, `flagMarkup()`, `flagNode()` (`:1710-1759`) and
+    `LANGUAGE_NAMES` (`:361-364`) — nothing else used them;
+  - the `.nc-lang*` / `.nc-flag` CSS (`css/nest-chatbot.css:1782-1863`) and the two declarations on
+    `.nc-controls` that only existed for it (`gap`, `transition: all`).
+  The composer gains the 45px the flag and its gap took: 345 → 390px in the 420px card, 595 → 640px
+  in the expanded sheet, viewport − 30px fullscreen. Tab order is now transcript, cue, input, send.
+  Every comment that cited the switcher as a precedent is reworded.
+- **`NestChatbot.setLocale()`, the `NestChatbot.locale` getter and `wchat:locale` stay**, working:
+  removing any of them would be a major. `setLocale(code)` is now the only way in. It relabels the
+  chrome and sets the preference the next turn carries; it cannot force the reply language once the
+  guest has written, and its docstring says so.
+- **Step 2 adopted: the preference goes out unclamped.** A new `requestLocale`, resolved by
+  `resolveRequestLocale()`: the primary subtag of `data-locale` when it is not `auto`, else of
+  `navigator.language`, lowercased, kept only if it is two ASCII letters (anything longer than five
+  characters is a `422`), else the clamped UI locale — exactly what 2.13.0 sent. It rides the init
+  body and **every** turn. A `uk-UA` browser now gets English chrome and sends **`uk`**; `zh-Hant-TW`
+  sends `zh`; `es-419` sends `es`. The UI `locale` is unchanged and is still what `t()`, `Intl`,
+  `NestChatbot.locale`, `NestChatbot.state` and every `wchat:*` payload carry.
+- **`setLocale()` sets `requestLocale` before its equality guard.** Otherwise `setLocale('en')` on a
+  `uk` browser whose UI is already English would return early and the explicit choice would never
+  reach the server. `wchat:locale` still fires only on a real UI change.
+
+### 1.14.0 — a handoff hands the guest a message already written (D-084)
+
+A handoff turn's `contact_channels` may carry `prefill {text, subject?, hint?}`: a message in the
+guest's voice, addressed to the property's team, in their language, with `ref H-<id>` and their own
+words. The contract's MUST: a renderer that appends it to a link shows it before the guest can leave.
+
+- **The preview renders ABOVE the links** — a caption, then a read-only `<textarea>`, then Call /
+  WhatsApp / Email, all inside the one `.nc-channels` wrap. **This departs from the hand-over**, which
+  said "under the links" (the reference's layout). The reference scrolls to the preview after
+  rendering it; this widget never scrolls new content into view (`anchorSend()` is the only thing
+  that moves the transcript). Under the links, a phone with the keyboard up leaves WhatsApp tappable
+  while the message is below the fold. Above, reaching a link means having passed the message, so
+  the MUST holds by construction, and a screen reader hears that a message is ready before the
+  buttons — the contract's Accessibility note. Measured: in the 420px card, the busy reply leaves
+  the preview partly below the fold with **no** link visible.
+- **The caption is a new pack key, `prefillCaption`**, in all five packs, byte-identical to the
+  server's own `handoff_prefill_hint`: en "Your message is ready below — check it, then press Send.",
+  es "Tu mensaje está listo aquí abajo: revísalo y luego pulsa Enviar.", it "Il tuo messaggio è
+  pronto qui sotto: controllalo, poi premi Invia.", de "Deine Nachricht steht unten bereit — prüf sie
+  und tippe dann auf Senden.", fr "Ton message est prêt ci-dessous : vérifie-le, puis appuie sur
+  Envoyer." `hint` is ignored: ours can follow `setLocale()`, a server string cannot. The caption is
+  `aria-hidden` and the textarea carries the same string as its `aria-label` (the `.nc-chip-head`
+  precedent; the widget emits no element ids). `readonly`, `rows="4"`, `dir="auto"`, the value set
+  with `.value` — never markup. `setLocale()` repaints the caption and the accessible name, never the
+  value.
+- **The links compose from the preview's CURRENT value** — `composeOnTap()`: once at render (so a
+  long-press, "copy link" or middle-click carries it), on the preview's `input`, and on the click
+  itself. `https://wa.me/<digits>?text=` + `encodeURIComponent(value)`; `mailto:<email>?subject=` +
+  `encodeURIComponent(subject)` + `&body=` + `encodeURIComponent(value)`. Letting the guest edit it is
+  removing `readonly`, nothing else in the renderer — with two costs left for the owner: iOS zooms a
+  focused field under 16px (the preview is 14px), and an edited message gives up the server's
+  1,800-byte link guarantee.
+- **No silent prefill.** The preview renders only for a `prefill` whose `text` is a non-blank string
+  (kept verbatim) **and** only when a WhatsApp or email link actually renders; a `prefill` without
+  `text` drops on its own and the channels render as before. `prefillOf()` test-encodes `text` and
+  `subject` once: `encodeURIComponent` throws on a lone surrogate, and a throw inside a renderer would
+  take the rest of the turn with it — such a message is dropped whole, plain links. A throw at tap
+  time falls back to the plain href.
+- **Kept out of analytics and logs.** The links keep `data-wchat-channel`, so `wchat:action` carries
+  `url: null` for them; the delegated listener now also nulls it for anything tagged
+  `contact_channels`. No `wchat:*` payload changed. **`data-debug`'s three full-body logs** (`init`,
+  `turn`, `poll`) printed the whole response — `prefill` included, and the demo sets `data-debug` —
+  so they now print `redactForLog()`'s shallow copy with every `prefill` read as `'[prefill]'`; the
+  body itself is never mutated (persist and render read it next).
+- **One exposure the widget cannot close, documented instead.** The composed href sits on the anchor
+  from render, so a **host's** own link tracking — GTM's Click URL, GA4's outbound clicks (on by
+  default; `wa.me` is outbound), a session-replay tool — can read the message. README § Measuring it
+  now tells hosts to exclude `#nest-chatbot a.nc-channel`. **Owner action before this ships to
+  nestshostels.com: check that site's GA4 / GTM link tracking.**
+- **The `00` fix, now reachable.** The platform's admin form accepts `+34 …` or `0034 …` since
+  D-084 (and stores the value as typed). `tel:` used to prefix `+` to everything, and `wa.me` kept a
+  leading `00`. The new `telNumber()` strips spaces, dots, hyphens and parentheses from the **whole**
+  value first — the admin rule's own separator set, a deliberate divergence from the reference's
+  leading-whitespace-only version — then gives `+` and the digits for a `+` value, `+` and the digits
+  after `00` for a `00` one, bare digits otherwise; `wa.me` takes `digits(telNumber(v))`. For
+  `0034 822 000 000`: **`tel:+34822000000`** and **`https://wa.me/34822000000`**. Both directions of
+  the change, since no live property uses these forms today: `0034 …` and a national `922 …` (which
+  used to dial `+922`, another country) are fixed, and `(+34) …` works where the reference's rule
+  would dial it nationally; a value written `34 922 …` with neither `+` nor `00` now dials as
+  national digits where it used to get a `+` — the admin form no longer accepts that form.
+- **Two small hardenings the prefill made worth it.** A phone or WhatsApp value with no digits
+  renders no link (it rendered a dead `tel:+` / `https://wa.me/`), and the email gate `EMAIL_OK` now
+  rejects `?`, `#`, `&` and `%` so our query is the only query — a legal address containing `&` now
+  renders no email link.
+- **A busy reply can carry `contact_channels`** since 1.14.0 (D-084(h)), `prefill` included.
+  Confirmed, and now demonstrated: `sendMessage()` has no busy branch, so `actions[]` renders on
+  every `200`.
+- **`.nc-channel` gained a declared focus ring** (the `.nc-restart` pattern — a host's
+  `a:focus { outline: 0 }` would otherwise leave the links that carry the message unmarked) and
+  `max-width: 100%; overflow-wrap: anywhere`, so a long catalog address wraps at 375px instead of
+  clipping. The preview's CSS declares every property a host `textarea` / `textarea:focus` /
+  `textarea[readonly]` rule could reach, at 1,1,0 — family, letter-spacing and box-shadow included,
+  because the reset block's `#nest-chatbot textarea` (1,0,1) only **ties** an id-prefixed host rule
+  such as `#top textarea`, and a tie goes to whichever sheet loads later. Its `font-family: inherit`
+  is the typography seam's **twelfth** site, on `.nc-input`'s precedent (`inherit` keeps
+  `data-fonts` covering it). CLAUDE.md said ten; it has been eleven since 2.10.2 (`.nc-menu-item`),
+  and is twelve now.
+
+### Packs
+
+One key in (`prefillCaption`), two out (`language`, `languageOf`, `:200/:239/:276/:311/:348`), plus
+`LANGUAGE_NAMES` and the flag constants. Packs are internal; removing keys breaks no host.
+
+### Fixtures
+
+- **`contact`** → the contract's own `prefill` example, with `subject` and `hint`.
+- **`!prefill`** → a hostile `prefill`: an `onerror` img and a `script` (both setting a
+  `window.__ncXss` sentinel, never `alert(`), both quote kinds, `&amp;` and `&`, `?text=x#frag`,
+  `%20`, `+`, a skin tone and a ZWJ family, a paragraph that **starts** with Arabic (so `dir="auto"`
+  reaches its right-to-left branch), newlines, 563 characters — escapes, not raw emoji — plus a
+  WhatsApp written `0034 600 111 222` and a subject carrying `& # ?`.
+- **`!nowhatsapp`** → phone `0034 822 000 000`, an email and a `prefill`, no WhatsApp.
+- **`!busy`** → the server's busy string keeping a handoff's `contact_channels`, `prefill` included.
+- **`human`** / **`It's about <name>`** → reworded to the 1.14.0 server strings
+  (`handoff_which_property`; the bound answer points at the buttons and ends with
+  `handoff_contact_offer`), and the answer carries a `prefill` quoting the `human` message.
+- **`!cap`** stays prefill-less: the plain-links control.
+- `Mock.init` reports `contract_version: '1.14.0'`.
+
+### Verified
+
+Chrome 143, headed, through the Playwright MCP, with `navigator.language` forced to `en-US` by an
+init script (this machine's profile is `it-IT`), the HTTP cache disabled over CDP, and the repo served
+on a **fresh port** (5741). The running source was asserted first (VERSION, BUILT_AGAINST, the new
+function names present, every switcher symbol absent). **About 280 assertions across four suites, all
+passing.** Four harness mistakes were fixed along the way (a `:last-of-type` selector, a measurement
+taken mid-`transition`, a harness override that could not express an empty `navigator.language`, and
+a console log too shallow to prove redaction — replaced by an in-page capture); none needed a code
+fix.
+
+- **Mock harness, `demo/index.html`.**
+  - The switcher is gone at 420 / 670 / 375: zero switcher nodes, `.nc-controls` holds the form
+    alone, the form measures 390 / 640 / 330, tab order cue → input → send.
+  - `contact`: DOM order caption → preview → links; caption, `aria-hidden`, `readonly`, `rows`,
+    `dir`, `aria-label`, no `lang`, the exact value; hrefs composed at render; taps (navigation
+    prevented) decode to the preview byte-for-byte, subject intact; `tel:+34922123456`,
+    `wa.me/34600111222`, `target=_blank`; three `wchat:action` with `url: null` and nothing leaked.
+  - Editing: `readonly` removed and typed into → hrefs update on `input` before any tap, a tap sends
+    the edit, a value set with no `input` event is picked up by the click refresh.
+  - `!prefill`: sentinel never set, no dialog, no error, no `img`/`script` node, the hint never
+    shown; preview === the fixture evaluated from the served source; both links round-trip it
+    byte-for-byte; `wa.me/34600111222`, `%2B` and `%2520` present, one `?`, subject decodes intact;
+    `unicode-bidi: plaintext`, and the Arabic line renders right-aligned.
+  - `!nowhatsapp` → `tel:+34822000000`, no WhatsApp link, the email carries the message. `!busy`
+    renders preview and links. `human` → Cisne chip → the 1.14.0 copy and a prefill quoting the exact
+    message. `!cap` → plain links, no query, no preview.
+  - `setLocale()`: `es`/`de`/`fr` repaint every caption and accessible name while every value stays
+    byte-identical; `uk`, `es-ES` and a repeat are silent; exactly one `wchat:locale` per real change.
+  - Replay after reload: all five previews return read-only with the server's text (an edit is not
+    persisted), links composed.
+  - The demo's `textarea:focus` trap, focused by click and by Tab: 2px teal ring at 2px offset,
+    `box-shadow: none`, `nc-Montserrat` 14px/21px, 106px tall, a visible scrollbar thumb; Tab reaches
+    the preview before its links.
+  - Layout at 420 / 670 / 375 (plus the hostile fixture at 375): no horizontal overflow, preview as
+    wide as the wrap, and never a link visible while the preview is not.
+  - `data-debug`: the full turn line prints `"prefill":"[prefill]"` and none of the text; the stored
+    record still holds the untouched server text.
+  - Regressions unchanged: `book`, `link`, `rooms` (11 rows), `available`, `cardstay`, `cardbook`,
+    `hostel`, `tenerife`, `pass`, `!unknown`, `!xss`, `!410`, `!429` / `60` / `80000`, `!500`, `!403`.
+- **Real XHR against a same-origin fake** (`page.route()`), on a host page carrying hostile CSS
+  (`textarea { min-height; height; margin; resize; field-sizing: content; border; background; font }`,
+  `textarea[readonly] { opacity; cursor }`, `textarea:focus`, `:focus` / `a:focus { outline: 0 }`).
+  - Bodies: `en-US` → init `{locale:'en'}`, turn `{message, locale:'en'}`; `data-locale` `uk` → UI
+    `en`, sends `uk`; `es-419` → `es`; `spa` / `AUTO` → `en`; `de` → `de`.
+  - `uk-UA` browser: UI, `state` and events `en`, init and turns `uk`; `setLocale('en')` → no event,
+    next turn `en`; `setLocale('es')` → one event, next turn `es`; `uk` / `es-ES` no-ops.
+    `x-klingon` → `en`, `zh-Hant-TW` → `zh`, `it-IT` → UI `it`, sends `it`. Every body matched
+    `/^[a-z]{2}$/`.
+  - 25 channel payloads: the `00` and separator cases above, digit-less values, `a@b.c?body=x`, a
+    blank `text`, a phone-only prefill, `prefill` / `text` / `subject` / `phone` / `whatsapp` /
+    `email` as every wrong type, a 10,000-character text, `\r\n`, a lone surrogate in `text` and in
+    `subject` (dropped, plain links) — no throw, `wchat:reply` every time.
+  - The preview held against the hostile CSS at rest and focused; a long address wrapped inside the
+    375px panel; `.nc-channel` settles at a 2px teal ring past the host's `outline: 0`; a lone
+    surrogate typed into an editable preview falls back to plain hrefs, then recovers.
+  - No drift warn from a 1.14.0 or a 1.13.0 server.
+- **Drift warn.** Positive control: the served script rewritten in flight to report 1.15.0, after a
+  fresh `mock-` init → exactly one warn reading "built against 1.14.0". Negative: silent.
+- **An adversarial review of the diff** (three lenses, every finding put to a refuter) confirmed
+  three minor defects, all fixed and re-measured before this commit: the hostile fixture's emoji and
+  Arabic had landed as raw UTF-8 under a comment promising escapes (now `\uXXXX`, still 563
+  characters, still byte-for-byte); `.nc-prefill` left family, letter-spacing and box-shadow to the
+  reset, which only ties a `#top textarea` rule (now stated — a `#top textarea` sheet appended
+  **after** ours leaves the preview on `nc-Montserrat`, `normal`, no shadow, no margin, 14px, and
+  its focus styles intact); and `docs/rendering-ownership.md`'s list of text `setLocale()` does not
+  repaint was incomplete.
+
+**Live, off `demo/demo.html` against `nest-mind.laravel.cloud` (2026-09-23 14:15 UTC): 1.14.0 has not
+deployed.**
+- A real init `201` reports `contract_version: 1.13.0`, `idle_hours: 168`, `server_time` present, and
+  `Access-Control-Expose-Headers: X-Chatbot-Contract, Retry-After` — so 1.11.0's header is readable
+  at last and 2.13.0's long-`429` copy is live.
+- The init body was `{locale: 'en'}` on the `en-US` browser. No console warning, correctly: the widget
+  is one step ahead.
+- **The Step 5.2 language check was not run**: the hand-over allows it only once init reports 1.14.0.
+  No person was asked for, deliberately — a handoff emails staff. The live pre-written message is the
+  owner's own smoke test after the deploy.
+
+### Not changed
+
+No `wchat:*` event name or payload field, no `NestChatbot` method or getter, no `data-*` attribute.
+`docs/rendering-ownership.md` **did** change this time: `contact_channels` gained server text (the
+guest's own words) and widget chrome (the caption).
+
 ## 2.13.0 — 2026-09-15
 
 **Contract sync: `BUILT_AGAINST` 1.10.0 → 1.12.0 (D-078, D-079).** A **MINOR**, for the usual

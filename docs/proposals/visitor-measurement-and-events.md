@@ -15,14 +15,21 @@ before changing the shape of it.
 Shipped in **2.8.2** as a patch — additive, no `data-*` attribute, nothing new for a host's
 `<script>` tag to say. `BUILT_AGAINST` was `1.6.1` at that release and no transport changed;
 the packet has since moved to **1.6.2** in `2.9.0` (D-047, an emission rule), to **1.7.0**
-in `2.10.0` (D-050), to **1.9.0** in `2.11.0` (D-067, D-071, 2026-08-27) and to **1.10.0** in
-`2.12.0` (D-072, D-073, 2026-08-28) — none of which
-changes the event surface: no name moved, no payload lost a field. 1.10.0 is worth a line here
-because it looked like it might: a booking turn may now carry a `property_cards` beside its
-`availability`, so `wchat:reply.elements` can list the pair, and the Book button the dedupe
-suppresses emits nothing — the information turn's existing behaviour, not a new rule. One payload *value* changed
-shape: since 1.9.0 `wchat:action.url` carries the server-composed booking url, language
-segment and stay query string included, exactly as the anchor's `href`.
+in `2.10.0` (D-050), to **1.9.0** in `2.11.0` (D-067, D-071, 2026-08-27), to **1.10.0** in
+`2.12.0` (D-072, D-073, 2026-08-28), to **1.12.0** in `2.13.0` (D-078, D-079, 2026-09-15;
+`wchat:error` gained `retryAfter`) and to **1.14.0** in `2.13.1` (D-083, D-084, 2026-09-23) —
+none of which changes the event surface: no name moved, no payload lost a field. 1.10.0 is
+worth a line here because it looked like it might: a booking turn may now carry a
+`property_cards` beside its `availability`, so `wchat:reply.elements` can list the pair, and the
+Book button the dedupe suppresses emits nothing — the information turn's existing behaviour, not a
+new rule. One payload *value* changed shape: since 1.9.0 `wchat:action.url` carries the
+server-composed booking url, language segment and stay query string included, exactly as the
+anchor's `href`. 2.13.1 changed no payload but moved two things under it: `wchat:locale` keeps
+its name and `{from, to}` and now fires only for a host's `setLocale()` — the on-screen switcher
+is gone — and the WhatsApp and email links, which since 1.14.0 can carry the guest's pre-written
+message, keep `url: null`, so that message never reaches a `wchat:*` event. It does sit in the
+anchor's `href`, where a host's own link-click tracking can read it; README § Measuring it tells
+hosts to exclude those links.
 
 **The upstream ask at the foot of this document was sent, and granted.** `idle_hours` landed in
 contract 1.7.0 and the widget adopted it in 2.10.0, which changes one thing described here for
@@ -121,7 +128,7 @@ Dispatched from `els.root`, never `window`: events bubble, so a host listener on
 | `wchat:error` | every non-200 branch | `phase`, `status`, `retrying`, `retryAfter` (since 2.13.0) | **429s on shared hostel wifi** — and, through `retryAfter`, whether one was a minute's wait or a daily cap (contract 1.11.0) — 403 origin refusals, transport failures — all invisible before this | why the server failed |
 | `wchat:ended` | `endConversation()` | `turns` | how often the turn cap bites | whether the guest minded |
 | `wchat:restart` | `restartConversation()` | `source`, `turns` | whether "start a new chat" is used, and **whether it was chosen or forced** (`source`) | why they wanted a fresh thread |
-| `wchat:locale` | `setLocale()` | `from`, `to` | **whether the language switcher earns its space** | whether detection would have got it right |
+| `wchat:locale` | `setLocale()` — since 2.13.1 only a host's `NestChatbot.setLocale()`; the on-screen switcher was removed | `from`, `to` | **how often the host page drives the widget's language** | which language the conversation is actually in — since contract 1.13.0 the server follows what the guest writes |
 | `wchat:teaser` | `showTeaser()`, `dismissTeaserForever()` | `action` | whether the teaser earns its 8 seconds | — |
 
 `source` enums: `open` — `toggler` \| `teaser` \| `auto` \| `api`. `close` — `toggler` \|
@@ -155,7 +162,11 @@ before it is used as a proxy for satisfaction.
 - **Element urls are the one string that travels**, and `contact_channels` is excluded even
   from that. A booking url is a server-supplied href the guest is navigating to and is already
   in the DOM; a `tel:`/`mailto:` href **is** the property's phone number or email, and putting
-  that in a host's analytics buys nothing — `channel` says which was used instead.
+  that in a host's analytics buys nothing — `channel` says which was used instead. Since 1.14.0
+  a WhatsApp or email href can also carry the guest's own pre-written message (`prefill`), which
+  the contract bars from analytics events and logs — one more reason the exclusion is absolute.
+  It is absolute for **our** events only: the href is on the anchor, and a host's generic
+  link-click tag reads it there, which no payload rule can prevent.
 - **`wchat:reply` fires twice for an async turn**, truthfully: the guest saw two answers land.
   `resolved` separates them, and the resolved one's `latencyMs` is the full poll wait, which is
   the number worth having for gated booking turns.

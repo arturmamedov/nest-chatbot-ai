@@ -70,8 +70,9 @@
            (@tailwindcss/forms paints its focus ring through box-shadow, not
            outline). They are why this page's own headings look loosely spaced —
            that is the trap working, not a bug. If the widget's header title ever
-           turns serif, or a blue ring appears inside the composer, or a CTA pill
-           picks up an underline, the widget has stopped declaring something. */
+           turns serif, or a blue ring appears inside the composer or the
+           pre-written message's preview, or a CTA pill picks up an underline, the
+           widget has stopped declaring something. */
         h2 { font-family: Georgia, serif; line-height: 4.5rem; letter-spacing: 0.32px; }
         textarea:focus { box-shadow: 0 0 0 1px #2563eb; outline: 2px solid transparent; }
         a { text-decoration: underline; color: #b1560f; }
@@ -150,7 +151,14 @@
             affordance may appear (the card's), and every option row has to survive it.
             <code>human</code> is the 1.12.0 handoff that does not know the hostel — no contact
             details, just a question over thirteen hostel chips that have to wrap whole; tap one
-            and that hostel's contacts arrive.
+            and that hostel's contacts arrive, with a message to its team already written.
+            <code>contact</code> shows that 1.14.0 pre-written message too — a caption and a
+            read-only preview above the links, and the WhatsApp and email links are built from
+            whatever the preview holds when you tap them. <code>!prefill</code> is a hostile one
+            that must show as plain text and survive the link byte for byte,
+            <code>!nowhatsapp</code> has only a phone written <code>0034 822 000 000</code>
+            (which must dial <code>tel:+34822000000</code>) and an email, and <code>!busy</code>
+            is a busy reply that still carries the handoff's contacts.
             <code>!xss</code>, <code>!unknown</code>, <code>!410</code>, <code>!403</code>,
             <code>!429</code> and <code>!500</code> drive the defensive paths — and
             <code>!429 60</code> / <code>!429 80000</code> send a <code>Retry-After</code>, so a
@@ -214,9 +222,11 @@
          reason is worth knowing: that tag is `defer`, so it executes after the
          parser finishes, while this ordinary inline script runs during parsing.
          Only an async-loaded tag (GTM, a third-party snippet) can miss ready —
-         which is what NestChatbot.state is for. Try both in the console:
+         which is what NestChatbot.state is for. Try these in the console:
              NestChatbot.state
-             wchatLog                                   -->
+             wchatLog
+             NestChatbot.setLocale('es')   relabels the widget and fires wchat:locale —
+                                           there is no on-screen switcher since 2.13.1   -->
     <script>
         window.wchatLog = [];
         document.addEventListener('wchat', function (e) {

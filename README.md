@@ -34,7 +34,7 @@ inside it either.
 | `data-api-base` | — | The chatbot API origin. |
 | `data-key` | — | Your public-scoped `ws_live_…` API key. Safe to expose — it is scoped to the guest chat routes of one site. |
 | `data-property` | — | Which property the conversation is about. A matched name seeds the conversation's working memory, so answers are scoped to that property from the first message. Unknown names are not an error. |
-| `data-locale` | `auto` | `auto` picks from the visitor's browser languages. Or force one of `en` `es` `it` `de` `fr`. |
+| `data-locale` | `auto` | The widget's own buttons and labels: `auto` picks from the visitor's browser languages, or force one of `en` `es` `it` `de` `fr`. The chat is also told the visitor's preferred language — the one you set here, else the browser's, in **any** language — and answers in it until the visitor writes in their own. So a Ukrainian browser gets English buttons and Ukrainian answers until the visitor writes. |
 | `data-position` | `right` | `right` or `left`. |
 | `data-offset-x` | `35` | Distance in px from the side of the window. Bare number, no unit. |
 | `data-offset-y` | `30` | Distance in px from the bottom. The panel follows the launcher. |
@@ -137,12 +137,17 @@ refused with `403 {"message":"Origin not allowed."}`.
 NestChatbot.open();
 NestChatbot.close();
 NestChatbot.toggle();
-NestChatbot.setLocale('es');
+NestChatbot.setLocale('es');  // the widget's labels, and the visitor's preferred reply language from the next message
 NestChatbot.destroy();
-NestChatbot.locale;    // 'es'
-NestChatbot.version;   // '2.12.0'
+NestChatbot.locale;    // 'es' — the widget's display language
+NestChatbot.version;   // '2.13.1'
 NestChatbot.state;     // a snapshot — see Measuring it, below
 ```
+
+There is no language switcher inside the widget since 2.13.1; `setLocale()` is how your page
+changes its language. It takes one of `en` `es` `it` `de` `fr` and ignores anything else. It
+relabels the widget at once, and the chat answers in that language only until the visitor writes
+in their own.
 
 ## Measuring it
 
@@ -176,8 +181,13 @@ Events bubble from the widget's own container, so a listener on `document` or `w
 | `wchat:error` | a request fails | `phase` (`init` \| `turn` \| `poll`), `status`, `retrying`, `retryAfter` |
 | `wchat:ended` | the conversation hits its turn cap | `turns` |
 | `wchat:restart` | the visitor starts a new chat | `source` (`menu` \| `ended`), `turns` |
-| `wchat:locale` | the language is switched | `from`, `to` |
+| `wchat:locale` | your page changes the widget's language with `NestChatbot.setLocale()` — there is no on-screen switcher since 2.13.1 | `from`, `to` |
 | `wchat:teaser` | the nudge appears or is dismissed | `action` (`shown` \| `dismissed`) |
+
+**`locale` is the widget's display language.** In `wchat:ready`, `wchat:message` and
+`NestChatbot.state` it is one of the five the widget is labelled in. The conversation follows the
+language the visitor writes, which can be any, so do not read `locale` as the language of the
+chat.
 
 **Two ways a chat restarts, and they mean opposite things.** `wchat:restart` carries
 `source: 'menu'` when the visitor chose it from the header menu — they were done with that
@@ -195,16 +205,28 @@ widget falls back to **24 hours** — that is a floor for older servers, not a d
 yours. Ask your window off an init response rather than assuming it, because the number moves
 without the widget changing.
 
-**No message text ever leaves.** Payloads carry counts, enums and booleans: `length` is a
+**No message text is ever in an event.** Payloads carry counts, enums and booleans: `length` is a
 character count, `elements[]` lists element types. What the visitor wrote and what the assistant
-replied stay in the widget. `wchat:action` carries the `url` of the button that was clicked so
-you can attribute a booking, and deliberately carries **no** `url` for phone and email links —
-`channel` tells you which was used without putting contact details in your analytics. Since
-contract 1.9.0 that url is composed by the server — a language segment plus `checkin`,
-`checkout` and, when the visitor stated it, `adults` as a query string — so it reaches your
-listener with the stay attached, exactly as the anchor's `href`. Pass it through as-is: the
-widget never parses, normalises or strips it, and an attribution pipeline that wants to match
-the page the visitor actually opened should not either.
+replied never reach a payload. `wchat:action` carries the `url` of the button that was clicked so
+you can attribute a booking, and deliberately carries **no** `url` for phone, WhatsApp and email
+links — `channel` tells you which was used without putting contact details, or the message the
+visitor is about to send, in the event. Since contract 1.9.0 that url is composed by the
+server — a language segment plus `checkin`, `checkout` and, when the visitor stated it, `adults`
+as a query string — so it reaches your listener with the stay attached, exactly as the anchor's
+`href`. Pass it through as-is: the widget never parses, normalises or strips it, and an
+attribution pipeline that wants to match the page the visitor actually opened should not either.
+
+**Your own link tracking can read what the events never carry — exclude the contact links.**
+Since 2.13.1, when a visitor asks for a person, the WhatsApp and email links carry the message
+written for them in their `href` — `?text=` on WhatsApp, `?subject=…&body=…` on email — from the
+moment they appear, not only when tapped. That message is the visitor's own words, addressed to
+your property's team. No `wchat:*` event and no widget log carries it, but a generic link-click
+tag reads the `href` straight off the anchor: GTM's **Click URL** on a link-click trigger, GA4
+enhanced measurement's **outbound clicks** (on by default, and `wa.me` is outbound), a
+session-replay tool that records attributes. Exclude `#nest-chatbot a.nc-channel` — or any
+`wa.me` / `mailto:` URL — from those triggers, make sure GA4's built-in outbound-click measurement
+is not recording these links' URLs (switching it off in favour of a GTM trigger you control is the
+simplest way), and count contact clicks with `wchat:action` and its `channel` instead.
 
 **Three counting notes.** On the turn that hits the cap, `wchat:ended` arrives *before* that
 turn's `wchat:reply` — the reply event is emitted last so it can report `ended: true`
@@ -250,8 +272,12 @@ NestChatbot.state;
   private rooms grouped, three of each with the rest one tap away, and what the whole party pays
   when the server knows it — rendered from the API's structured response, never parsed out of the
   reply text.
-- Language switching mid-conversation across English, Spanish, Italian, German and French,
-  without losing the thread.
+- When they ask for a person, a message to that property's team already written in their
+  language and shown above the WhatsApp and email buttons, so they can read it before it opens in
+  their app. Nothing is sent until they press Send there.
+- Answers in the language the visitor writes — any language, and mid-conversation — without
+  losing the thread. The widget's own buttons and labels are in English, Spanish, Italian, German
+  or French, picked from the browser, `data-locale` or your own `NestChatbot.setLocale()`.
 - Conversations that survive a page reload, for as long as the server keeps them alive.
 - Keyboard accessible: `Enter` to send, `Esc` to close, focus moves into the composer on open,
   new replies announced to screen readers.

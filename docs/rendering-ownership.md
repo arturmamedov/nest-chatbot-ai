@@ -1,6 +1,6 @@
 # Rendering ownership — what the server supplies, what the widget composes
 
-**About:** the Nest Chatbot drop-in widget (`nest-chatbot.js`), current as of release 2.11.1.
+**About:** the Nest Chatbot drop-in widget (`nest-chatbot.js`), current as of release 2.13.1.
 **For:** anyone asking "who writes this string?" — before changing a renderer, adding an element
 type, or deciding whether something belongs in a pack or on the wire.
 
@@ -22,6 +22,10 @@ guest sees comes down the wire, and which does the widget make up?**
 >
 > The **widget** supplies display text when it is **chrome it invented to describe structured data**
 > the server deliberately sent as *data*: labels around numbers, enums and phone numbers.
+>
+> Since 1.14.0 the **server** also sends back **the guest's own words** —
+> `contact_channels.prefill.text`, a server-localized message around their quote — shown verbatim
+> as a form value, never re-derived from a pack, never in an event or a log.
 
 Everything in the table below follows from that, including the case that looks inconsistent at first
 glance — `availability` sends no display text at all, while `property_cards` sends almost nothing
@@ -50,7 +54,7 @@ on an English figure.
 | **`quick_replies`** | Chip `label` and `heading` — tenant-authored, server-localized. Plus `id`, `locale`. | Only the row's `aria-label` fallback, `t('quickReplies')`, and **only** when there is no `heading`. Never a visible label: substituting our own line over a server row is explicitly forbidden by the contract. |
 | **`link_button`** | `label`, localized server-side. Plus `url` and the `style` hint. | Nothing. The `style` hint is honoured, not composed. |
 | **`booking_link`** | `url` only — **no label on the wire at all**. Plus the optional `summary` object. | `t('book')`. |
-| **`contact_channels`** | The raw `phone` / `whatsapp` / `email` **values**. Nothing else — no labels, no hrefs. | Both the label (`tf('call', …)`, `t('whatsapp')`, `tf('email', …)`) **and** the href: `tel:`, `https://wa.me/`, `mailto:` are constructed here from the values, never taken verbatim from the payload. |
+| **`contact_channels`** | The raw `phone` / `whatsapp` / `email` **values** and, since 1.14.0, an optional `prefill`: `text` (a server-localized message in the guest's voice around their own words, verbatim), `subject`, and `hint` (a server-localized caption). No labels, no hrefs. | The labels (`tf('call', …)`, `t('whatsapp')`, `tf('email', …)`), the preview's caption and accessible name (`t('prefillCaption')` — `hint` is ignored; the pack carries the server's own translations), **and** every href: `tel:` (separators stripped, then `+` kept, a leading `00` turned into `+`, bare digits otherwise), `https://wa.me/<digits>` (neither `+` nor `00`), `mailto:` — constructed here from the values, never taken verbatim, and since 1.14.0 with `?text=` / `?subject=&body=` appended percent-encoded from what the preview shows at tap time. `prefill.text` itself is payload: the read-only textarea's value, above the links, never repainted, never in an event or a log. |
 | **`availability`** | **No display text.** `room` (the PMS's raw vendor name), `price` / `total` / `currency` as decimal strings and an ISO 4217 code, `basis` as a bare enum (`per_person` \| `per_unit`), `units` as an int, `url`, and the `available` boolean. | **Every word.** The group headings ("Beds in shared rooms" / "Private rooms"), the count nouns ("2 beds"), the unit labels ("per bed"), the fold button ("Show 3 more" / "Show less"), `t('noAvailability')`, and `t('book')` on the trailing CTA. |
 | **`conversation_ended`** | Nothing displayed — it is a state signal. | `t('newChat')` and the restart affordance around it. |
 | **`async_result`** | Nothing displayed — `url` only. | Nothing; the interim reply is ordinary `reply` text. |
@@ -86,16 +90,26 @@ they work only because the server composes both sides from the same inputs. Norm
 and the dedupe is what breaks.
 
 The one place the widget *does* build a href is `contact_channels` — and there it must, because the
-payload carries a phone number, not a link.
+payload carries a phone number, not a link, and since 1.14.0 a pre-written message sent deliberately
+as text, never as a URL. The message enters the link only percent-encoded, as a query value, from
+what the preview shows at the moment of the tap.
 
 ### 3. What it means for `setLocale()`
 
-The split above is exactly the rule for what repaints when the guest switches language:
+The split above is exactly the rule for what repaints when `setLocale()` changes the language — a
+host's call since 2.13.1; there is no on-screen switcher:
 
 - **Payload text is frozen** once rendered. Repainting a server string from a pack would be
   inventing a translation the tenant did not write. So `promo_card` copy, `quick_replies` labels and
-  headings, `link_button` labels, card names and badges all stay as they arrived.
-- **Widget text re-derives** on every switch, because re-deriving is the only way it can be right.
+  headings, `link_button` labels, card names and badges, and the `prefill` preview's text all stay
+  as they arrived.
+- **Widget text re-derives** on every switch, because re-deriving is the only way it can be right —
+  since 2.13.1 that includes the `prefill` caption and the preview's accessible name. (Not yet
+  everything: some widget text is painted from packs at render and never repainted — among it the
+  `contact_channels` link labels, `t('book')` and `linkButton()`'s `t('open_link')` fallback,
+  `t('noAvailability')`, a card's price line (`t('priceFrom')` and its period/basis suffixes), the
+  rail's `tf('showingOf', …)` count line, and the carousel's and chip row's accessible names. A known
+  gap, not a rule.)
 
 The 2.11.1 availability card is the worked example — its headings, count nouns, unit labels and
 fold label all repaint, while `room` and the figures do not — and the day-separator pills are the
@@ -132,7 +146,8 @@ two ever disagree:
   § `property_cards`, § `promo_card`, § `quick_replies`, § `conversation_ended`).
 - **Widget side** — `nest-chatbot.js` § `render`: `renderAction()` (which caller passes which
   label), `propertyCard()`, `cardTitle()`, `cardPrice()`, `renderPropertyCards()`,
-  `renderPromoCard()`, `renderQuickReplies()`, `renderChannels()` / `channelLink()`,
-  `renderAvailability()` and its helpers, and `linkButton()`.
+  `renderPromoCard()`, `renderQuickReplies()`, `renderChannels()` / `channelLink()` (with
+  `telNumber()`, `prefillOf()` and `composeOnTap()` since 2.13.1), `renderAvailability()` and its
+  helpers, and `linkButton()`.
 - **The repaint rule** — `setLocale()` in § `flow`, and `CHANGELOG.md` 2.11.1 § "The card follows
   the language switcher".

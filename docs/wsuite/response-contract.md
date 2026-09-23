@@ -2,18 +2,18 @@
 
 | | |
 |---|---|
-| **Version** | 1.12.0 (see [Versioning](#versioning) · [Changelog](#changelog)) |
-| **Date** | 2026-09-15 |
+| **Version** | 1.14.0 (see [Versioning](#versioning) · [Changelog](#changelog)) |
+| **Date** | 2026-09-23 |
 | **Status** | Frozen envelope — the shared artifact the in-repo preview widget and the external `nest-chatbot-ai` widget build against. Governed by `docs/decisions.md` (D-020, D-029, D-036). |
 | **Endpoint** | `POST /api/v1/chatbot/conversations/{uuid}/messages` (route `chatbot.v1.conversations.messages.store`) |
 
-This is the response shape of a single guest turn. Element **content is deterministic — code-emitted from the DB catalog or tenant-authored site settings, never chosen by the LLM** — so link/contact correctness is independent of the LLM provider (Mistral-switchable by construction). The conversation-start endpoint (`POST /api/v1/chatbot/conversations` → `{conversation:{uuid}, greeting, actions?, idle_hours?, server_time?, contract_version}`) is unaffected by this envelope; it additionally echoes the current `contract_version` (below) so a consumer can detect it is behind. **Since 1.7.0** it also reports **`idle_hours`** (the conversation idle window as a duration — stop mirroring it as a client-side constant) and **`server_time`** (ISO-8601, for a one-off client-clock offset); both are documented in [`integration-guide.md`](integration-guide.md) §3.1, and both may be absent. **Since 1.5.0** the init response also carries an optional **`actions`** array of the same element vocabulary (greeting-time quick prompts and, when configured, the promo card) — the server always emits it (`[]` when unconfigured), older servers omit it, and a consumer that never reads it loses nothing. **What can appear there:** content elements only — `promo_card` and `quick_replies` today. `async_result` and `availability` are turn-scoped by construction (both are tied to a turn number), so an init response will not carry them; keep ignoring unknown types rather than hard-coding that list.
+This is the response shape of a single guest turn. Element **content is deterministic — code-emitted from the DB catalog or tenant-authored site settings, never chosen by the LLM** — so link/contact correctness is independent of the LLM provider (Mistral-switchable by construction). **One bounded exception since 1.14.0:** [`contact_channels.prefill.text`](#the-pre-written-message-prefill--since-1140) quotes the guest's own message verbatim inside a code-emitted template — guest-authored words, still never model-written. The conversation-start endpoint (`POST /api/v1/chatbot/conversations` → `{conversation:{uuid}, greeting, actions?, idle_hours?, server_time?, contract_version}`) is unaffected by this envelope; it additionally echoes the current `contract_version` (below) so a consumer can detect it is behind. **Since 1.7.0** it also reports **`idle_hours`** (the conversation idle window as a duration — stop mirroring it as a client-side constant) and **`server_time`** (ISO-8601, for a one-off client-clock offset); both are documented in [`integration-guide.md`](integration-guide.md) §3.1, and both may be absent. **Since 1.5.0** the init response also carries an optional **`actions`** array of the same element vocabulary (greeting-time quick prompts and, when configured, the promo card) — the server always emits it (`[]` when unconfigured), older servers omit it, and a consumer that never reads it loses nothing. **What can appear there:** content elements only — `promo_card` and `quick_replies` today. `async_result` and `availability` are turn-scoped by construction (both are tied to a turn number), so an init response will not carry them; keep ignoring unknown types rather than hard-coding that list.
 
 ## Versioning
 
 The contract is versioned **`MAJOR.MINOR.PATCH`** (semver):
 
-- **MINOR** — an **additive** element or field (the common case). By the [extension rule](#extension-rule-the-dry-seam) + "ignore unknown types", adding an element or an optional field is **backwards-compatible**: an existing consumer keeps working untouched, so this is never a breaking change. **This also covers an additive optional *request* field** (e.g. `locale` on the turn endpoint in 1.3.0): a consumer tracks **one** version number for the whole guest API surface, so a new opt-in request field it may want to send bumps the same number. It is likewise backwards-compatible — omitting the field keeps the previous behavior exactly. **It also covers a change to the *value* an existing field carries** when that value stays within the field's documented type and anchor rule — `1.9.0` (every booking `url` gaining the guest's language and stay, D-071) is the precedent: nothing is added or renamed and a consumer that renders the field as before keeps working, but the number moves so a consumer that *inspects* the value finds out. **It also covers a change to transport behaviour a consumer can act on** — `1.11.0` is the precedent: a `429` that can now last up to a day, and its `Retry-After` header made readable cross-origin so a consumer can tell that apart from a one-minute wait. No body changes, and a consumer that ignores the header keeps working.
+- **MINOR** — an **additive** element or field (the common case). By the [extension rule](#extension-rule-the-dry-seam) + "ignore unknown types", adding an element or an optional field is **backwards-compatible**: an existing consumer keeps working untouched, so this is never a breaking change. **This also covers an additive optional *request* field** (e.g. `locale` on the turn endpoint in 1.3.0): a consumer tracks **one** version number for the whole guest API surface, so a new opt-in request field it may want to send bumps the same number. It is likewise backwards-compatible — omitting the field keeps the previous behavior exactly. **It also covers a change to the *value* an existing field carries** when that value stays within the field's documented type and anchor rule — `1.9.0` (every booking `url` gaining the guest's language and stay, D-071) is the precedent: nothing is added or renamed and a consumer that renders the field as before keeps working, but the number moves so a consumer that *inspects* the value finds out. **It also covers a change to transport behaviour a consumer can act on** — `1.11.0` is the precedent: a `429` that can now last up to a day, and its `Retry-After` header made readable cross-origin so a consumer can tell that apart from a one-minute wait. No body changes, and a consumer that ignores the header keeps working. **It also covers a change to what an existing *request* field means** — `1.13.0` is the precedent: the turn endpoint's `locale` stopped being an override that beats detection and became the visitor's preferred language, which answers until the guest writes theirs. The field, its type and its validation are unchanged and a consumer that keeps sending it keeps working; the number moves because what the field *does* changed.
 - **MAJOR** — an **envelope** change (a rename/removal/retype of `reply` / `actions` / `turn`, or a change to how elements are discriminated). This should never happen; the envelope is frozen.
 - **PATCH** — a wording/clarification fix with no wire effect.
 
@@ -68,7 +68,9 @@ element** rather than rendering a degraded form. For an element carrying `items[
 are the opposite: absence is normal and **must** be tolerated. One element is stated as an
 at-least-one-of instead of by required fields — [`contact_channels`](#contact_channels--the-propertys-contact-channels),
 whose three channels are individually optional but never all absent; treat a `contact_channels`
-with no channel at all as an element to drop.
+with no channel at all as an element to drop. **A required field inside an optional object is scoped
+to that object** (since 1.14.0): a `contact_channels.prefill` without its `text` drops the `prefill`
+only — the element and its channels still render.
 
 **Where elements render.** After the `reply` bubble (or, on init, after the `greeting`), as
 **siblings of it in `actions[]` order** — never nested inside the bubble. `property_cards` and
@@ -92,19 +94,72 @@ Emitted deterministically by the information path for a resolved property (a Boo
 | `style` | `string` | no | Presentation hint (`primary`). The renderer may honour or ignore it. |
 
 ### `contact_channels` — the property's contact channels
-Emitted by a human-handoff turn whose property is known (normalizes the former `handoff_ack`). Each present channel becomes a native link. **Since 1.12.0** (D-079) a handoff turn that has not yet identified the property emits **no** `contact_channels` — its `reply` says staff were notified and asks which property the request is about, over a [`property_choice`](#quick_replies--tap-to-send-question-chips) chip row; the next turn that names one carries that property's channels. Never assume a handoff turn carries this element.
+Emitted by a human-handoff turn whose property is known (normalizes the former `handoff_ack`). Each present channel becomes a native link. **Since 1.12.0** (D-079) a handoff turn that has not yet identified the property emits **no** `contact_channels` — its deterministic `reply` asks which property the request is about, over a [`property_choice`](#quick_replies--tap-to-send-question-chips) chip row, and offers that team's contact for the answer (since 1.14.0 it no longer says staff were notified — D-084); the next turn that names one carries that property's channels. Never assume a handoff turn carries this element.
+
+Also emitted, without `prefill`, by the booking fallbacks and the [turn-cap](#conversation_ended--this-conversation-accepts-no-further-turns) reply. **Since 1.14.0** a **busy reply** keeps the element when the failure came after a handoff turn had already raised its request (D-084(h)) — a busy reply is otherwise element-free, so render `actions[]` on it like on any other reply.
+
+**Since 1.14.0 the handoff reply points the guest at these buttons** — the quickest way to reach a person — and never says that staff were notified or will reply (D-084(a)). It may end with a fixed, code-appended line offering to take the guest's email or phone; that line is part of `reply`, not an element.
 
 ```json
-{ "type": "contact_channels", "phone": "+34123456789", "whatsapp": "+34600111222", "email": "hola@laseras.example" }
+{
+  "type": "contact_channels",
+  "phone": "+34 922 000 000",
+  "whatsapp": "+34 600 111 222",
+  "email": "hola@laseras.example",
+  "prefill": {
+    "text": "Hi Las Eras Nest Hostel team! I'm writing from your website chat (ref H-111):\n\n\"my key card stopped working\"",
+    "subject": "Question from the website chat — H-111",
+    "hint": "Your message is ready below — check it, then press Send."
+  }
+}
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `phone` | `string` | no | Rendered as `tel:` (digits only). |
-| `whatsapp` | `string` | no | Rendered as `https://wa.me/<digits>`. |
+| `phone` | `string` | no | Rendered as `tel:` from its digits. Keep a leading `+` (and turn a leading `00` into `+`) so an international number dials from abroad — `tel:+34922000000`. |
+| `whatsapp` | `string` | no | Rendered as `https://wa.me/<digits>` — the digits only, with no `+` and no `00` prefix. |
 | `email` | `string` | no | Rendered as `mailto:`. |
+| `prefill` | `object` | no | **Since 1.14.0.** The message a handoff turn pre-writes for the guest's WhatsApp or email — see [below](#the-pre-written-message-prefill--since-1140). |
 
 At least one channel is present when the element is emitted; all three are individually optional.
+
+#### The pre-written message (`prefill`) — since 1.14.0
+
+A handoff turn hands the guest a message to send **as themselves** (D-084(b)/(c)): addressed to the
+property's team, in the guest's language, carrying the request's reference and the guest's own words.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `text` | `string` | **yes, within `prefill`** | The WhatsApp message and the email body. May contain `\n`. A `prefill` without it is dropped on its own ([missing-required-field policy](#element-conventions-all-types)). |
+| `subject` | `string` | no | The email subject. Present only when `email` is. |
+| `hint` | `string` | no | A server-localized caption for the preview (the `cta_label` precedent). A renderer with its own translations may use its own wording instead. |
+
+- **Where it appears.** Only on a handoff turn's `contact_channels`, and only when that element
+  carries `whatsapp` or `email` — never on the booking fallbacks, never on the turn-cap reply.
+- **How to use it.** Build the links yourself, as for every channel:
+  `https://wa.me/<digits>?text=` + `encodeURIComponent(text)`, and
+  `mailto:<email>?subject=` + `encodeURIComponent(subject)` + `&body=` + `encodeURIComponent(text)`.
+  The server sends **no URL**, and `prefill` is never folded into `whatsapp` — a renderer strips that
+  to its digits.
+- **No silent prefill — MUST.** A renderer that appends the message to a link **must show the text
+  before the guest leaves the page** (the reference widget: a preview under the buttons, captioned by
+  `hint`). A renderer that cannot show it **must not** append it — it renders the plain channels, as
+  before 1.14.0. WhatsApp and email never send a pre-filled message by themselves; the guest always
+  presses Send.
+- **Editing — MAY.** A renderer may let the guest edit the text before sending. Build the preview so
+  the link is composed from its **current** value at tap time. Two consequences: an edited message is
+  the guest's own and **never returns to the server** (the stored copy and what was sent may differ),
+  and a guest who deletes the `ref H-…` line costs staff the match back to the conversation.
+- **Length — a server guarantee.** The quote is cut at 280 characters on a grapheme boundary, and
+  every link built as above from `text` (and `subject`) is **at most 1,800 bytes**. The server counts
+  with `rawurlencode()`, which escapes a few characters `encodeURIComponent` does not, so a browser's
+  link is never longer than the server's count.
+- **The reply never mentions it.** The server cannot know whether your renderer applied it, so the
+  prose points at the buttons and the caption is the only place that says a message is ready.
+- **Layout.** "WhatsApp leads, else email" is guidance, not normative. One shared preview serves both
+  links.
+- **Privacy.** It carries the guest's own words: keep it out of analytics events and logs (see the
+  [Security rule](#security-rule-both-widgets)).
 
 ### `booking_link` — the booking deep-link (MVP fallback)
 Emitted by a booking turn at `Ready` when no PMS availability provider is bound (D-018/D-010). Rendered like a `link_button` ("Book now").
@@ -505,6 +560,12 @@ Emitted on the **turn-cap** reply (D-044): a conversation that reaches `wsuite.c
 ## Security rule (both widgets)
 Guest/LLM strings and element fields are rendered via `textContent` / `setAttribute` / created DOM nodes — **never `innerHTML`** — so a hostile reply cannot inject markup (XSS); this includes the tenant-authored `promo_card`/`quick_replies` strings. Element-supplied `url` **and `image`** fields (`link_button`, `booking_link`, `availability`, `property_cards` items **and its element-level `more.url`**, `promo_card`/its `cta`) are honoured **only for `http`/`https`** schemes; everything else is dropped. `quick_replies` items carry no URLs at all — chips send text, never navigate. `tel:`/`mailto:`/`wa.me` hrefs are constructed by the widget from the channel values, not taken verbatim.
 
+`contact_channels.prefill` (since 1.14.0) quotes the guest's own words: show it as a form value or via
+`textContent`, put it into a link **only** percent-encoded (`encodeURIComponent`) as the `wa.me` `text`
+or the `mailto:` `subject`/`body` query value — never into a path or a host — and **never send it to an
+analytics event or a log**. The server never puts the conversation uuid in it: that uuid plus the
+page-visible public key is enough to post into the conversation.
+
 Every URL-bearing field the contract ever adds inherits this rule; it is named here so the list stays
 the single inventory.
 
@@ -523,6 +584,10 @@ consumer is encouraged to match.
 - **`promo_card`** — a region named by its `title`, not a live region. Mark it up with `lang` when
   `locale` is present, so a screen reader does not read Spanish copy with an English voice. Its banner
   image is decorative.
+- **`contact_channels` with `prefill`** (since 1.14.0) — give the preview an accessible name (the
+  `hint`, or your own caption) and render the caption as visible text beside it, so a screen reader
+  hears that a message is ready before reaching the buttons. Mark the preview `dir="auto"`: the guest's
+  quote may be right-to-left.
 - **`quick_replies`** — real `<button type="button">` elements (never anchors — chips carry no URLs) in
   a group with an accessible name so their purpose is clear before they are read out one by one. When a
   row retires, do not steal or drop focus; move it somewhere sensible if it was inside the row.
@@ -548,6 +613,8 @@ Each version is tagged in the platform repo as **`chatbot-contract-v<X.Y.Z>`**, 
 
 | Version | Date | Breaking | Change | Element / field | Consumer action |
 |---|---|---|---|---|---|
+| `1.14.0` | 2026-09-23 | No | **A handoff hands the guest the fastest way to a person, with the message already written** (D-084, amends D-023/D-079(b); KI-010, KI-012, O-19, O-67). Measured 2026-09-18: since handoff mail began on 2026-08-19, 38 live handoffs were emailed and none was ever marked handled, and 50 of 52 held no guest contact — while the reply said "a team member has been notified". **(a) New optional field `contact_channels.prefill {text, subject?, hint?}`** — a message in the guest's voice, addressed to the property's team, in the reply language: the property, the guest's name only if they typed it, `ref H-<id>` (the staff email and panel show the same reference), and the guest's issue quoted verbatim. Only a handoff turn's element carries it, and only with `whatsapp` or `email`. The renderer builds `wa.me/<digits>?text=` and `mailto:?subject=&body=` itself; it **must show the text before the guest leaves the page** and must not append it otherwise; it **may** let the guest edit it. Every link built from it is at most 1,800 bytes (a server guarantee). **(b) Behaviour a consumer can see, no shape change:** the handoff `reply` points at the buttons and never says staff were notified; it may end with a fixed code-appended line offering to take the guest's email or phone, whose answer the server recognises on the next message and echoes back; the unbound "which property?" lines no longer announce the request; and a **busy reply** keeps `contact_channels` when the failure came after the handoff request was raised. Documentation: the [missing-required-field policy](#element-conventions-all-types) scopes a required field inside an optional object to that object; the determinism statement admits verbatim guest words in `prefill.text`; `tel:` keeps its `+`. Reference widget: a read-only preview under the buttons whose current value builds the link at tap time (editing later = removing one attribute), `tel:+digits`, and `wa.me` in a new tab. | `contact_channels` (`prefill` · emission on a busy reply) | **Optional.** To adopt `prefill`: show `text` (a read-only field is fine) before the guest can tap, caption it with your own label or `hint`, and compose `wa.me?text=` / `mailto:?subject=&body=` from the shown value with `encodeURIComponent` at tap time. Keep it out of analytics and logs. If you cannot show it, ignore it — the plain channels keep working. Two checks: render `actions[]` on a busy reply too, and keep a leading `+` in `tel:` links. |
+| `1.13.0` | 2026-09-18 | No | **The reply follows the language the guest writes** (D-083, amends D-036(f); the audit's F7). The turn endpoint's optional request `locale` has been an explicit override since 1.3.0, beating language detection on every turn — so a widget that sends the browser's language with every message answered a Spanish guest on an English browser in English, canned lines and chips included. Measured before the change: 9 of 84 live conversations from 2026-08-19 to 2026-09-18 had the first message that showed a language answered in another one. `locale` is now the visitor's **preferred** language: it answers until the guest writes something that shows their own (12 or more letters once hostel, island and town names are removed, or any non-Latin letter). From then on the guest's language wins and is remembered — a later `ok`, number, hostel name or tapped chip keeps it, and a new sentence in another language switches it. The resolved language still sets the prose and every server-localized label together, and it is not limited to five languages: a guest who writes Ukrainian gets Ukrainian prose, with server strings in English where no translation exists (KI-024). Field, type, validation and shape are unchanged; no element or field is added — this is the meaning-change lane §Versioning now names. Reference widget: a constant move — it sends `locale` only at init, and that stored locale is now the preference its turns fall back to until the guest writes theirs (before, it only chose the greeting). | *(request)* `locale` (meaning) | **None required.** Keep sending `locale` as you do. If you have a UI language switcher, it no longer forces the reply language once the guest has written in another one — removing it is fine. Optional: send the browser's primary language unclamped (`uk`) rather than the nearest one your UI supports; the server accepts any two-letter code, answers pre-writing turns in it with English fallbacks, and records it. |
 | `1.12.0` | 2026-09-15 | No | **A handoff that does not know the property asks, instead of guessing** (D-079, closes KI-010's guest and mail halves). Until now a human-handoff turn with no identified property borrowed the tenant's alphabetically-first property: its `contact_channels` went in front of every such guest and, since per-property handoff mail (D-048), its inbox received their request — 15 of 25 live handoffs over 30 days, measured 2026-09-15. Such a turn now emits **no** `contact_channels`; its deterministic `reply` says staff were notified and asks which property the request is about, over a **`quick_replies` row with the new `id` `property_choice`** (one chip per bookable property, labels are catalog names, no `locale`, uncapped). The request is still raised. The next message that names one property — a tapped chip or a typed name — is answered as that handoff: the property's channels appear, and its own inbox is told once. Additive by the ignore-unknown rule: a new value in the documented `id` vocabulary, a known element on a turn it never appeared on, and a known element that a turn can now omit. Reference widget: a constant move plus one comment — it already renders any chip row on any turn and does not switch on `id`. | `quick_replies` (`id: property_choice`; emission on a handoff turn) · `contact_channels` (not emitted while the property is unknown) | **None required.** Two checks: (1) if you switch on `quick_replies.id`, treat `property_choice` like `island_choice` (server text, proper-noun labels, send `message` verbatim); (2) if anything in your widget assumes a handoff turn always carries `contact_channels` — a "call the hostel" affordance keyed on it, say — let it be absent. Rows can be long: wrap or scroll. |
 | `1.11.0` | 2026-09-14 | No | **A `429` can last a day, and says so** (D-078). The guest bucket (init + turn) gains two **daily** ceilings beside its per-minute ones — per visitor (key + IP) and per key (the whole site), a rolling 24 hours — so an IP-rotating flood can no longer spend a month's AI budget in minutes. A `429` from a daily cap can therefore last up to 24 hours, and `Retry-After` is now in CORS `exposed_headers` so a browser consumer can read how long. The body is unchanged (`{"message":"Too Many Attempts."}`), no element or field moves, and polls are untouched. Reference widget: a constant move — its soft retry copy is unchanged. | `429` response · `Retry-After` header (newly readable) | **Optional.** Read `Retry-After` on a `429`; when it is more than about a minute, show a "come back later / contact the hostel" message instead of "try again in a moment", and do not retry automatically. A consumer that changes nothing keeps working and shows its existing retry copy. |
 | `1.10.0` | 2026-08-28 | No | **The hostel card beside the booking element, per site** (D-073). When a tenant switches it on for a site (`chatbot.cards.on_booking`, off by default), the Ready booking turn carries the resolved property's `property_cards` (one item) **first** in `actions[]`, before its `availability` or `booking_link`; the card's `url` is byte-identical to that element's. D-069 had moved every "is it free / price for these dates" question onto the booking path, where no card had ever been emitted, so the hostel's image, location and from-price vanished from exactly the turns guests ask that on. No element or field is added, removed or renamed — a known element on a turn it never appeared on. Reference widget: the `availability` branch now draws `options[]` unconditionally and dedupes only its Book button — against a card CTA in the same list and against a url already anchored this turn. | `property_cards` (emission) · `availability` / `booking_link` (co-occurrence) | **Extend your Book-button dedupe** to `availability.url` and `booking_link.url` against the card CTAs you actually render (raw string equality, D-043(c)), and keep drawing `options[]` regardless. A renderer that already dedupes every Book affordance against rendered card urls needs only the constant move. Nothing reaches the wire until the tenant switches the card on. |

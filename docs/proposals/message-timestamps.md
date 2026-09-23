@@ -32,10 +32,11 @@ and the absence of a **per-turn** timestamp, which is still not asked for and st
 at day granularity. Do **not** ask for a top-level `created_at`: contract §Envelope states the
 three top-level keys are the whole surface and always will be.
 
-Current release **2.12.0**; the surface described here landed in **2.8.1** and was corrected in
-**2.10.0**. `BUILT_AGAINST` is **1.10.0**, and **no transport changed** — the turn body is still
-`{message, locale}` and init is still `{locale, property}`. The widget's stored transcript is
-display-only, lives in `localStorage`, and never enters a request body.
+Current release **2.13.1**; the surface described here landed in **2.8.1** and was corrected in
+**2.10.0**. `BUILT_AGAINST` is **1.14.0**, and **no transport field changed** — the turn body is
+still `{message, locale}` and init is still `{locale, property}` (since 2.13.1 that `locale` is
+the visitor's unclamped two-letter preference, contract 1.13.0). The widget's stored transcript
+is display-only, lives in `localStorage`, and never enters a request body.
 
 ## The gap — half of it closed in 1.7.0
 

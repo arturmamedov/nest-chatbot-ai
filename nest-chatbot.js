@@ -18,11 +18,15 @@
  *   this file (svgNode) is only ever handed module-local constant markup — it is
  *   never reachable from network or guest input.
  *   Element-supplied urls are honoured for http(s) only; tel:/mailto:/wa.me hrefs
- *   are constructed here from channel values, never taken verbatim.
+ *   are constructed here from channel values, never taken verbatim. The 1.14.0
+ *   contact_channels.prefill — the guest's own words — reaches the DOM only as a
+ *   textarea's value, and a link only encodeURIComponent'd, as the wa.me ?text= or
+ *   the mailto: subject/body query value, composed from what the preview shows at
+ *   tap time. It never enters a wchat:* payload or a log() line.
  *
- * Built against response contract 1.12.0 (BUILT_AGAINST, api section), in
- * lockstep with the packet vendored in docs/wsuite/ — release 2.13.0 is the sync
- * that adopted it (D-078, D-079). BUILT_AGAINST records what this code implements, not
+ * Built against response contract 1.14.0 (BUILT_AGAINST, api section), in
+ * lockstep with the packet vendored in docs/wsuite/ — release 2.13.1 is the sync
+ * that adopted it (D-083, D-084). BUILT_AGAINST records what this code implements, not
  * what the docs say. The server reports its live contract_version at init; the
  * widget warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
@@ -31,7 +35,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.13.0';
+    var VERSION = '2.13.1';
 
     /* =========================================================== config ===== */
 
@@ -83,6 +87,38 @@
         console.info.apply(console, ['[nest-chatbot]'].concat([].slice.call(arguments)));
     }
 
+    /*
+     * What log() may print of a response body: a SHALLOW COPY in which any
+     * action's `prefill` reads '[prefill]'. contact_channels.prefill (contract
+     * 1.14.0) is the guest's own words, and the contract bars it from every log —
+     * data-debug included, because a debug tag left on in production prints to
+     * any visitor's devtools, and the demo page sets it. A copy and never an
+     * edit: the same body is persisted and rendered right after each log line.
+     * Keyed on the field rather than the element type, so an element that ever
+     * carries one too is covered before anyone remembers to add it here.
+     */
+    function redactForLog(body) {
+        if (!body || !Array.isArray(body.actions)) { return body; }
+        var copy = {};
+        for (var k in body) {
+            if (Object.prototype.hasOwnProperty.call(body, k)) { copy[k] = body[k]; }
+        }
+        copy.actions = [];
+        for (var i = 0; i < body.actions.length; i++) {
+            var a = body.actions[i];
+            if (a && typeof a === 'object' && a.prefill != null) {
+                var shown = {};
+                for (var j in a) {
+                    if (Object.prototype.hasOwnProperty.call(a, j)) { shown[j] = a[j]; }
+                }
+                shown.prefill = '[prefill]';
+                a = shown;
+            }
+            copy.actions.push(a);
+        }
+        return copy;
+    }
+
     // The fixtures in the api section are the dev harness, and reaching them is
     // an explicit opt-in (the demo page sets data-mock="true"). A production tag
     // that forgot its config must fail loudly — no widget at all — never silently
@@ -107,9 +143,31 @@
         return 'en';
     }
 
+    /*
+     * The language the SERVER is told the visitor prefers (contract 1.13.0,
+     * guide §3.1-3.2) — a different question from which of our five packs
+     * paints the chrome, so it is resolved separately and deliberately NOT
+     * clamped: a uk-UA browser gets English buttons and sends `uk`, which the
+     * server answers in until the guest writes, and records either way — how
+     * the platform learns which untranslated languages our visitors bring. The
+     * primary subtag of data-locale when it names one, else of
+     * navigator.language (singular, as the guide says), lowercased. Anything
+     * that is not two ASCII letters — 'spa', an empty tag — falls back to the
+     * clamped UI locale, i.e. exactly what 2.13.0 sent: the server would ignore
+     * it, and over five characters is a 422.
+     */
+    function resolveRequestLocale(pref, fallback) {
+        var tag = (pref && pref !== 'auto') ? pref : navigator.language;
+        var primary = String(tag || '').split('-')[0].toLowerCase();
+        return /^[a-z]{2}$/.test(primary) ? primary : fallback;
+    }
+
     /* ============================================================ state ===== */
 
-    var locale = resolveLocale(cfg.locale);
+    var locale = resolveLocale(cfg.locale);   // the UI: t(), Intl, NestChatbot.locale, every wchat:* `locale`
+    // The PREFERENCE the init and turn bodies carry (contract 1.13.0) —
+    // unclamped, moved by setLocale(), and never read for display.
+    var requestLocale = resolveRequestLocale(cfg.locale, locale);
     var conversationUuid = null;
     var started = false;    // a conversation exists
     var busy = false;       // a request is in flight
@@ -197,11 +255,16 @@
             scrollLatest: 'Scroll down to last message',
             properties: 'Properties', showingOf: 'Showing %s of %s',
             send: 'Send message', input: 'Type your message',
-            language: 'Change language', languageOf: 'Switch to %s',
             book: 'Book now', open_link: 'Open',
             newChat: 'Start a new chat', newChatConfirm: 'Yes, clear this chat',
             dayToday: 'Today', dayYesterday: 'Yesterday',
             call: 'Call %s', whatsapp: 'WhatsApp', email: 'Email %s',
+            // The 1.14.0 prefill preview's caption, and the textarea's accessible
+            // name. The server's own handoff_prefill_hint in all five packs,
+            // verbatim, so every renderer says the same thing — ours rather than
+            // the payload's `hint` only because a pack string can follow
+            // setLocale(). "Send" is the button in WhatsApp or the mail app.
+            prefillCaption: 'Your message is ready below — check it, then press Send.',
             noAvailability: 'No availability for those dates.',
             error: 'Sorry, something went wrong. Please try again, or reach us directly and we\'ll be glad to help.',
             retry: 'We\'re getting a lot of messages right now — please try again in a moment.',
@@ -236,11 +299,11 @@
             scrollLatest: 'Bajar al último mensaje',
             properties: 'Alojamientos', showingOf: 'Mostrando %s de %s',
             send: 'Enviar mensaje', input: 'Escribe tu mensaje',
-            language: 'Cambiar idioma', languageOf: 'Cambiar a %s',
             book: 'Reservar ahora', open_link: 'Abrir',
             newChat: 'Empezar un chat nuevo', newChatConfirm: 'Sí, borrar este chat',
             dayToday: 'Hoy', dayYesterday: 'Ayer',
             call: 'Llamar %s', whatsapp: 'WhatsApp', email: 'Escribir a %s',
+            prefillCaption: 'Tu mensaje está listo aquí abajo: revísalo y luego pulsa Enviar.',
             noAvailability: 'No hay disponibilidad para esas fechas.',
             error: 'Lo siento, algo ha ido mal. Inténtalo de nuevo o escríbenos directamente y te ayudamos encantados.',
             retry: 'Estamos recibiendo muchos mensajes ahora mismo — inténtalo de nuevo en un momento.',
@@ -273,11 +336,11 @@
             scrollLatest: 'Scendi all\'ultimo messaggio',
             properties: 'Strutture', showingOf: 'Mostrati %s di %s',
             send: 'Invia messaggio', input: 'Scrivi il tuo messaggio',
-            language: 'Cambia lingua', languageOf: 'Passa a %s',
             book: 'Prenota ora', open_link: 'Apri',
             newChat: 'Inizia una nuova chat', newChatConfirm: 'Sì, cancella questa chat',
             dayToday: 'Oggi', dayYesterday: 'Ieri',
             call: 'Chiama %s', whatsapp: 'WhatsApp', email: 'Scrivi a %s',
+            prefillCaption: 'Il tuo messaggio è pronto qui sotto: controllalo, poi premi Invia.',
             noAvailability: 'Nessuna disponibilità per quelle date.',
             error: 'Mi dispiace, qualcosa è andato storto. Riprova o scrivici direttamente, saremo felici di aiutarti.',
             retry: 'Stiamo ricevendo molti messaggi in questo momento — riprova tra poco.',
@@ -308,11 +371,11 @@
             scrollLatest: 'Zur letzten Nachricht springen',
             properties: 'Unterkünfte', showingOf: '%s von %s angezeigt',
             send: 'Nachricht senden', input: 'Schreibe deine Nachricht',
-            language: 'Sprache wechseln', languageOf: 'Zu %s wechseln',
             book: 'Jetzt buchen', open_link: 'Öffnen',
             newChat: 'Neuen Chat starten', newChatConfirm: 'Ja, Chat löschen',
             dayToday: 'Heute', dayYesterday: 'Gestern',
             call: '%s anrufen', whatsapp: 'WhatsApp', email: 'E-Mail an %s',
+            prefillCaption: 'Deine Nachricht steht unten bereit — prüf sie und tippe dann auf Senden.',
             noAvailability: 'Keine Verfügbarkeit für diese Daten.',
             error: 'Entschuldigung, da ist etwas schiefgelaufen. Bitte versuche es erneut oder kontaktiere uns direkt.',
             retry: 'Wir bekommen gerade sehr viele Nachrichten — bitte versuche es gleich noch einmal.',
@@ -345,21 +408,17 @@
             scrollLatest: 'Aller au dernier message',
             properties: 'Hébergements', showingOf: '%s sur %s affichés',
             send: 'Envoyer le message', input: 'Écris ton message',
-            language: 'Changer de langue', languageOf: 'Passer en %s',
             book: 'Réserver', open_link: 'Ouvrir',
             newChat: 'Commencer un nouveau chat', newChatConfirm: 'Oui, effacer ce chat',
             dayToday: 'Aujourd\'hui', dayYesterday: 'Hier',
             call: 'Appeler %s', whatsapp: 'WhatsApp', email: 'Écrire à %s',
+            prefillCaption: 'Ton message est prêt ci-dessous : vérifie-le, puis appuie sur Envoyer.',
             noAvailability: 'Aucune disponibilité pour ces dates.',
             error: 'Désolé, une erreur est survenue. Réessaie ou contacte-nous directement, nous serons ravis de t\'aider.',
             retry: 'Nous recevons beaucoup de messages en ce moment — réessaie dans un instant.',
             retryLater: 'Nous avons atteint notre limite de messages pour le moment — réessaie plus tard.',
             timeout: 'Cela prend plus de temps que prévu — utilise le lien de réservation ci-dessus, ou redemande-moi dans un instant.'
         }
-    };
-
-    var LANGUAGE_NAMES = {
-        en: 'English', es: 'Español', it: 'Italiano', de: 'Deutsch', fr: 'Français'
     };
 
     function t(key) {
@@ -745,7 +804,10 @@
      * text — the transcript is display-only and stays that way. Element urls are
      * the one string that travels: they are server-supplied hrefs the guest is
      * navigating to, already visible in the DOM as an href, and without them the
-     * conversion event cannot say WHICH property was booked.
+     * conversion event cannot say WHICH property was booked. Never a
+     * contact_channels href: it is the property's phone or email, and since
+     * 1.14.0 a wa.me / mailto: one can carry contact_channels.prefill — the
+     * guest's own words, which the contract bars from every event and log.
      */
     var EVENT_NS = 'wchat';
 
@@ -854,10 +916,20 @@
      * Every callback is done(status, data) — the flow section below maps status
      * codes to behaviour.
      *
-     * NOTE: `locale` in the turn body is contractual since 1.3.0 (guide §3.2) —
-     * a stateless per-turn reply-language override for a UI that owns a language
-     * switcher, which this widget does. Resend it on EVERY turn: dropping it
-     * hands the next turn back to server-side detection.
+     * NOTE: `locale` in both bodies is requestLocale, NOT the UI `locale`, and
+     * since contract 1.13.0 (D-083, guide §3.1-3.2) it is the visitor's
+     * PREFERRED language, not an override. The server answers in the language
+     * the guest writes once a message shows one (12+ letters once place names
+     * are removed, or any non-Latin letter), remembers it for the conversation,
+     * and uses this value only for the greeting and the turns before that — so
+     * a setLocale() relabels our chrome at once and may not move the replies at
+     * all. Deliberately NOT clamped to the five packs: any two ASCII letters are
+     * accepted, and `uk` is how the platform learns it has Ukrainian visitors
+     * (answered in Ukrainian, English wherever it has no string). Only the
+     * primary subtag, validated /^[a-z]{2}$/ in resolveRequestLocale(), because
+     * over 5 characters is a 422. Still sent on EVERY turn although the
+     * reference sends it at init only: a resumed conversation never re-inits,
+     * and a host's setLocale() has to reach the server on the next turn.
      */
 
     // The response-contract version this widget was built against. The init
@@ -865,7 +937,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.12.0';
+    var BUILT_AGAINST = '1.14.0';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -955,13 +1027,13 @@
         init: function (done) {
             if (USE_MOCK) { return Mock.init(done); }
             request('POST', '/api/v1/chatbot/conversations',
-                { locale: locale, property: cfg.property || undefined }, done);
+                { locale: requestLocale, property: cfg.property || undefined }, done);
         },
 
         send: function (uuid, text, done) {
             if (USE_MOCK) { return Mock.send(uuid, text, done); }
             request('POST', '/api/v1/chatbot/conversations/' + encodeURIComponent(uuid) + '/messages',
-                { message: text, locale: locale }, done);
+                { message: text, locale: requestLocale }, done);
         },
 
         poll: function (path, done) {
@@ -975,7 +1047,11 @@
      * exercisable with no backend. Type a keyword to reach a branch:
      *
      *   "book"      → booking_link with a stay summary
-     *   "contact"   → contact_channels (phone + whatsapp + email)
+     *   "contact"   → contact_channels (phone + whatsapp + email) + a 1.14.0
+     *                 prefill {text, subject, hint}, the contract's own example:
+     *                 a caption and a read-only preview ABOVE the links, and the
+     *                 WhatsApp / email hrefs composed from the preview's CURRENT
+     *                 value (remove readonly in devtools, edit, tap)
      *   "link"      → three link_buttons (book / website / directions)
      *   "available" → async_result: interim reply now, final reply after polling.
      *                 The final is an `availability` sharing the interim's
@@ -1017,16 +1093,30 @@
      *                 the welcome block's chip row
      *   "pass" / "offer" → promo_card on its own ("pass" is word-bounded, so
      *                 "passport" and "compass" fall through to the plain reply)
-     *   "human"     → the 1.12.0 unbound handoff (D-079): a reply that asks which
-     *                 hostel, a quick_replies row with id property_choice and
-     *                 THIRTEEN chips, and NO contact_channels. Tapping a chip
-     *                 sends "It's about <name>", which answers with that hostel's
-     *                 channels — the turn the real server gives the right phone
+     *   "human"     → the 1.12.0 unbound handoff (D-079), worded as 1.14.0 has
+     *                 it: a reply that asks which hostel and offers that team's
+     *                 contact (it no longer says staff were told), a
+     *                 quick_replies row with id property_choice and THIRTEEN
+     *                 chips, and NO contact_channels. Tapping a chip sends
+     *                 "It's about <name>", which answers as a bound handoff does
+     *                 since 1.14.0: a reply pointing at the buttons plus the
+     *                 server's contact-offer line, and that hostel's channels
+     *                 with a prefill quoting the "human" message — the turn the
+     *                 real server gives the right phone
      *   "!cap"      → the turn-cap reply: contact_channels + conversation_ended
      *                 (emitted last, per contract) — composer closes, restart
-     *                 button appears
+     *                 button appears. NO prefill — the contract never puts one on
+     *                 the turn-cap reply — so it is the plain-links control
      *   "!unknown"  → an unrecognised element type (must be ignored silently)
      *   "!xss"      → a hostile reply and a javascript: url (must both be inert)
+     *   "!prefill"  → a hostile 1.14.0 prefill (markup, both quotes, &amp;/&,
+     *                 ?text=x#frag, %20, +, emoji, an Arabic paragraph, ~500
+     *                 chars) and a whatsapp written 0034: shown as text,
+     *                 round-trips byte-for-byte through the hrefs, wa.me/34600111222
+     *   "!nowhatsapp" → phone "0034 822 000 000" + email + prefill, no whatsapp:
+     *                 tel:+34822000000, and the email carries the message
+     *   "!busy"     → the server's busy reply keeping a raised handoff's
+     *                 contact_channels, prefill included (1.14.0, D-084(h))
      *   "!410" "!403" "!429" "!500" → force that status. A number after it is
      *                 sent as Retry-After (1.11.0): "!429 60" is a per-minute
      *                 refusal, "!429 80000" a daily one, and bare "!429" the
@@ -1043,6 +1133,11 @@
     var Mock = (function () {
         var pollCounts = {};
         var turn = 0;
+        // The message that raised the last "human" handoff, which the bound
+        // answer's prefill quotes — as the server quotes the guest's own words
+        // (1.14.0). Harness state like `turn`: a restart does not reset it, and
+        // nothing needs it to.
+        var handoffQuote = null;
 
         // retryAfter is the transport's third argument (see request()): a header
         // the mock has no headers to carry, so it rides the callback directly.
@@ -1184,6 +1279,32 @@
             };
         }
 
+        // The '!prefill' message: everything a guest's quote can hand a renderer
+        // that treats it as anything but a form value and a percent-encoded query
+        // value. Markup that would run if parsed (an img onerror and a script,
+        // both setting a sentinel rather than calling alert(), so a scanner never
+        // reads this file as an attack and no literal close-script tag ships),
+        // both quote kinds, an entity that must stay literal, a query and a
+        // fragment that must not become the link's own, a pre-encoded %20 that
+        // must be encoded again, a + that must not arrive as a space, a
+        // skin-toned thumb and a ZWJ family (one grapheme, several code points
+        // each), and a paragraph that STARTS with Arabic — dir="auto" decides per
+        // paragraph by its first strong letter, so Arabic mid-line would never
+        // reach the right-to-left branch. About 500 characters, near the server's
+        // 280-character quote plus its template. Escapes rather than raw emoji
+        // and Arabic, so no editor can quietly reorder or normalise them. No \r:
+        // a textarea normalises it to \n, which would break byte-for-byte.
+        var HOSTILE_PREFILL =
+            'Hi Las Eras Nest Hostel team! I\'m writing from your website chat (ref H-999):\n\n"' +
+            '<img src=x onerror="window.__ncXss=1"><script>window.__ncXss=1<\/script> ' +
+            'He wrote "call me back" and I wrote \'not yet\'. &amp; is not & and &lt;b&gt; is not <b>. ' +
+            'See https://example.com/?text=x#frag, 100%20 off, and 1+1=2.\n' +
+            '\u0645\u0631\u062D\u0628\u0627\u060C \u0634\u0643\u0631\u0627 \u2014 ' +
+            '\uD83C\uDFDD\uFE0F \uD83D\uDC4D\uD83C\uDFFD \uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66\n' +
+            'Second line: my key card stopped working twice this week, the door beeps red, ' +
+            'reception said to write here, and I am out until late tonight, so please leave ' +
+            'a new card at the desk or tell me where to pick one up before eleven."';
+
         return {
             init: function (done) {
                 var throttled = mockInitRetryAfter();
@@ -1213,7 +1334,7 @@
                     // what a correct client clock should compute.
                     idle_hours: mockIdleHours(),
                     server_time: new Date().toISOString(),
-                    contract_version: '1.12.0'
+                    contract_version: '1.14.0'
                 }, 700);
             },
 
@@ -1255,6 +1376,8 @@
                     // the contract specifies. The real server would also repeat
                     // the previous exchange's turn number; `turn` here is close
                     // enough, since the widget never reads it on this path.
+                    // No prefill, on purpose: the contract never puts one on the
+                    // turn-cap reply, so this stays the plain-links control.
                     return reply(done, 200, {
                         reply: 'We have reached this conversation’s message limit. Start a new chat to keep talking — or reach the team directly below.',
                         actions: [
@@ -1270,6 +1393,78 @@
                     });
                 }
 
+                // ---- the 1.14.0 prefill (D-084), harness-only ------------------
+                // '!'-prefixed startsWith tests like '!xss' and '!cap': unreachable
+                // by guest prose, and above every indexOf test below. Not
+                // '!xssprefill' — the '!xss' test above is a startsWith and would
+                // take it.
+                if (q.indexOf('!prefill') === 0) {
+                    // The whatsapp is written 0034 on purpose: wa.me must get
+                    // 34600111222. The subject carries & # ? for the mailto:
+                    // query, and the hint is markup this widget must never show —
+                    // it captions the preview from its own pack.
+                    return reply(done, 200, {
+                        reply: 'The quickest way to reach the Las Eras team is right below.',
+                        actions: [{
+                            type: 'contact_channels',
+                            phone: '+34 922 123 456',
+                            whatsapp: '0034 600 111 222',
+                            email: 'hola@nestshostels.com',
+                            prefill: {
+                                text: HOSTILE_PREFILL,
+                                subject: 'Q & A #1 — H-999?x=y',
+                                hint: '<b>not markup</b>'
+                            }
+                        }],
+                        turn: turn
+                    });
+                }
+
+                if (q.indexOf('!nowhatsapp') === 0) {
+                    // A property with no WhatsApp: the preview still renders,
+                    // because the email link does. The phone is written 0034,
+                    // which the admin form accepts since 1.14.0 — tel: must dial
+                    // +34822000000, where 2.13.0 built tel:+0034822000000.
+                    return reply(done, 200, {
+                        reply: 'The quickest way to reach the Médano team is right below.',
+                        actions: [{
+                            type: 'contact_channels',
+                            phone: '0034 822 000 000',
+                            email: 'hola@nestshostels.com',
+                            prefill: {
+                                text: 'Hi Médano Nest team! I\'m writing from your website chat (ref H-113):\n\n"the shower in room 4 has no hot water"',
+                                subject: 'Question from the website chat — H-113',
+                                hint: 'Your message is ready below — check it, then press Send.'
+                            }
+                        }],
+                        turn: turn
+                    });
+                }
+
+                if (q.indexOf('!busy') === 0) {
+                    // 1.14.0 (D-084(h)): a busy reply that failed AFTER a handoff
+                    // raised its request keeps that turn's contact_channels whole —
+                    // prefill included — and drops its chips (upstream
+                    // ChatOrchestrator::busyTurn()). The reply is the server's own
+                    // en `busy` string. sendMessage() special-cases nothing, so
+                    // this proves the element renders on a busy 200 like on any.
+                    return reply(done, 200, {
+                        reply: 'Sorry, I\'m having trouble responding right now. Please try again in a moment, or reach us directly and we\'ll be glad to help.',
+                        actions: [{
+                            type: 'contact_channels',
+                            phone: '+34 922 123 456',
+                            whatsapp: '+34 600 111 222',
+                            email: 'hola@nestshostels.com',
+                            prefill: {
+                                text: 'Hi Las Eras Nest Hostel team! I\'m writing from your website chat (ref H-114):\n\n"can I speak to someone about my booking"',
+                                subject: 'Question from the website chat — H-114',
+                                hint: 'Your message is ready below — check it, then press Send.'
+                            }
+                        }],
+                        turn: turn
+                    });
+                }
+
                 // ---- the 1.12.0 unbound handoff (D-079) ---------------------
                 // The answer FIRST, and above every content branch below: a
                 // property_choice message carries a hostel's name, and these are
@@ -1277,13 +1472,29 @@
                 // or "book" would otherwise be answered as that keyword instead.
                 // This is the turn that carries the right hostel's channels.
                 if (q.indexOf('it\'s about ') === 0) {
+                    var name = text.slice('It\'s about '.length);
                     return reply(done, 200, {
-                        reply: 'Thanks — the ' + text.slice('It\'s about '.length) + ' team has your message and will get back to you. You can also reach them directly:',
+                        // 1.14.0 (D-084(a)): the handoff reply points at the buttons
+                        // and never says staff were notified or will reply. The
+                        // second paragraph is the server's code-appended en
+                        // handoff_contact_offer. The reply never mentions the
+                        // prefill — the caption is the only place that says a
+                        // message is ready.
+                        reply: 'The quickest way to reach the ' + name + ' team is right below.\n\n' +
+                            'If you\'d like, leave your email or phone number here so the team has a way to reach you — it\'s optional.',
                         actions: [{
                             type: 'contact_channels',
                             phone: '+34 928 123 456',
                             whatsapp: '+34 600 333 444',
-                            email: 'hola@nestshostels.com'
+                            email: 'hola@nestshostels.com',
+                            // The server's en handoff_prefill around the message
+                            // that raised the handoff, verbatim.
+                            prefill: {
+                                text: 'Hi ' + name + ' team! I\'m writing from your website chat (ref H-112):\n\n"' +
+                                    (handoffQuote || 'I need to speak to a person') + '"',
+                                subject: 'Question from the website chat — H-112',
+                                hint: 'Your message is ready below — check it, then press Send.'
+                            }
                         }],
                         turn: turn
                     });
@@ -1292,10 +1503,13 @@
                 // The question. NO contact_channels — before 1.12.0 this turn
                 // carried the alphabetically-first hostel's, which is exactly the
                 // wrong phone number this fixture exists to prove the widget does
-                // not miss. The reply is the server's own en string.
+                // not miss. The reply is the server's own en string as 1.14.0
+                // words it (handoff_which_property): it offers that team's
+                // contact instead of announcing that staff were told (D-084(a)).
                 if (q.indexOf('human') !== -1) {
+                    handoffQuote = text;
                     return reply(done, 200, {
-                        reply: 'I\'ve passed your message to our team. Which property is this about, so the right team can help?',
+                        reply: 'Which property is this about? Tap it below and I\'ll give you that team\'s contact so you can reach them directly.',
                         actions: [propertyChoiceChips()],
                         turn: turn
                     });
@@ -1308,7 +1522,15 @@
                             type: 'contact_channels',
                             phone: '+34 922 123 456',
                             whatsapp: '+34 600 111 222',
-                            email: 'hola@nestshostels.com'
+                            email: 'hola@nestshostels.com',
+                            // 1.14.0 (D-084): the contract's own example, verbatim,
+                            // hint included — the widget ignores the hint and
+                            // captions the preview from its own pack.
+                            prefill: {
+                                text: 'Hi Las Eras Nest Hostel team! I\'m writing from your website chat (ref H-111):\n\n"my key card stopped working"',
+                                subject: 'Question from the website chat — H-111',
+                                hint: 'Your message is ready below — check it, then press Send.'
+                            }
                         }],
                         turn: turn
                     });
@@ -1707,56 +1929,6 @@
         send: '<svg xmlns="http://www.w3.org/2000/svg" class="nc-icon" viewBox="0 0 512 512" aria-hidden="true"><path d="M498.1 5.6c10.1 7 15.4 19.1 13.5 31.2l-64 416c-1.5 9.7-7.4 18.2-16 23s-18.9 5.4-28 1.6L284 427.7l-68.5 74.1c-8.9 9.7-22.9 12.9-35.2 8.1S160 493.2 160 480v-83.6c0-4 1.5-7.8 4.2-10.8L331.8 202.8c5.8-6.3 5.6-16-.4-22s-15.7-6.4-22-.7L106 360.8 17.7 316.6C7.1 311.3.2 300.7 0 288.9s6.2-22.6 16.6-28.3l448-243.4c10.8-5.9 24-5 33.9 2.1z"/></svg>'
     };
 
-    // Simplified national flags, painted full-bleed into the 35px circle: `slice`
-    // scales each one to cover its square button and crops the overflow from the
-    // centre, so no fine detail is needed. It has to be the SVG attribute and NOT
-    // object-fit — that property only applies to replaced elements, and an inline
-    // <svg> is not one, so object-fit:cover here silently does nothing and the flag
-    // letterboxes instead.
-    // The GB clip-path ids are uniquified per instance so two Union Jacks on the
-    // same page cannot cross-reference each other's defs.
-    var flagUid = 0;
-    var FLAG_FIT = ' preserveAspectRatio="xMidYMid slice" class="nc-flag">';
-
-    function flagMarkup(code) {
-        var id = 'nc-uk-' + (++flagUid);
-        switch (code) {
-            case 'en':
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 30"' + FLAG_FIT +
-                    '<clipPath id="' + id + 'a"><path d="M0,0 v30 h60 v-30 z"/></clipPath>' +
-                    '<clipPath id="' + id + 'b"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath>' +
-                    '<g clip-path="url(#' + id + 'a)">' +
-                    '<path d="M0,0 v30 h60 v-30 z" fill="#012169"/>' +
-                    '<path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/>' +
-                    '<path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#' + id + 'b)" stroke="#C8102E" stroke-width="4"/>' +
-                    '<path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/>' +
-                    '<path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/>' +
-                    '</g></svg>';
-            case 'es':
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2"' + FLAG_FIT +
-                    '<rect width="3" height="2" fill="#AA151B"/>' +
-                    '<rect width="3" height="1" y="0.5" fill="#F1BF00"/></svg>';
-            case 'it':
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2"' + FLAG_FIT +
-                    '<rect width="1" height="2" x="0" fill="#008C45"/>' +
-                    '<rect width="1" height="2" x="1" fill="#F4F5F0"/>' +
-                    '<rect width="1" height="2" x="2" fill="#CD212A"/></svg>';
-            case 'de':
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5 3"' + FLAG_FIT +
-                    '<rect width="5" height="1" y="0" fill="#000"/>' +
-                    '<rect width="5" height="1" y="1" fill="#D00"/>' +
-                    '<rect width="5" height="1" y="2" fill="#FFCE00"/></svg>';
-            case 'fr':
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2"' + FLAG_FIT +
-                    '<rect width="1" height="2" x="0" fill="#002395"/>' +
-                    '<rect width="1" height="2" x="1" fill="#fff"/>' +
-                    '<rect width="1" height="2" x="2" fill="#ED2939"/></svg>';
-        }
-        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2"' + FLAG_FIT + '</svg>';
-    }
-
-    function flagNode(code) { return svgNode(flagMarkup(code)); }
-
     /**
      * The bot's avatar, in one place because three call sites need it (a reply, the
      * thinking dots, the intro greeting). Same mark as the launcher and the header —
@@ -1914,15 +2086,15 @@
            matters MOST: the panel is fullscreen there and a guest has no other
            way to start a conversation over.
 
-           Toggle and dropdown share a wrapper the way .nc-lang wraps its own
-           toggle and options. It is the dropdown's positioning context, and it
-           puts the item beside ⋯ in the tab order instead of after ✕.
+           Toggle and dropdown share a wrapper, .nc-menu-wrap. It is the
+           dropdown's positioning context, and it puts the item beside ⋯ in the
+           tab order instead of after ✕.
 
            Deliberately NOT role="menu" / role="menuitem" / aria-haspopup. Those
            roles carry a keyboard contract — roving tabindex, arrow keys,
            Home/End, typeahead — that one item does not need, and half-honouring
-           it is worse than never claiming it. aria-expanded alone, exactly as
-           .nc-lang-toggle does for the same shape. */
+           it is worse than never claiming it. aria-expanded alone: the
+           disclosure pattern, whose whole contract is one toggle and one panel. */
         var menuWrap = el('div', 'nc-menu-wrap');
         var menuToggle = el('button', 'nc-menu-toggle');
         attrs(menuToggle, { type: 'button', 'aria-label': t('menu'), 'aria-expanded': 'false' });
@@ -1982,7 +2154,7 @@
         // free. Out of flex flow, so it costs nothing in the footer's `gap`.
         //
         // FIRST child on purpose: it sits above the composer on screen, and the tab
-        // order has to read the same way — transcript, cue, language, input, send.
+        // order has to read the same way — transcript, cue, input, send.
         var cue = el('button', 'nc-scroll-cue nc-cue-hidden');
         // title as well as aria-label: the glyph is a bare chevron, and a pointer
         // guest gets no other chance to learn what it does.
@@ -1990,27 +2162,9 @@
         cue.appendChild(svgNode(ICONS.chevron));
         footer.appendChild(cue);
 
+        // The composer row. Since 2.13.1 it holds the form alone; it stays for the
+        // flex row .nc-form grows into and for a stable DOM under the CSS.
         var controls = el('div', 'nc-controls');
-
-        var lang = el('div', 'nc-lang');
-        var langToggle = el('button', 'nc-lang-toggle');
-        attrs(langToggle, { type: 'button', 'aria-label': t('language'), 'aria-expanded': 'false' });
-        langToggle.appendChild(flagNode(locale));
-
-        var langOptions = el('div', 'nc-lang-options');
-        var optionButtons = {};
-        SUPPORTED.forEach(function (code) {
-            var option = el('button', 'nc-lang-option');
-            attrs(option, { type: 'button', 'data-lang': code, 'aria-label': tf('languageOf', LANGUAGE_NAMES[code]) });
-            option.appendChild(flagNode(code));
-            option.appendChild(el('span', 'nc-sr-only', LANGUAGE_NAMES[code]));
-            if (code === locale) { option.classList.add('nc-hidden'); }
-            langOptions.appendChild(option);
-            optionButtons[code] = option;
-        });
-
-        lang.appendChild(langToggle);
-        lang.appendChild(langOptions);
 
         // novalidate: we validate in submit() and show no browser tooltips, but the
         // required/minlength constraints stay so :valid can light the send button.
@@ -2027,7 +2181,6 @@
 
         form.appendChild(input);
         form.appendChild(send);
-        controls.appendChild(lang);
         controls.appendChild(form);
         footer.appendChild(controls);
 
@@ -2056,11 +2209,9 @@
         els = {
             root: root, toggler: toggler, panel: panel, body: body, loader: loader,
             progress: progress, form: form, input: input, send: send, close: closeBtn,
-            controls: controls, langToggle: langToggle, langOptions: langOptions,
-            optionButtons: optionButtons, badge: badge, subline: subline, expand: expandBtn,
-            // The header menu. Its open state is a class on headerControls, the
-            // way the language row's is a class on controls — same shape, so the
-            // same seam.
+            badge: badge, subline: subline, expand: expandBtn,
+            // The header menu. Its open state is a class on headerControls
+            // (nc-menu-open), not on the toggle: the CSS keys off the container.
             headerControls: headerControls, menuToggle: menuToggle, menu: menu,
             menuNewChat: menuNewChat,
             unread: unread, teaser: teaser, teaserBody: teaserBody, teaserClose: teaserClose,
@@ -2560,6 +2711,44 @@
 
     function digits(value) { return String(value || '').replace(/[^0-9]/g, ''); }
 
+    /*
+     * A dialable number (contract 1.14.0): `+` and the digits for a `+34 …`
+     * value, `+` and the digits AFTER the `00` for a `0034 …` one, the bare
+     * digits otherwise. tel: needs the `+` to dial from abroad, and wa.me takes
+     * digits(telNumber(v)) — the same number with neither `+` nor `00`. Until
+     * 2.13.1 tel: prefixed `+` to everything: a `0034 …` value dialled +0034…,
+     * and a national `922 123 456` dialled +922, another country.
+     *
+     * The separators go FIRST, and that is a deliberate divergence from the
+     * reference's telNumber(), which strips only leading whitespace. The
+     * platform's admin form (D-084) validates a number by removing spaces, dots,
+     * dashes and parentheses from anywhere in it and then requiring a leading
+     * `+` or `00` — and stores the value as typed. So `(+34) 922 123 456` and
+     * `(0034) 600 111 222` are valid catalog data, and a test on the raw first
+     * character would read both as national: tel:34…, and a wa.me link with the
+     * 00 still on it, which reaches nobody. Same separator set as the server's,
+     * so the two cannot disagree about which numbers are international.
+     */
+    function telNumber(value) {
+        var compact = String(value || '').replace(/[\s.\-()]/g, '');
+        var d = digits(compact);
+        if (compact.charAt(0) === '+') { return '+' + d; }
+        if (compact.slice(0, 2) === '00') { return '+' + d.slice(2); }
+        return d;
+    }
+
+    /*
+     * The email gate — the one channel with a shape to check, and stricter since
+     * 1.14.0, because a mailto: href now gets OUR ?subject=&body= appended, so
+     * the address may carry no query, fragment or escape of its own: no ?, #, &
+     * or %, no whitespace, exactly one @. 'a@b.c?body=x' passed the old
+     * /^[^\s@]+@[^\s@]+\.[^\s@]+$/ and would have put a second body in front of
+     * the guest's. Catalog data, so defence in depth rather than a live hole —
+     * and the cost is real if small: a legal address with an & in it now
+     * renders no email link.
+     */
+    var EMAIL_OK = /^[^\s@?#&%]+@[^\s@?#&%]+\.[^\s@?#&%]+$/;
+
     /**
      * Element-supplied urls are honoured ONLY for http(s). Innocent surrounding
      * whitespace is trimmed off the returned href; javascript:, data: and
@@ -2781,8 +2970,8 @@
      * RE-derived by setLocale(), which is the only way the two can never drift.
      * All three are pack strings around payload VALUES — for this element the
      * contract sends `basis` as a bare enum and no display text at all, so these
-     * words are the widget's own and follow the language switcher like every
-     * other control. What is not ours: `room`, the PMS's vendor name, and the
+     * words are the widget's own and follow setLocale() like every other
+     * control. What is not ours: `room`, the PMS's vendor name, and the
      * figures, which are the server's strings.
      */
     function optionsHeadingText(basis) {
@@ -2891,9 +3080,10 @@
                 hidden[i].classList.toggle('nc-hidden', !expanding);
             }
             more.setAttribute('aria-expanded', expanding ? 'true' : 'false');
-            // Read from the pack at press time, so a guest who switched language
-            // gets the next label in the new one — the same "handlers read their
-            // label fresh" line setLocale() draws for the prompt pills.
+            // Read from the pack at press time, so a setLocale() between two
+            // presses gets the next label in the new language — the same
+            // "handlers read their label fresh" line setLocale() draws for the
+            // prompt pills.
             more.textContent = optionsMoreText(hidden.length, expanding);
             afterRender();
         });
@@ -2966,23 +3156,108 @@
         return row;
     }
 
+    /*
+     * contact_channels. Every href here is CONSTRUCTED from the channel value —
+     * never taken verbatim from the payload.
+     *
+     * 1.14.0 `prefill` (D-084): the message a handoff pre-writes for the guest's
+     * WhatsApp or email — in their voice and language, carrying `ref H-…` and
+     * their own words. The contract's one MUST: a renderer that appends it to a
+     * link shows it before the guest can leave the page. Here that is a caption
+     * and a READ-ONLY textarea ABOVE the links, inside this same wrap, and the
+     * WhatsApp and email hrefs are composed from the textarea's CURRENT value
+     * (composeOnTap).
+     *
+     * Above, not under as the reference draws it, because this widget never
+     * scrolls new content into view (anchorSend() is the only thing that moves
+     * the transcript). Under the links, a phone with the keyboard still up
+     * leaves WhatsApp tappable while the message sits below the fold — a tap
+     * would carry text the guest never saw, the one thing the contract forbids.
+     * Above, reaching a link means having passed the message, so the MUST holds
+     * by construction rather than by a visibility check; and a screen reader
+     * hears that a message is ready before the buttons, which is the contract's
+     * Accessibility note.
+     *
+     * Letting the guest edit the message — a MAY the owner has deferred — is
+     * removing the `readonly` attribute below, and nothing else in this
+     * renderer. Two things the owner decides with it, not here: a focused text
+     * field under 16px makes iOS zoom the page (the preview is 14px), and an
+     * edited message gives up the server's 1,800-byte link guarantee. An edited
+     * message is the guest's own: it goes to the property from their app and
+     * never back to the server.
+     *
+     * Where this deliberately parts from the reference's contactChannels():
+     *   - the order above;
+     *   - the caption is our pack's prefillCaption, never `hint`: it is chrome,
+     *     so setLocale() repaints it, which a server string could not follow —
+     *     and the five pack strings ARE the server's translations, verbatim;
+     *   - the caption is aria-hidden and the textarea carries the same string
+     *     as its aria-label, so a screen reader hears it once (.nc-chip-head);
+     *   - the preview waits for a link that actually RENDERS — a whatsapp with
+     *     digits, an email past EMAIL_OK — not for a truthy field, so it can
+     *     never mount with nothing to carry it;
+     *   - telNumber() strips the admin form's separators first (see there);
+     *   - a message encodeURIComponent cannot encode is dropped, not thrown;
+     *   - afterRender(), never a scroll or a focus(); and resize: none (CSS).
+     * No lang attribute on the preview: the element names no language, and
+     * absent means set nothing (the promo and chip-row rule).
+     */
     function renderChannels(action) {
         var wrap = el('div', 'nc-channels');
-        // Every href here is CONSTRUCTED from the channel value — never taken
-        // verbatim from the payload.
-        if (action.phone) {
-            wrap.appendChild(channelLink(tf('call', action.phone), 'tel:+' + digits(action.phone), 'phone'));
+        // Built before anything is appended: the preview goes FIRST in the wrap,
+        // but whether there is one depends on which links survive their gates.
+        var links = [];
+
+        var tel = telNumber(action.phone);
+        if (digits(tel)) {
+            links.push(channelLink(tf('call', action.phone), 'tel:' + tel, 'phone'));
         }
-        if (action.whatsapp) {
-            wrap.appendChild(channelLink(t('whatsapp'), 'https://wa.me/' + digits(action.whatsapp), 'whatsapp'));
+        var wa = digits(telNumber(action.whatsapp));
+        var waLink = null;
+        if (wa) {
+            waLink = channelLink(t('whatsapp'), 'https://wa.me/' + wa, 'whatsapp');
+            links.push(waLink);
         }
-        if (action.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(action.email)) {
-            wrap.appendChild(channelLink(tf('email', action.email), 'mailto:' + action.email, 'email'));
+        var email = (typeof action.email === 'string' && EMAIL_OK.test(action.email)) ? action.email : null;
+        var mailLink = null;
+        if (email) {
+            mailLink = channelLink(tf('email', email), 'mailto:' + email, 'email');
+            links.push(mailLink);
         }
-        if (wrap.childNodes.length) {
-            els.body.appendChild(wrap);
-            afterRender();
+        // No usable channel, no element — the contract's "at least one of" read
+        // at the gate: a phone of 'ask reception' or a whatsapp of 'n/a' is not a
+        // dead tel:/wa.me/ link, it is nothing. COUNTED rather than read off
+        // wrap.childNodes, which since 1.14.0 can hold the caption and preview
+        // too — the trap renderQuickReplies() hit when its heading moved inside
+        // the row.
+        if (!links.length) { return; }
+
+        var prefill = prefillOf(action.prefill);
+        if (prefill && (waLink || mailLink)) {
+            var caption = el('div', 'nc-prefill-caption', t('prefillCaption'));
+            attrs(caption, { 'aria-hidden': 'true' });
+            var preview = el('textarea', 'nc-prefill');
+            // A form VALUE, never markup — the Security rule's own first option.
+            preview.value = prefill.text;
+            // Remove readonly to let the guest edit it — see the docblock above.
+            attrs(preview, { readonly: 'readonly', rows: '4', dir: 'auto', 'aria-label': t('prefillCaption') });
+            wrap.appendChild(caption);
+            wrap.appendChild(preview);
+            if (waLink) {
+                composeOnTap(waLink, 'https://wa.me/' + wa, preview, function (value) {
+                    return '?text=' + encodeURIComponent(value);
+                });
+            }
+            if (mailLink) {
+                composeOnTap(mailLink, 'mailto:' + email, preview, function (value) {
+                    return '?' + (prefill.subject ? 'subject=' + encodeURIComponent(prefill.subject) + '&' : '') +
+                        'body=' + encodeURIComponent(value);
+                });
+            }
         }
+        for (var i = 0; i < links.length; i++) { wrap.appendChild(links[i]); }
+        els.body.appendChild(wrap);
+        afterRender();
     }
 
     // `channel` names which of the three this is, for the events. The href
@@ -2993,13 +3268,70 @@
         attrs(link, { href: href, rel: 'noopener noreferrer' });
         // No url on this one, ever: the href IS the guest-facing phone number or
         // email address of the property, and a tel:/mailto: string in an
-        // analytics payload is contact data leaving the page for no gain.
+        // analytics payload is contact data leaving the page for no gain. Since
+        // 1.14.0 a wa.me / mailto: href can also carry the guest's pre-written
+        // message (?text= / &body=), which the contract forbids in any event or
+        // log — a second reason, and the stronger one.
         attrs(link, { 'data-wchat-el': 'contact_channels', 'data-wchat-channel': channel });
         // Only the wa.me channel navigates — open it in a new tab so the guest
-        // keeps the host page (deliberate divergence from the reference, which
-        // lets it navigate away). tel:/mailto: hand off to external handlers.
+        // keeps the host page: navigating it away would drop the chat
+        // mid-handoff. The reference does the same since 1.14.0 (until then this
+        // was a deliberate divergence). tel:/mailto: hand off to external
+        // handlers.
         if (/^https:/.test(href)) { attrs(link, { target: '_blank' }); }
         return link;
+    }
+
+    /*
+     * The usable part of a 1.14.0 prefill, or null — and null always means "the
+     * plain links, as before 1.14.0". `text` is required WITHIN the object (a
+     * prefill without it drops on its own; the channels still render), judged
+     * after trim() so whitespace is not a message — but the value itself is
+     * kept VERBATIM: it is the server's framing around the guest's own words,
+     * byte for byte. `subject` is optional and kept the same way.
+     *
+     * Both are test-encoded here, once: encodeURIComponent throws URIError on a
+     * lone UTF-16 surrogate (half an emoji), and a throw inside a renderer
+     * escapes renderActions() — which has no try — and takes the rest of the
+     * turn with it: later elements, persist bookkeeping, wchat:reply. A message
+     * this renderer cannot put into a link is one it cannot honour, so it is
+     * dropped whole rather than shown over links that carry less than it shows.
+     */
+    function prefillOf(p) {
+        if (!p || typeof p !== 'object' || typeof p.text !== 'string' || !p.text.trim()) { return null; }
+        var subject = (typeof p.subject === 'string' && p.subject.trim()) ? p.subject : null;
+        if (!encodable(p.text) || (subject !== null && !encodable(subject))) { return null; }
+        return { text: p.text, subject: subject };
+    }
+
+    function encodable(value) {
+        try { encodeURIComponent(value); return true; } catch (e) { return false; }
+    }
+
+    /*
+     * Keeps a channel link's href composed from the preview's CURRENT value:
+     * once now, so a long-press, "copy link" or middle-click (none of which
+     * fires `click`) already carries the message; on every `input`, so it stays
+     * current once the guest can edit; and on the click itself, the last word
+     * before the navigation reads the href. `query` builds the ?… part, and if
+     * it throws — a lone surrogate in an edited value — the link falls back to
+     * its plain base href: never a stale message, never an exception.
+     *
+     * NEVER stopPropagation or preventDefault here. This listener runs at the
+     * target, before the delegated wchat:action listener on els.body: stopping
+     * the event loses the conversion event, preventing it loses the tap. A
+     * closure per link where CTAs delegate, on optionsToggle()'s reasoning: a
+     * transcript holds a handful of these, not dozens.
+     */
+    function composeOnTap(link, base, preview, query) {
+        var refresh = function () {
+            var href = base;
+            try { href = base + query(preview.value); } catch (e) { href = base; }
+            link.setAttribute('href', href);
+        };
+        refresh();
+        link.addEventListener('click', refresh);
+        preview.addEventListener('input', refresh);
     }
 
     /**
@@ -4006,9 +4338,10 @@
     /**
      * The widget's own two openers, appended into the welcome wrapper.
      *
-     * Labels are resolved at CLICK time, not here. A guest who switches language
-     * between reading the pill and tapping it must send the sentence they can
-     * read — and setLocale() repaints the visible pills to match.
+     * Labels are resolved at CLICK time, not here. If a setLocale() lands
+     * between the guest reading the pill and tapping it, they must send the
+     * sentence they can read — and setLocale() repaints the visible pills to
+     * match.
      *
      * Nothing here announces: this is interactive chrome reached by Tab, and the
      * announcer exists for replies the eye may miss, not for buttons.
@@ -4221,7 +4554,6 @@
         if (els.panel.contains(document.activeElement)) { els.toggler.focus(); }
         els.root.classList.remove('nc-open');
         els.toggler.setAttribute('aria-expanded', 'false');
-        closeLanguageMenu();
         closeHeaderMenu();
         emit('close', {
             source: oneOf(CLOSE_SOURCES, source),
@@ -4456,7 +4788,7 @@
             var waiters = initWaiters || [];
             initWaiters = null;
             if (removed) { return; }
-            log('init', status, body);
+            log('init', status, redactForLog(body));
             lastInitStatus = status;
             lastInitRetryAfter = retryAfter;
 
@@ -4650,7 +4982,7 @@
             if (removed || epoch !== chatEpoch) { return; }
             busy = false;
             els.send.disabled = false;
-            log('turn', status, body);
+            log('turn', status, redactForLog(body));
 
             if (thinking.parentNode) { thinking.parentNode.removeChild(thinking); }
 
@@ -5025,7 +5357,7 @@
                 // Re-checked HERE too: the request was in flight while the guest
                 // restarted, and this callback is the last gate before the DOM.
                 if (removed || epoch !== chatEpoch) { return; }
-                log('poll', status, body);
+                log('poll', status, redactForLog(body));
                 if (status === 403) {
                     emit('error', { phase: 'poll', status: 403, retrying: false, retryAfter: null });
                     teardown();
@@ -5109,16 +5441,16 @@
     /* ---------------------------------------------------------- header menu */
 
     /*
-     * The three-dots menu. Shaped on the language popover - aria-expanded on the
-     * toggle, an open-state class on the container, stopPropagation on the
-     * toggle's click, delegated handling resolved with closest(), and a close
-     * path safe to call when already closed - with two of its habits dropped:
+     * The three-dots menu: aria-expanded on the toggle, an open-state class on
+     * the container, stopPropagation on the toggle's click, delegated handling
+     * resolved with closest(), and a close path safe to call when already
+     * closed. Two things it deliberately does NOT do:
      *
-     *   - NO auto-close timer. The language row squeezes the composer to make
-     *     room for five flags, so it has to be transient. This dropdown takes
-     *     room from nothing and stays until the guest dismisses it.
-     *   - NO max-width clipping. That is a squeeze-in-place animation for a row
-     *     inside a flex bar; this is an ordinary absolutely-positioned panel.
+     *   - NO auto-close timer. It takes room from nothing, so it stays until
+     *     the guest dismisses it.
+     *   - NO max-width clipping. It is an ordinary absolutely-positioned panel,
+     *     display: none when closed, so a closed item leaves the tab order
+     *     instead of sitting there invisible and focusable.
      *
      * THE CONFIRM. From the header this is reachable MID-CONVERSATION, which the
      * conversation_ended button never was: restartConversation() calls
@@ -5138,11 +5470,11 @@
     function closeHeaderMenu() {
         if (!isMenuOpen()) { return; }
         // The standing focus rule, for the SIXTH time in this repo - the teaser,
-        // the carousel arrows, the prompt pills, the language row, the scroll
-        // cue, and now this. The menu is display:none when closed, so an item
-        // holding focus drops it to <body>, i.e. the top of the customer's page.
-        // The toggle is always visible and is the way back in, so it is the
-        // landing spot as well as the rescue.
+        // the carousel arrows, the prompt pills, the language row (removed in
+        // 2.13.1), the scroll cue, and now this. The menu is display:none when
+        // closed, so an item holding focus drops it to <body>, i.e. the top of
+        // the customer's page. The toggle is always visible and is the way back
+        // in, so it is the landing spot as well as the rescue.
         if (els.menu.contains(document.activeElement)) { els.menuToggle.focus(); }
         els.headerControls.classList.remove('nc-menu-open');
         els.menuToggle.setAttribute('aria-expanded', 'false');
@@ -5179,65 +5511,38 @@
 
     /* ------------------------------------------------------------- language */
 
-    // The open row squeezes the composer to make space for five flags, so it is a
-    // transient menu, not a mode: it times out on its own. The token is what stops
-    // an earlier timer collapsing a row the guest has since reopened — the timer
-    // follows the teardown contract (teardown() clears nothing), so its callback
-    // re-checks `removed` and its own token instead of trusting the state it was
-    // scheduled in.
-    var LANG_AUTO_CLOSE_MS = 4000;
-    var langOpenToken = 0;
-
-    function closeLanguageMenu() {
-        langOpenToken += 1;   // any auto-collapse still in flight is now stale
-        els.controls.classList.remove('nc-lang-open');
-        els.langToggle.setAttribute('aria-expanded', 'false');
-    }
-
-    function toggleLanguageMenu() {
-        var opening = !els.controls.classList.contains('nc-lang-open');
-        els.controls.classList.toggle('nc-lang-open');
-        els.langToggle.setAttribute('aria-expanded', opening ? 'true' : 'false');
-
-        if (opening) {
-            SUPPORTED.forEach(function (code) {
-                els.optionButtons[code].classList.toggle('nc-hidden', code === locale);
-            });
-            var tok = ++langOpenToken;
-            setTimeout(function () {
-                if (removed || tok !== langOpenToken) { return; }
-                // Never collapse a row the guest is standing in. The options are
-                // clipped to max-width: 0 rather than display: none, so focus is
-                // not reset to <body> here — it is stranded on an INVISIBLE
-                // button instead, which is harder to recover from than losing it
-                // outright.
-                //
-                // langOptions, not controls: .nc-controls also holds the composer,
-                // and open() focuses that 320ms after every open — guarding on the
-                // whole row would mean the timer never fires for anyone. The
-                // options are the only nodes the collapse actually hides; the flag
-                // toggle stays visible and stays focusable throughout, so a guest
-                // who merely clicked it still gets the 4s timeout.
-                if (els.langOptions.contains(document.activeElement)) { return; }
-                closeLanguageMenu();
-            }, LANG_AUTO_CLOSE_MS);
-        }
-    }
-
     /**
-     * Switching language never discards the conversation. The new locale travels
-     * with the next turn so the model can follow it; until it does, the guest just
-     * keeps being answered in whatever language they are writing.
+     * The host's language switch, NestChatbot.setLocale(code) — and since 2.13.1
+     * the only one. The footer flag row is gone: after contract 1.13.0 it could
+     * no longer do what a guest would take it to do. This stays, and so does
+     * wchat:locale, because both are public surface and removing either is a
+     * major.
+     *
+     * It does two separate things. It repaints the widget's OWN strings — never
+     * payload, never the conversation — and it sets requestLocale, the
+     * PREFERENCE the next turn carries. Since 1.13.0 that preference answers only
+     * until the guest writes a message that shows a language of their own; from
+     * then on the server keeps to theirs and remembers it, so a switch
+     * mid-conversation relabels the chrome at once and may not move the replies
+     * at all.
+     *
+     * One of the five codes only, because it sets the UI language too and there
+     * is no pack to paint `uk` with. Anything else — a region tag like 'es-ES'
+     * included — is ignored, as it always was.
      */
     function setLocale(code) {
-        if (SUPPORTED.indexOf(code) === -1 || code === locale) { return; }
+        if (SUPPORTED.indexOf(code) === -1) { return; }
+        // BEFORE the equality guard, and the order is the point. A uk-UA browser
+        // shows English chrome and sends `uk`; a host that then calls
+        // setLocale('en') has made an explicit choice, and it has to reach the
+        // server even though there is nothing on screen to repaint.
+        requestLocale = code;
+        if (code === locale) { return; }
         var from = locale;
         locale = code;
 
         // NOT document.documentElement.lang — the host page's language is theirs,
         // not ours.
-        els.langToggle.replaceChild(flagNode(locale), els.langToggle.firstChild);
-        els.langToggle.setAttribute('aria-label', t('language'));
         els.input.setAttribute('placeholder', t('placeholder'));
         els.input.setAttribute('aria-label', t('input'));
         els.send.setAttribute('aria-label', t('send'));
@@ -5262,11 +5567,11 @@
             });
         }
         // The restart button is a live control like the pills, not frozen
-        // transcript — its label follows the language switcher.
+        // transcript — its label follows setLocale().
         if (els.restart) { els.restart.textContent = t('newChat'); }
         // Live controls too. The item reads its PRIMED state rather than the
-        // pack alone: a guest who armed the confirm and then switched language
-        // must not have it silently un-armed under them, which is what a bare
+        // pack alone: a setLocale() landing while the guest has the confirm
+        // armed must not silently un-arm it under them, which is what a bare
         // t('newChat') here would do.
         els.menuToggle.setAttribute('aria-label', t('menu'));
         els.menuNewChat.textContent = menuConfirm ? t('newChatConfirm') : t('newChat');
@@ -5296,7 +5601,7 @@
          * numbers — group headings, count nouns, unit labels and the fold's
          * label all come from the pack. For this element the contract sends
          * `basis` as a bare enum and no display text at all, so localizing them
-         * is ours and they follow the switcher like every other control. What
+         * is ours and they follow setLocale() like every other control. What
          * stays frozen is PAYLOAD: `room` is the PMS's vendor name and the
          * figures are the server's strings — neither is ours to repaint.
          *
@@ -5316,11 +5621,28 @@
                     on.getAttribute('data-nc-units'), on.getAttribute('data-nc-each'));
             }
         }
+        /*
+         * The 1.14.0 prefill caption is ours too — the pack's copy of the
+         * server's hint, chrome by the rendering-ownership rule — and so is the
+         * preview's accessible name, the same string. Both repaint. The
+         * preview's VALUE never does: it is the server's message around the
+         * guest's own words, payload, and once editing is allowed it may be the
+         * guest's edit. textContent and setAttribute on the SAME nodes: the
+         * guest may be standing on the preview.
+         */
+        var prefills = els.body.querySelectorAll('.nc-prefill-caption, .nc-prefill');
+        for (var pi = 0; pi < prefills.length; pi++) {
+            if (prefills[pi].classList.contains('nc-prefill')) {
+                prefills[pi].setAttribute('aria-label', t('prefillCaption'));
+            } else {
+                prefills[pi].textContent = t('prefillCaption');
+            }
+        }
         // A relabelled card can change height — "Camas en dormitorio compartido"
-        // wraps where "Beds in shared rooms" did not — and the anchor pad and the
-        // cue are what a height change has to re-measure. Guarded, so a
-        // transcript with no options card behaves exactly as it did before.
-        if (opts.length) { afterRender(); }
+        // wraps where "Beds in shared rooms" did not — and so can a caption, and
+        // the anchor pad and the cue are what a height change has to re-measure.
+        // Guarded, so a transcript with neither behaves exactly as it did before.
+        if (opts.length || prefills.length) { afterRender(); }
         els.panel.setAttribute('aria-label', 'Germán — ' + t('assistantRole'));
         // The one control whose label depends on state, not just on locale: it
         // reads "shrink" while the sheet is out.
@@ -5331,13 +5653,10 @@
         els.cue.setAttribute('aria-label', t('scrollLatest'));
         els.cue.setAttribute('title', t('scrollLatest'));
 
-        SUPPORTED.forEach(function (code2) {
-            els.optionButtons[code2].classList.toggle('nc-hidden', code2 === locale);
-        });
-
-        // Only ever a real change — the guard at the top already returned for an
-        // unsupported code or a re-selection of the current one, so a host
-        // counting these is counting switches, not clicks.
+        // Only ever a real UI change — the guards at the top returned for an
+        // unsupported code and, after moving requestLocale, for the current one,
+        // so a host counting these counts language changes, not calls. Since
+        // 2.13.1 only a host's NestChatbot.setLocale() gets here at all.
         emit('locale', { from: from, to: locale });
     }
 
@@ -5355,15 +5674,15 @@
         els.expand.addEventListener('click', function () {
             isExpanded() ? shrinkPanel(true) : expandPanel();
         });
-        // stopPropagation for the reason .nc-lang-toggle needs it: without it
+        // stopPropagation: without it the click bubbles to document, and
         // onDocumentClick would close the menu this very click just opened.
         els.menuToggle.addEventListener('click', function (e) {
             e.stopPropagation();
             toggleHeaderMenu();
         });
 
-        // Delegated and closest()-guarded, exactly as the langOptions listener
-        // is - a click on the dropdown's padding must resolve to no item.
+        // Delegated and closest()-guarded: a click on the dropdown's padding
+        // must resolve to no item.
         els.menu.addEventListener('click', function (e) {
             e.stopPropagation();
             var item = e.target.closest ? e.target.closest('.nc-menu-item') : null;
@@ -5397,7 +5716,7 @@
          *
          * Fires on the click, never on a navigation outcome — a blocked popup or
          * a guest who backs out still counts as intent, which is what a CTA
-         * measures. `.closest` guarded exactly as the langOptions listener does.
+         * measures. `.closest` guarded exactly as the header menu's listener is.
          */
         els.body.addEventListener('click', function (e) {
             var node = e.target && e.target.closest ? e.target.closest('[data-wchat-el]') : null;
@@ -5410,9 +5729,12 @@
                 index: index === null ? null : Number(index),
                 // Present for http(s) CTAs and deliberately absent for contact
                 // channels, whose href IS the property's phone number or email
-                // (see channelLink) — the tag is set there without a url and
-                // this reads what the node actually carries.
-                url: node.getAttribute('data-wchat-channel') ? null : node.getAttribute('href')
+                // (see channelLink) — and, since 1.14.0, may carry the guest's
+                // pre-written message in ?text= / &body=. Keyed on the element
+                // as well as the channel, so a contact link that ever lost its
+                // channel tag still could not leak one.
+                url: (node.getAttribute('data-wchat-channel') ||
+                    node.getAttribute('data-wchat-el') === 'contact_channels') ? null : node.getAttribute('href')
             });
         });
 
@@ -5442,28 +5764,10 @@
 
         els.input.addEventListener('input', adjustInputHeight);
         els.input.addEventListener('keydown', function (e) {
-            // Typing IS the guest telling us they are done with the language row:
-            // it is holding the composer at two thirds width while they write in
-            // it. Collapse on the first keystroke rather than making them wait
-            // out the 4s timer or aim at the flag again.
-            if (els.controls.classList.contains('nc-lang-open')) { closeLanguageMenu(); }
             // Enter sends on desktop; on touch it should insert a newline.
             if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) {
                 submit(e);
             }
-        });
-
-        els.langToggle.addEventListener('click', function (e) {
-            e.stopPropagation();
-            toggleLanguageMenu();
-        });
-
-        els.langOptions.addEventListener('click', function (e) {
-            e.stopPropagation();
-            var button = e.target.closest ? e.target.closest('.nc-lang-option') : null;
-            if (!button) { return; }
-            setLocale(button.getAttribute('data-lang'));
-            closeLanguageMenu();
         });
 
         document.addEventListener('click', onDocumentClick);
@@ -5481,7 +5785,6 @@
     // Named so teardown() can unregister them — everything else the widget wires
     // lives inside #nest-chatbot and leaves with it.
     function onDocumentClick() {
-        if (els.controls.classList.contains('nc-lang-open')) { closeLanguageMenu(); }
         closeHeaderMenu();   // its own guard makes this a no-op when already closed
     }
 
@@ -5496,10 +5799,6 @@
         // that only fires when focus is INSIDE the menu, and a guest who opened
         // it and then pressed Escape from the composer should still land on the
         // control they opened.
-        //
-        // The language popover deliberately keeps the old behaviour (Escape
-        // closes the panel; close() collapses the row on the way out). Changing
-        // it is a second behaviour change nobody asked for.
         if (isMenuOpen()) { closeHeaderMenu(); els.menuToggle.focus(); return; }
         if (isOpen()) { close('escape'); els.toggler.focus(); return; }
         // Esc on the teaser means "not now", never "not ever": it hides the nudge
@@ -5574,7 +5873,7 @@
         // After the auto-open check: an auto-opened session has already written
         // the opened flag, so the teaser timer never arms.
         scheduleTeaser();
-        log('booted', VERSION, { locale: locale, assetBase: assetBase, mock: USE_MOCK });
+        log('booted', VERSION, { locale: locale, requestLocale: requestLocale, assetBase: assetBase, mock: USE_MOCK });
     }
 
     if (document.body) { boot(); }

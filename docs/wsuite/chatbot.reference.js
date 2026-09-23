@@ -55,7 +55,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.12.0';
+    var BUILT_AGAINST = '1.14.0';
 
     // ---- state ---------------------------------------------------------------
     var conversationUuid = null;
@@ -236,6 +236,12 @@
             '.wsc-act{display:inline-block;margin:6px 0;padding:9px 14px;border-radius:10px;font-size:14px;',
             'font-weight:600;text-decoration:none;color:#fff;background:' + color + '}',
             '.wsc-chan{display:block;margin:4px 0;font-size:14px;color:' + color + ';text-decoration:none}',
+            // 1.14.0 prefill preview -- read-only for now, styled as a field so
+            // enabling edits later needs no restyle.
+            '.wsc-prefill-hint{font-size:12px;color:#6b7280;margin:8px 0 4px}',
+            '.wsc-prefill{display:block;width:100%;box-sizing:border-box;margin:0 0 6px;padding:8px 10px;',
+            'border:1px solid #e6e8ec;border-radius:10px;background:#fff;color:#1f2430;font-size:13px;',
+            'line-height:1.4;font-family:inherit;resize:vertical}',
             '.wsc-foot{display:flex;border-top:1px solid #e6e8ec;background:#fff}',
             '.wsc-in{flex:1;border:none;padding:12px 14px;font-size:14px;outline:none;resize:none;font-family:inherit}',
             '.wsc-send{border:none;background:none;color:' + color + ';font-weight:600;padding:0 16px;cursor:pointer;font-size:14px}',
@@ -459,10 +465,74 @@
         }
 
         if (action.type === 'contact_channels') {
-            if (action.phone) { channelLink('Call ' + action.phone, 'tel:' + digits(action.phone)); }
-            if (action.whatsapp) { channelLink('WhatsApp', 'https://wa.me/' + digits(action.whatsapp)); }
-            if (action.email) { channelLink('Email ' + action.email, 'mailto:' + action.email); }
+            contactChannels(action);
         }
+    }
+
+    // contact_channels. Every href is built HERE from the channel value, never
+    // taken from the payload (the contract's security rule).
+    //
+    // 1.14.0 `prefill` (D-084): the message a handoff pre-writes for the guest's
+    // WhatsApp or email. The contract's MUST: a renderer that appends it shows it
+    // before the guest leaves the page -- here, a preview under the buttons,
+    // captioned by the server-localized `hint`. The WhatsApp and email links are
+    // composed from the preview's CURRENT value when tapped, not once at render.
+    // So letting the guest edit the message (a MAY, deferred by the owner) means
+    // removing the `readonly` attribute below and nothing else. An edited message
+    // is the guest's own: it never goes back to the server.
+    function contactChannels(action) {
+        var prefill = action.prefill && typeof action.prefill.text === 'string' && action.prefill.text ? action.prefill : null;
+        var preview = null;
+        if (prefill && (action.whatsapp || action.email)) {
+            preview = el('textarea', 'wsc-prefill');
+            preview.value = prefill.text; // a form value -- never markup
+            preview.setAttribute('readonly', 'readonly'); // remove to let the guest edit it
+            preview.setAttribute('rows', '4');
+            preview.setAttribute('dir', 'auto'); // a quote may be right-to-left
+            preview.setAttribute('aria-label', typeof prefill.hint === 'string' && prefill.hint ? prefill.hint : 'Message to send');
+        }
+
+        if (action.phone) { channelLink('Call ' + action.phone, 'tel:' + telNumber(action.phone)); }
+        if (action.whatsapp) {
+            var wa = 'https://wa.me/' + digits(telNumber(action.whatsapp));
+            var waLink = channelLink('WhatsApp', wa);
+            if (preview) { composeOnTap(waLink, function () { return wa + '?text=' + encodeURIComponent(preview.value); }); }
+        }
+        if (action.email) {
+            var mail = 'mailto:' + action.email;
+            var mailLink = channelLink('Email ' + action.email, mail);
+            if (preview) {
+                composeOnTap(mailLink, function () {
+                    var subject = typeof prefill.subject === 'string' && prefill.subject ? 'subject=' + encodeURIComponent(prefill.subject) + '&' : '';
+                    return mail + '?' + subject + 'body=' + encodeURIComponent(preview.value);
+                });
+            }
+        }
+
+        if (preview) {
+            if (typeof prefill.hint === 'string' && prefill.hint) { els.body.appendChild(el('div', 'wsc-prefill-hint', prefill.hint)); }
+            els.body.appendChild(preview);
+            scrollDown();
+        }
+    }
+
+    // Rebuild a link's href from the preview at tap time (and once now, so a
+    // long-press or "copy link" carries the message too).
+    function composeOnTap(link, build) {
+        var refresh = function () { link.setAttribute('href', build()); };
+        refresh();
+        link.addEventListener('click', refresh);
+    }
+
+    // A dialable number: `+` and the digits when the value is international
+    // (`+34 …` or `0034 …`), else the bare digits. `tel:` needs the `+` to dial
+    // abroad; `wa.me` takes the same digits without it.
+    function telNumber(value) {
+        var raw = String(value || '').replace(/^\s+/, '');
+        var d = digits(raw);
+        if (raw.charAt(0) === '+') { return '+' + d; }
+        if (raw.slice(0, 2) === '00') { return '+' + d.slice(2); }
+        return d;
     }
 
     // The from-price line. `period`/`basis` (1.6.0) are OPTIONAL and absent unless
@@ -704,12 +774,16 @@
         scrollDown();
     }
 
+    // wa.me opens in a new tab: navigating the HOST page away would drop the
+    // guest's chat mid-handoff. tel:/mailto: hand off to an app and stay put.
     function channelLink(label, href) {
         var a = el('a', 'wsc-chan', label);
         a.setAttribute('href', href);
         a.setAttribute('rel', 'noopener noreferrer');
+        if (/^https:/.test(href)) { a.setAttribute('target', '_blank'); }
         els.body.appendChild(a);
         scrollDown();
+        return a;
     }
 
     // ---- flow ----------------------------------------------------------------

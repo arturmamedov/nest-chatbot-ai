@@ -163,9 +163,9 @@
    72px line-height on the header title, which made the header 37px taller than
    designed. Add a tag here if build() ever creates one.
 
-   svg is in the list for exactly that reason — build() creates icons, flags and
-   the intro ring. Sizing is the part this block does not cover: .nc-icon and
-   .nc-flag state their own width/height, but .nc-progress carried only the
+   svg is in the list for exactly that reason — build() creates icons and the
+   intro ring. Sizing is the part this block does not cover: .nc-icon states
+   its own width/height, but .nc-progress carried only the
    width="180"/height="180" ATTRIBUTES, and a presentation attribute loses to any
    author rule — including a host theme's bare `svg { width: 100%; height: auto }`,
    the common fluid-media reset. It is declared on .nc-progress itself rather than
@@ -586,8 +586,9 @@
     box-shadow: var(--nc-shadow-card);
 }
 
-/* The open state is a class on the CONTAINER, the way .nc-lang-open sits on
-   .nc-controls - same shape, same seam. */
+/* The open state is a class on the CONTAINER (.nc-menu-open on
+   .nc-header-controls, set by toggleHeaderMenu()); the toggle carries only
+   aria-expanded. */
 #nest-chatbot .nc-header-controls.nc-menu-open .nc-menu {
     display: block;
 }
@@ -763,8 +764,8 @@
    between two of them.
 
    No font-family here on purpose — #nest-chatbot's own var(--nc-font-body)
-   inherits down to this node. Declaring one would make an eleventh site of a
-   typography seam whose entire value is that there are exactly ten, and
+   inherits down to this node. Declaring one would make a thirteenth site of a
+   typography seam whose entire value is that there are exactly twelve, and
    data-fonts would quietly stop covering everything. */
 #nest-chatbot .nc-day {
     align-self: center;
@@ -894,7 +895,7 @@
    clamped either — a truncated question is worse than a two-line one, and the
    contract's 60 characters are advisory.
 
-   No font-family: a div inherits from #nest-chatbot, so this adds no eleventh
+   No font-family: a div inherits from #nest-chatbot, so this adds no thirteenth
    site to the two-custom-property typography seam. 600, not 500 — only 400 and
    600 faces ship. */
 #nest-chatbot .nc-chip-head {
@@ -1011,11 +1012,138 @@
     border-radius: 12px;
     background: var(--nc-surface);
     transition: 0.2s ease;
+    /* A long catalog address ("Email reservations.lasplayitas@…") must wrap
+       inside the row, not clip under .nc-body's overflow-x at 375px — the
+       anonymous text item's min-width would otherwise hold the line whole. */
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 #nest-chatbot .nc-channel:hover {
     background: var(--nc-primary);
     color: #fff;
+}
+
+/* Declared, not left to the UA ring: since 1.14.0 these links can carry the
+   guest's pre-written message, and a host's `a:focus { outline: 0 }` would
+   otherwise leave them the one unmarked control beside a preview that has a
+   ring. The house pattern (.nc-restart, .nc-prompt). */
+#nest-chatbot .nc-channel:focus-visible {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: 2px;
+}
+
+/* The 1.14.0 pre-written message (contract `prefill`, D-084): a caption and a
+   READ-ONLY textarea ABOVE the channel links, INSIDE .nc-channels — each takes
+   a whole line of the wrapping row with `flex: 0 0 100%`, the .nc-chip-head
+   recipe, and leaves with the wrap.
+
+   The contract's one MUST is that the guest sees this text before a link can
+   carry it away. The widget never scrolls new content into view, so the order
+   is what keeps that true: reaching a link means having passed the message.
+   Nothing here may hide either rule at any width — no media query touches
+   them, and one that ever does has to drop the prefill from the links too
+   (renderChannels()).
+
+   The caption is the chip-head recipe: 13px, 600, --nc-text — NOT
+   --nc-text-subtle, which measures about 3.2:1 on the white body, and this line
+   is meant to be read. No font-family on the caption: a div inherits. */
+#nest-chatbot .nc-prefill-caption {
+    flex: 0 0 100%;
+    margin: 0 0 2px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--nc-text);
+    overflow-wrap: break-word;
+}
+
+/* The preview. A textarea is exactly what a host's form reset aims at —
+   @tailwindcss/forms, a theme's bare `textarea` or `textarea:focus`, an
+   id-prefixed `#top textarea` — so every property a host rule could reach is
+   stated HERE, at 1,1,0, which beats any bare or pseudo-classed element rule
+   (textarea:focus is 0,1,1) and an id-prefixed one (1,0,1) without
+   !important. That includes the family, letter-spacing and box-shadow the
+   reset block above already sets: the reset is itself 1,0,1, so against
+   `#top textarea` it only TIES, and a tie goes to whichever stylesheet loads
+   later — a theme sheet printed in <body> beats ours in <head>. `font-family:
+   inherit` is therefore the seam's twelfth site, on the composer's own
+   precedent (.nc-input); `inherit` keeps data-fonts covering it.
+   demo/index.html's `textarea:focus` trap is the live case for focus: its
+   `outline: 2px solid transparent` would otherwise leave this field with no
+   visible focus at all.
+
+   14px at 1.5, the reply bubble's own size: it is a message, the guest's, and
+   should read like one. White with the composer's --nc-line edge, so it reads
+   as a field and not as another bot bubble — the sunken tint is theirs.
+   rows="4" in the markup and height: auto here give the "about four lines"
+   the contract asks for; the rest scrolls inside, so the thumb colour is
+   declared rather than inherited from .nc-body, whose #a4fafc all but vanishes
+   on white. field-sizing: fixed holds the height against a host's
+   field-sizing: content.
+
+   resize: none, like the composer, and not the reference's `vertical`: a
+   resize changes .nc-body's content height with no afterRender(), and the
+   widget deliberately has no resize listener, so the cue would go stale — and
+   the handle is useless on touch. px, not rem: rem follows the HOST's root
+   size. */
+#nest-chatbot .nc-prefill {
+    display: block;
+    flex: 0 0 100%;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    field-sizing: fixed;
+    margin: 0;
+    padding: 10px 14px;
+    border: 1px solid var(--nc-line);
+    border-radius: 12px;
+    background: var(--nc-surface-alt);
+    color: var(--nc-text);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 400;
+    font-style: normal;
+    line-height: 1.5;
+    letter-spacing: normal;
+    word-spacing: normal;
+    text-align: start;
+    text-indent: 0;
+    text-transform: none;
+    text-shadow: none;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    overflow-x: hidden;
+    overflow-y: auto;
+    resize: none;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+    box-shadow: none;
+    opacity: 1;
+    cursor: text;
+    transition: none;
+    scrollbar-width: thin;
+    scrollbar-color: var(--nc-text-subtle) transparent;
+}
+
+/* :focus, not :focus-visible: a read-only textarea is not a text-entry field
+   to every engine's heuristic, and a click must show the ring too — the same
+   2px --nc-secondary the composer gets through .nc-form:focus-within. The
+   field's own colours are restated because a host's `textarea:focus` (or
+   `#top textarea:focus`, 1,1,1) outranks the base rule above for anything
+   this one leaves unsaid. */
+#nest-chatbot .nc-prefill:focus {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: 2px;
+    border-color: var(--nc-line);
+    background: var(--nc-surface-alt);
+    color: var(--nc-text);
+    box-shadow: none;
 }
 
 /* Keeps align-self: the availability card hugs its content instead of stretching
@@ -1073,7 +1201,7 @@
    card shares one edge, and tabular numerals so the digits line up down that edge
    — the difference between a list and a table of prices. The string is the
    server's, via textContent; nothing here formats, rounds or derives it. No
-   font-family: a div inherits from #nest-chatbot, so this adds no eleventh site
+   font-family: a div inherits from #nest-chatbot, so this adds no thirteenth site
    to the two-custom-property typography seam. */
 #nest-chatbot .nc-option-figure {
     font-weight: 600;
@@ -1687,24 +1815,25 @@
     color: var(--nc-text-subtle);
 }
 
+/* The composer row. Since 2.13.1 it holds the form alone — the language
+   selector that shared it is gone — and stays a flex row so .nc-form's
+   flex-grow fills it. */
 #nest-chatbot .nc-controls {
     display: flex;
     align-items: center;
-    gap: 10px;
     width: 100%;
-    transition: all 0.3s ease;
     /* Undoes the .nc-panel inheritance for this subtree. `interpolate-size:
        allow-keywords` is on the panel so it can animate its own auto→length
        height — but it inherits, and .nc-form below declares
-       `transition: width` while specifying no width. Its computed `auto` was
-       therefore not interpolable against the calc() the open language row sets,
-       and that transition had never once run; allow-keywords woke it up.
-       (Verified with getAnimations() on .nc-form: a `width` CSSTransition
-       appears when allow-keywords reaches it, and none without.) Flex layout
-       still governs the used width, so the visible difference was small — but a
-       transition that has been dormant since Phase 1 on protected composer
-       styling should stay dormant, not start running as a side effect of a
-       property set on an ancestor for something else. */
+       `transition: width` while specifying no width. With allow-keywords a
+       width change from `auto` becomes interpolable, which woke a transition
+       that had never once run (the language row, removed in 2.13.1, squeezed
+       the form with a calc(); nothing sets its width today). (Verified with
+       getAnimations() on .nc-form: a `width` CSSTransition appears when
+       allow-keywords reaches it, and none without.) A transition dormant since
+       Phase 1 on protected composer styling should stay dormant, not start
+       running as a side effect of a property set on an ancestor for something
+       else. */
     interpolate-size: numeric-only;
 }
 
@@ -1778,88 +1907,6 @@
     cursor: default;
     transform: none;
 }
-
-/* ------------------------------------------------------------ language selector */
-
-#nest-chatbot .nc-lang {
-    display: flex;
-    z-index: 10;
-    gap: 8px;
-    transition: all 0.3s ease;
-}
-
-#nest-chatbot .nc-lang-toggle,
-#nest-chatbot .nc-lang-option {
-    height: 35px;
-    width: 35px;
-    border: none;
-    cursor: pointer;
-    border-radius: 50%;
-    background: #fff;
-    padding: 0;
-    overflow: hidden;
-    flex-shrink: 0;
-    /* The hairline is the flag's only edge against the white footer (it/fr have
-       white stripes). A ring shadow rather than an outline: it always follows the
-       border-radius, and it leaves `outline` free for the keyboard focus ring. */
-    box-shadow: 0 0 0 1px var(--nc-line), 0 0 8px rgba(0, 0, 0, 0.06);
-    transition: all 0.2s ease;
-    position: relative;
-    z-index: 2;
-}
-
-#nest-chatbot .nc-lang-toggle:hover,
-#nest-chatbot .nc-lang-option:hover,
-#nest-chatbot .nc-lang-toggle:focus,
-#nest-chatbot .nc-lang-option:focus {
-    transform: scale(1.15);
-}
-
-/* The full-bleed crop comes from preserveAspectRatio="xMidYMid slice" in the markup,
-   not from object-fit — that does nothing on an inline <svg>. The radius here is
-   belt-and-braces for browsers that fail to clip an SVG child to the button's. */
-#nest-chatbot .nc-flag {
-    width: 100%;
-    height: 100%;
-    display: block;
-    border-radius: 50%;
-}
-
-#nest-chatbot .nc-lang-options {
-    display: flex;
-    gap: 8px;
-    max-width: 0;
-    overflow: hidden;
-    transition: all 0.3s ease;
-    opacity: 0;
-}
-
-#nest-chatbot .nc-controls.nc-lang-open .nc-lang-options {
-    max-width: 300px;
-    opacity: 1;
-    overflow: inherit;
-}
-
-#nest-chatbot .nc-controls.nc-lang-open .nc-form {
-    width: calc(100% - 220px);
-}
-
-#nest-chatbot .nc-lang-option {
-    transform: scale(0.8);
-    transition: transform 0.3s ease, opacity 0.3s ease;
-    opacity: 0;
-}
-
-#nest-chatbot .nc-controls.nc-lang-open .nc-lang-option {
-    transform: scale(1);
-    opacity: 1;
-}
-
-#nest-chatbot .nc-controls.nc-lang-open .nc-lang-option:nth-child(1) { transition-delay: 0.05s; }
-#nest-chatbot .nc-controls.nc-lang-open .nc-lang-option:nth-child(2) { transition-delay: 0.10s; }
-#nest-chatbot .nc-controls.nc-lang-open .nc-lang-option:nth-child(3) { transition-delay: 0.15s; }
-#nest-chatbot .nc-controls.nc-lang-open .nc-lang-option:nth-child(4) { transition-delay: 0.20s; }
-#nest-chatbot .nc-controls.nc-lang-open .nc-lang-option:nth-child(5) { transition-delay: 0.25s; }
 
 /* ----------------------------------------------------------------- typing caret */
 
