@@ -434,14 +434,31 @@
     flex-shrink: 0;
     align-items: center;
     justify-content: space-between;
+    /* Two things deliberately NOT here, now that the title is the site owner's
+       text (2.13.2) and can fill the row.
+
+       No overflow: hidden, on this or on .nc-header-controls, to contain a long
+       name: the ⋯ dropdown hangs out of both and would be clipped. The name is
+       contained where it is drawn, on .nc-title.
+
+       No gap. space-between only separates the two halves while there is free
+       space, so a row-filling name runs up to the ⋯ button — as the subline
+       already does below 400px. A 10px gap was tried and measured: it comes
+       out of the text column at exactly the widths where that column is
+       tight, and at 375px it sent the badge under a six-letter name that
+       2.13.1 fitted beside it. */
     padding: 12px 18px 15px 18px;
     background: var(--nc-primary);
 }
 
+/* min-width: 0 on every flex level from here down to the title. A flex item's
+   automatic minimum is its content's width, so one level left at the default
+   and a long name pushes ✕ out of the panel instead of wrapping. */
 #nest-chatbot .nc-header-info {
     display: flex;
     gap: 10px;
     align-items: center;
+    min-width: 0;
 }
 
 #nest-chatbot .nc-header-logo {
@@ -457,33 +474,91 @@
     flex-direction: column;
     gap: 3px;
     margin-left: 0.5rem;
+    min-width: 0;
 }
 
+/* Wraps, so a name too long to share the line sends the badge UNDER it, whole,
+   rather than squeezing either one. The row gap matches .nc-header-text's. */
 #nest-chatbot .nc-name-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 7px;
+    gap: 3px 7px;
+    min-width: 0;
 }
 
 /* The reset block sets font-family: inherit on h2 (a host's Poppins-at-72px-
    line-height trap measured on nestshostels.com), so the heading font has to be
-   declared here — it will not arrive by inheritance from #nest-chatbot. */
+   declared here — it will not arrive by inheritance from #nest-chatbot.
+
+   Since 2.13.2 (contract 1.15.0) this is the site owner's text — the
+   assistant's name — and no longer a six-letter constant. The server caps it at
+   24 characters and the widget at 60; neither fits one line of a phone header
+   beside the badge. So it WRAPS, never truncates — a name cut to "Nesti fr…"
+   is not the name — up to three lines, and only then clamps. Three, measured
+   in the 135px column a 320px phone leaves it: 24 characters of mixed case
+   ("Nesti from Nests Hostels") take two lines there and the same count in
+   capitals takes three. The bound itself is for a malformed value, which
+   could otherwise grow the header over the transcript. overflow-wrap:
+   anywhere, because one unbroken token must break too — with break-word
+   stated first for an engine that does not know `anywhere` (Safari before
+   15.4), where the later line is simply dropped.
+
+   The line-height is 1.45 with -0.125em of margin, which lays out one line
+   exactly as the 1.2 this rule used to state — same row height, same baseline
+   — and that is not a restyle. The clamp needs overflow: hidden, and at 1.2
+   Poppins' ink is taller than its line: measured, an accent ran 1.1px above
+   the box and a descender 1.1px below it, so "Ángel" and "gjpqy" would each
+   have lost a sliver. At 1.45 nc-Poppins' glyphs sit inside their own line
+   box, so the clamp cuts between lines and never through one. Measured for
+   nc-Poppins, and for the faces Windows falls back to for six scripts the
+   subset does not carry (Latin Extended-A, Cyrillic, Greek, Arabic, Thai,
+   Devanagari): all fit, Devanagari with 0.3px to spare. Another platform's
+   fallback face, or a host's own font, is a different measurement — and where
+   one does run over, this rule clips a sliver that 2.13.1, having no
+   overflow: hidden, did not.
+   Plain `margin`, not margin-block: the shorthand has no support floor.
+
+   text-transform, white-space, text-align, word-break and hyphens are
+   declared for the reset block's reason: a host's bare `h2 { text-transform:
+   uppercase }` matches this element directly and would restyle a tenant's
+   name, and now that the title can be a multi-line box a host's `text-align:
+   center` or `hyphens: auto` would show in it too. demo/index.html traps the
+   first and the third. */
 #nest-chatbot .nc-title {
     font-family: var(--nc-font-heading);
     color: #fff;
     font-weight: 600;
     font-size: 19px;
-    line-height: 1.2;
+    line-height: 1.45;
+    margin: -0.125em 0;
     letter-spacing: 0.02rem;
+    min-width: 0;
+    max-width: 100%;
+    text-transform: none;
+    text-align: start;
+    white-space: normal;
+    word-break: normal;
+    hyphens: manual;
+    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
 }
 
+/* The AI disclosure. It never shrinks and never breaks: whatever the name
+   beside it does, this stays whole and on screen. */
 #nest-chatbot .nc-badge {
+    flex-shrink: 0;
     color: #fff;
     background: var(--nc-secondary);
     font-size: 9.5px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    white-space: nowrap;
     padding: 2px 6px;
     border-radius: 4px;
 }
@@ -496,6 +571,7 @@
 
 #nest-chatbot .nc-header-controls {
     display: flex;
+    flex-shrink: 0;   /* ⋯ ⤢ ✕ keep their size; the name block is what gives */
     align-items: center;
     gap: 5px;
 }
@@ -1868,6 +1944,19 @@
     font-family: inherit;
     font-size: 0.95rem;
     padding: 14px 0 12px 18px;
+}
+
+/* One line. Since 2.13.2 the placeholder carries the assistant's name
+   ("Pregunta lo que quieras a …"), and a long one wrapped into a second line
+   that the fixed 49px box then cut through the middle of.
+
+   No ellipsis, and not for want of trying: measured in Chromium, text-overflow
+   does nothing for a TEXTAREA's placeholder, declared here or on the field
+   itself — the hint is cut at the field's edge. That is still one clean line.
+   Where an engine ignores this rule as well, the result is the old clipped
+   second line, which is what any over-long placeholder has always done here. */
+#nest-chatbot .nc-input::placeholder {
+    white-space: nowrap;
 }
 
 #nest-chatbot .nc-send {

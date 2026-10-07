@@ -1,6 +1,6 @@
 # Rendering ownership — what the server supplies, what the widget composes
 
-**About:** the Nest Chatbot drop-in widget (`nest-chatbot.js`), current as of release 2.13.1.
+**About:** the Nest Chatbot drop-in widget (`nest-chatbot.js`), current as of release 2.13.2.
 **For:** anyone asking "who writes this string?" — before changing a renderer, adding an element
 type, or deciding whether something belongs in a pack or on the wire.
 
@@ -26,6 +26,10 @@ guest sees comes down the wire, and which does the widget make up?**
 > Since 1.14.0 the **server** also sends back **the guest's own words** —
 > `contact_channels.prefill.text`, a server-localized message around their quote — shown verbatim
 > as a form value, never re-derived from a pack, never in an event or a log.
+>
+> Since 1.15.0 the **server** also says **who the guest is talking to**: the init's
+> `assistant.name`, typed by the site owner. It is tenant-authored content like a promo title, so
+> it is the server's — and until 2.13.2 it was the one tenant string this widget made up.
 
 Everything in the table below follows from that, including the case that looks inconsistent at first
 glance — `availability` sends no display text at all, while `property_cards` sends almost nothing
@@ -49,6 +53,7 @@ on an English figure.
 
 | Element | The server supplies | The widget composes |
 |---|---|---|
+| ***(init)* `assistant`** — not an element; it rides the init `201` once per conversation | `name` — the assistant's display name, **tenant-authored and not localized** (a name is the same in every language), plain text, at most 24 characters, and **omitted** when the site set none. `disclosure` — the server's own "AI assistant" label, localized, always sent. And `greeting`, which arrives finished: where a site's greeting says the name, the server has already written it in. | **Never a name.** With one: the sentence around it — `placeholderNamed`, `openNamed`, `openUnreadNamed`, and `greetingNamed` only where the server sent no greeting — and the role in the dialog label (`name — t('assistantRole')`). Without one: the name-free strings under the same four keys and `t('title')`, the role, as the header title. In both cases the disclosure itself: the `aiAssistant` badge, `t('disclaimer')` and `assistantRole` come from our own pack — `disclosure` is ignored, being byte-identical in all five locales, so that it can follow `setLocale()`. |
 | **`property_cards`** | `name`, `location`, `badge` — raw catalog values, **not** localized. `cta_label` and `more.label` — **localized server-side**. `image`, `url`, and `price_from` (`amount`, `currency`, `period`, `basis`) as data. `total` as an int. | The price *number*, formatted by `Intl.NumberFormat` in the guest's locale (`cardPrice()`); `t('priceFrom')`'s wrapper around it; the `period`/`basis` suffix (`/night`, `per person`); `t('book')` **only** when `cta_label` is absent; `tf('showingOf', n, total)` when there is no `more`; and the carousel's a11y strings (`t('carousel')`, `t('properties')`, the arrow labels). |
 | **`promo_card`** | Everything displayed: `title`, `body`, `cta.label` — tenant-authored, resolved per guest locale **all-or-nothing**. Plus `image`, `cta.url`, `style`, `locale`. | **Nothing.** Not one pack string. The widget adds only the `lang` attribute (from `locale`), the `role="region"` named by the payload's own `title`, and layout. A card missing `title`, `body`, `cta.label` or a usable `cta.url` is dropped rather than patched with a default. |
 | **`quick_replies`** | Chip `label` and `heading` — tenant-authored, server-localized. Plus `id`, `locale`. | Only the row's `aria-label` fallback, `t('quickReplies')`, and **only** when there is no `heading`. Never a visible label: substituting our own line over a server row is explicitly forbidden by the contract. |
@@ -102,7 +107,10 @@ host's call since 2.13.1; there is no on-screen switcher:
 - **Payload text is frozen** once rendered. Repainting a server string from a pack would be
   inventing a translation the tenant did not write. So `promo_card` copy, `quick_replies` labels and
   headings, `link_button` labels, card names and badges, and the `prefill` preview's text all stay
-  as they arrived.
+  as they arrived. So does the assistant's **name** (1.15.0): `setLocale('es')` turns "Ask Nesti
+  anything…" into "Pregunta lo que quieras a Nesti…", and the only thing that did not move is the
+  name. `paintAssistant()` is that repaint — one function for the header title, the dialog label,
+  the placeholder and the launcher label, reading the name it was given and the pack it is in.
 - **Widget text re-derives** on every switch, because re-deriving is the only way it can be right —
   since 2.13.1 that includes the `prefill` caption and the preview's accessible name. (Not yet
   everything: some widget text is painted from packs at render and never repainted — among it the
@@ -143,7 +151,12 @@ two ever disagree:
 
 - **Server side** — `docs/wsuite/response-contract.md`, the per-element field tables and their
   **Localized** column (§ `link_button`, § `contact_channels`, § `booking_link`, § `availability`,
-  § `property_cards`, § `promo_card`, § `quick_replies`, § `conversation_ended`).
+  § `property_cards`, § `promo_card`, § `quick_replies`, § `conversation_ended`). For the init
+  `assistant`: `docs/wsuite/integration-guide.md` §3.1 ("`assistant` — the assistant's name, and
+  the AI disclosure") and the `assistant` paragraphs of the contract's Security rule and
+  Accessibility sections.
+- **The assistant seam** — `nest-chatbot.js`: `assistantNameOf()` / `cleanName()` (§ `storage`),
+  `tn()` (§ `i18n`) and `paintAssistant()` (§ `dom`).
 - **Widget side** — `nest-chatbot.js` § `render`: `renderAction()` (which caller passes which
   label), `propertyCard()`, `cardTitle()`, `cardPrice()`, `renderPropertyCards()`,
   `renderPromoCard()`, `renderQuickReplies()`, `renderChannels()` / `channelLink()` (with

@@ -5,6 +5,202 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.13.2 — 2026-10-07
+
+**Contract sync: `BUILT_AGAINST` 1.14.0 → 1.15.0 (D-090).** A **patch** by the rule `64ccaa2` set,
+and the upstream prompt asked for 2.13.2 too, so nothing was overruled. Packet:
+`docs @ chatbot-contract-v1.15.0 (7f032d2) · widget @ 7f032d2`. The halves share a sha because
+1.15.0 changed the renderer in the tag commit. All three vendored files byte-match both
+`nest-packet-1.15.0/` and `git show chatbot-contract-v1.15.0:<path>` upstream.
+
+One row, and it is a real renderer change: **the assistant's name stops being ours.** Since 1.15.0
+the init `201` may carry `assistant {name?, disclosure}` — the display name the site owner typed in
+the wSuite panel, omitted when they set none, and the server's own "AI assistant" label. This widget
+hardcoded "Germán" instead. `grep -n "Germán" nest-chatbot.js` now returns nothing: no default, no
+fallback. A site with no name gets name-free wording.
+
+### The name is data
+
+- **What went**, as read at `057ff93`: the dialog's accessible name (`nest-chatbot.js:2059`,
+  repainted at `:5646`), the header `h2` (`:2068`), a comment (`:1999`), and the name inside four
+  pack keys in all five locales (`placeholder`, `greeting`, `open`, `openUnread`).
+- **Two strings per key, not one slot.** The name sits inside the grammar ("%s öffnen, den
+  KI-Assistenten von Nests") and a site may have set none. Each of the four keys now holds the
+  **name-free** wording and gains a `<key>Named` variant with one `%s`. In English:
+  `placeholder` "Ask anything…" / `placeholderNamed` "Ask %s anything…"; `greeting` "Hi! I'm the
+  Nests AI assistant. …" / `greetingNamed` "Hi! I'm %s, the Nests AI assistant. …"; `open` "Open the
+  Nests AI assistant" / `openNamed` "Open %s, the Nests AI assistant"; `openUnread` "Open the chat —
+  1 new message" / `openUnreadNamed` "Open %s, the AI assistant — 1 new message". Twenty strings
+  reworded, twenty added. `tn(key)` picks between them and is the only place that choice is made.
+- **The name-free header title is a new key, `title`** — the role: "AI assistant", "Asistente IA",
+  "Assistente IA", "KI-Assistent", "Assistant IA". The owner's choice. Its cost is recorded under
+  "What a guest sees" below: beside the badge it says the role twice.
+- **State and validation.** `assistantName`, `null` until a server says otherwise.
+  `assistantNameOf()` accepts only a non-array object and hands `name` to `cleanName()`: a string,
+  whitespace collapsed, trimmed, capped at `ASSISTANT_NAME_MAX = 60`, a surrogate pair the cap cut
+  in half dropped whole, and anything else "no name". 60 is the reference's bound, not the server's
+  24 mirrored by hand. One validator, two callers — the init body and the stored record.
+- **One paint seam, `paintAssistant()`.** The single writer of the header title, the dialog label
+  (`name — assistantRole`, or the role alone), the composer placeholder and the launcher label.
+  `textContent` and `setAttribute` only. Called from `build()`, `boot()`, the three branches of
+  `startConversation()` (resume, `201`, failed init), `markOpened()` and `setLocale()`. `build()`
+  no longer writes any of the four itself, and `els` gains a `title` handle.
+- **`restartConversation()` has no call of its own**, although the hand-over lists it as a call
+  site. It runs `startConversation()`, whose three branches each assign and paint, and so does the
+  410/404 re-init. The old name stays up for the round trip instead of flashing name-free;
+  measured, "Start a new chat" changes the title exactly once.
+- **The record** gains `assistantName`, written by `persist()` and rebuilt — re-validated — by
+  `readStore()`. It is in no other key: after an open, storage holds `nest-chatbot:<key>` and
+  `nest-chatbot:opened`, and the name is only in the first. `clearStore()` takes it with the rest.
+- **The fallback greeting follows the name.** The three `t('greeting')` sites are `tn('greeting')`:
+  named on a resume whose record has a name, name-free after a failed init. The server's own
+  `greeting` is never touched — where a site's greeting says the name, the server wrote it in.
+
+Three things beyond the hand-over, each for a reason found while building it:
+
+- **`boot()` restores the name too.** The hand-over restores it on the resume branch, which runs
+  when the panel opens. But the launcher's label is read while the panel is closed, and `open()`
+  runs `markOpened()` before that branch — so without a boot restore `openUnreadNamed` could never
+  paint at all, and `openNamed` only after an open and close on one page view. It reads the
+  conversation record itself, never a key of its own.
+- **A failed init clears the name only when there is no conversation**
+  (`if (!conversationUuid)`). `startConversation()` reads the store before its `initWaiters`
+  check, so a fast first send can adopt a record another tab wrote while this tab's init is on the
+  wire; a bare `null` in the failed branch was then persisted over that record's name. Reproduced
+  with the guard taken out (adoption at +237ms, failure at +713ms, `assistantName: null` stored)
+  and gone with it in.
+- **`openUnreadNamed` says the role**, where 2.13.1's "Open Germán — 1 new message" did not. It is
+  the launcher's label for a returning guest's new session, heard while the panel and its badge are
+  hidden, and guide §3.1 makes a disclosure beside the name a MUST.
+
+And one hardening: **`tf()` fills `%s` through a replacer function.** Given a string,
+`String.replace` reads `$&` and `$'` inside it as patterns, and a tenant-authored name now comes
+through. A stored name of `$& $' $1 $$` renders as exactly that.
+
+An independent review of the diff before the commit found no defect in the JS and one gap in the
+CSS. What came out of it: `text-align` (and with it `word-break` and `hyphens`) is declared on the
+title and `break-word` backs up `anywhere`, both described under "The header wraps"; a name made
+only of invisible characters — a zero-width space is not whitespace to `\s` — is "no name" rather
+than an empty header; and `tn()` reads name-free for a key that has no `Named` variant instead of
+printing "undefined". It also caught five comments that claimed more than had been measured,
+corrected before they shipped.
+
+### The disclosure stays unconditional
+
+The `aiAssistant` badge, the `disclaimer` under the composer and `assistantRole` in the dialog label
+show with a name and without one; `paintAssistant()` cannot remove any of them. The server's
+`disclosure` is ignored in favour of our own pack — byte-identical in all five locales, and a pack
+string can follow `setLocale()`. The `prefill.hint` precedent.
+
+### The header wraps
+
+The title was a six-letter constant and is now up to 24 characters of someone else's text (60 if
+malformed). The header had no overflow handling at all.
+
+- `min-width: 0` down `.nc-header-info` → `.nc-header-text` → `.nc-name-row`; the row wraps
+  (`flex-wrap`), so a name too long to share the line sends the badge **under** it, whole
+  (`white-space: nowrap; flex-shrink: 0`); `.nc-header-controls` no longer shrinks.
+- `.nc-title` wraps (`overflow-wrap: anywhere`) up to three lines and only then clamps. Measured:
+  "Nesti from Nests Hostels" is one line in the expanded sheet and two everywhere else, down to
+  320px; 60 unbroken W's never exceed three lines, with ⋯, ✕ and the badge inside the panel at
+  every width from 320px to the 670px sheet.
+- **Its line-height is 1.45 with −0.125em of margin, which lays out exactly as the old 1.2.** Not
+  a restyle: the clamp needs `overflow: hidden`, and at 1.2 Poppins' ink is taller than its line —
+  measured, 19px of ascent against 17.9px of room and 6px of descent against 4.9px, so an accent
+  and a descender each lost a sliver. At 1.45 the room is 20.3px and 7.3px, which also holds the
+  faces Windows falls back to for six scripts the subset does not carry (Devanagari closest, at
+  20.0px of ascent).
+- Three lines rather than two because of the narrowest phone: in the 135px column a 320px screen
+  leaves the title, "Nesti from Nests Hostels" is two lines and "NESTI FROM NESTS HOSTELS" three.
+- `text-transform`, `white-space`, `text-align`, `word-break` and `hyphens` are declared on the
+  title: a host's bare `h2 { text-transform: uppercase }` would otherwise restyle a tenant's name,
+  and now that the title can be a multi-line box a host's `text-align: center` or `hyphens: auto`
+  would show in it too. `demo/index.html`'s `h2` trap gains `text-transform` and `text-align`. It
+  does **not** gain `white-space: nowrap`: tried, and it made the demo page itself scroll sideways
+  on a phone.
+- `overflow-wrap: break-word` is stated before `anywhere`, for an engine that does not know the
+  second (Safari before 15.4). Forced in Chromium, 60 unbroken W's still wrap inside the header
+  at 320px.
+- **For a name the width of "Germán", nothing moved.** Header, badge, subline, controls and logo
+  are pixel-identical to 2.13.1 at 420px, 414, 390, 375 and 360. A 10px `gap` on `.nc-header` was
+  tried first and removed for exactly this: at 375px it sent the badge under a six-letter name.
+- **320px is different, and better.** 2.13.1 squeezed the badge into two lines beside the name and
+  pushed ✕ 9px past the edge of the screen (measured: right edge at 329px in a 320px viewport).
+  Now the badge sits whole under the name, the header is 15px taller, and ✕ ends at 305px.
+- `.nc-input::placeholder { white-space: nowrap }`: a long named hint used to wrap into a second
+  line that the fixed 49px field cut through. One line now, cut at the field's edge — with **no
+  ellipsis**: in Chromium `text-overflow` does nothing for a textarea's placeholder, declared on
+  the pseudo-element or on the field.
+
+### Fixtures
+
+The mock init reports `contract_version: '1.15.0'` and takes a `?nc-assistant=` URL knob, read at
+every init. No knob: `assistant: { name: 'Nesti', disclosure }` with a greeting that says the name.
+`none`: no `assistant` key. `markup`: a name that would run if parsed. `long`: 500 characters.
+`string` / `array`: `assistant` as each. CLAUDE.md § Local development has the table.
+
+### What a guest sees, and what a host does not
+
+- **No `wchat:*` payload changed and `NestChatbot.state` gained no field.** Compared event by
+  event against 2.13.1 over the same script: the same nine event names in the same order, the same
+  keys and types, the same twelve state keys, the same eight `NestChatbot` members. The name is in
+  no payload.
+- **The name-free title shows on every first open, briefly.** The header is painted at boot and
+  the name arrives with init, so a new visitor reads "AI assistant" for the round trip. On a phone
+  between 360px and 390px that title is too wide to share the row with the badge, so the header is
+  15–18px taller until the name lands and then settles (measured in English against "Nesti"; no
+  shift at 414px or on desktop, and the other four packs' titles are a little wider). It also
+  shows after a failed init, and for a conversation stored by 2.13.1 — whose record has no name —
+  until that conversation ends.
+- **In that state the header says the role twice**: "AI assistant" over the "AI ASSISTANT" badge.
+  The badge cannot be the thing that gives way.
+- **After a failed re-init the header goes name-free over a transcript that may still say the
+  name** — a `410` followed by a refused init, or a restart that fails. That is the hand-over's
+  rule ("a failed init leaves it null") working as written, and the next successful init puts a
+  name back.
+- **Known limits, not fixed here.** The heading font's subset stops at U+00FF, so a name like
+  "Łukasz" falls back per glyph. `img/germanavatar.png` keeps its filename: it is the Nest mark,
+  not a character. The French pack mixes `tu` and `vous` — the placeholder, "Essayez de demander"
+  and the disclaimer are `vous`, the rest `tu` — and this release kept each string's own form
+  rather than settle it. **All layout here is measured in Chromium only**: the three-line clamp
+  (`-webkit-line-clamp` on a flex item) and the one-line placeholder are unverified in Safari and
+  Firefox.
+
+### Verified
+
+Headless Chrome 143 over CDP (the Playwright MCP did not connect), 177 checks, on the mock fixtures
+unless noted, each scenario in a fresh browser context, the served file asserted to be this one.
+
+- No `assistant` key: name-free title, placeholder, launcher and dialog label; badge and
+  disclaimer visible; name-free greeting; `assistantName: null` stored.
+- Named: "Nesti" in all four once the panel has opened; badge and disclaimer unchanged.
+- Resume: reloaded on `?nc-assistant=none` with the conversation stored — "Nesti" in all four
+  **before** the panel opens, same uuid after. On the real XHR transport against a fake API, with
+  the API then blocked: zero requests, "Nesti" in all four.
+- A new session over a stored record reads "Open Nesti, the AI assistant — 1 new message", then
+  "Open Nesti, the Nests AI assistant" after the first open.
+- "Start a new chat" across two knob values, both directions: the title changes exactly once
+  (`["Nesti","AI assistant"]`, then `["AI assistant","Nesti"]`), the record follows.
+- `setLocale()` through all five packs, named and name-free: the name stays, the words move.
+- Hostile: the `markup` name is text in all four places, `window.__ncXss` stays `undefined`, the
+  `h2` has no element children; `string` and `array` are no name; so are `name: null`, `""`, `123`,
+  an object, `assistant: null`, and a disclosure-only object, over the real transport.
+- A tampered record (object, number, array, blank, markup, `$&`, `%s`, 500 characters, a cut
+  surrogate pair) and a 2.13.1-shaped one: name-free or literal as appropriate, conversation and
+  transcript intact.
+- Failed init (mock `429`, real `500`): name-free in all four, nothing persisted. A real `403`
+  tears down as before, and `setLocale()` afterwards does not throw.
+- Drift warn: none at `1.15.0`; exactly one with the mock rewritten to `1.16.0` in flight.
+- The demo page's own 55 elements: geometry and 18 computed properties identical with the widget
+  absent, loaded, and open.
+
+**Live, 2026-10-07 20:54 UTC:** init `201` against `nest-mind.laravel.cloud` reports
+`contract_version: 1.14.0`, `idle_hours: 168`, no `assistant` key, and
+`Access-Control-Expose-Headers: X-Chatbot-Contract, Retry-After`. The widget is one step ahead, so
+no drift warn, and the hand-over's live header check is **not run**: it waits for the server to
+report 1.15.0. Read the same minute, nestshostels.com serves the theme copy as 2.13.1 with
+`cache-control: max-age=86400` and a tag with no version query — the deploy adds `?v=2.13.2`.
+
 ## 2.13.1 — 2026-09-23
 
 **Contract sync: `BUILT_AGAINST` 1.12.0 → 1.14.0 (D-083, D-084).** A **patch** — the first sync

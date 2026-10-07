@@ -24,9 +24,9 @@
  *   the mailto: subject/body query value, composed from what the preview shows at
  *   tap time. It never enters a wchat:* payload or a log() line.
  *
- * Built against response contract 1.14.0 (BUILT_AGAINST, api section), in
- * lockstep with the packet vendored in docs/wsuite/ — release 2.13.1 is the sync
- * that adopted it (D-083, D-084). BUILT_AGAINST records what this code implements, not
+ * Built against response contract 1.15.0 (BUILT_AGAINST, api section), in
+ * lockstep with the packet vendored in docs/wsuite/ — release 2.13.2 is the sync
+ * that adopted it (D-090). BUILT_AGAINST records what this code implements, not
  * what the docs say. The server reports its live contract_version at init; the
  * widget warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
@@ -35,7 +35,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.13.1';
+    var VERSION = '2.13.2';
 
     /* =========================================================== config ===== */
 
@@ -221,13 +221,33 @@
 
     /* ============================================================= i18n ===== */
 
+    /*
+     * The assistant's name is DATA since contract 1.15.0 — the init's
+     * `assistant.name`, set by the site owner — and no pack holds one. The four
+     * keys that used to carry it come in pairs: the bare key is the NAME-FREE
+     * wording, and `<key>Named` takes the name in its one %s. Two strings rather
+     * than one slot, because the name sits inside the grammar ("%s öffnen, den
+     * KI-Assistenten von Nests") and a site may have set none at all. tn() picks
+     * between them, so no call site decides on its own.
+     *
+     * `title` is the header's name-free text, the role. Both launcher labels
+     * say the role as well as the name: they are heard while the panel — and
+     * the AI badge in it — is hidden, and the contract wants a disclosure
+     * wherever the name is shown. openNamed always did; openUnreadNamed is the
+     * one that gained it in 2.13.2.
+     */
     var STRINGS = {
         en: {
             assistantRole: 'Nests Hostels AI assistant',
-            placeholder: 'Ask Germán anything…',
-            greeting: 'Hi! I\'m Germán, the Nests AI assistant. Your travel community in the Canaries & Ibiza — 14 hostels · 3 islands · 1 Nest Pass.',
-            open: 'Open Germán, the Nests AI assistant', close: 'Minimise the chat',
-            openUnread: 'Open Germán — 1 new message',
+            title: 'AI assistant',
+            placeholder: 'Ask anything…',
+            placeholderNamed: 'Ask %s anything…',
+            greeting: 'Hi! I\'m the Nests AI assistant. Your travel community in the Canaries & Ibiza — 14 hostels · 3 islands · 1 Nest Pass.',
+            greetingNamed: 'Hi! I\'m %s, the Nests AI assistant. Your travel community in the Canaries & Ibiza — 14 hostels · 3 islands · 1 Nest Pass.',
+            open: 'Open the Nests AI assistant', close: 'Minimise the chat',
+            openNamed: 'Open %s, the Nests AI assistant',
+            openUnread: 'Open the chat — 1 new message',
+            openUnreadNamed: 'Open %s, the AI assistant — 1 new message',
             teaser: 'Need a hand picking your Nest?', teaserDismiss: 'Dismiss',
             subline: 'Nests Hostels · replies in seconds', aiAssistant: 'AI assistant',
             expand: 'Expand the chat', shrink: 'Shrink the chat', menu: 'More options',
@@ -277,10 +297,15 @@
         },
         es: {
             assistantRole: 'Asistente IA de Nests Hostels',
-            placeholder: 'Pregunta lo que quieras a Germán…',
-            greeting: '¡Hola! Soy Germán, el asistente de IA de Nests. Tu comunidad viajera en Canarias e Ibiza — 14 hostels · 3 islas · 1 Nest Pass.',
-            open: 'Abrir Germán, el asistente IA de Nests', close: 'Minimizar el chat',
-            openUnread: 'Abrir Germán — 1 mensaje nuevo',
+            title: 'Asistente IA',
+            placeholder: 'Pregunta lo que quieras…',
+            placeholderNamed: 'Pregunta lo que quieras a %s…',
+            greeting: '¡Hola! Soy el asistente de IA de Nests. Tu comunidad viajera en Canarias e Ibiza — 14 hostels · 3 islas · 1 Nest Pass.',
+            greetingNamed: '¡Hola! Soy %s, el asistente de IA de Nests. Tu comunidad viajera en Canarias e Ibiza — 14 hostels · 3 islas · 1 Nest Pass.',
+            open: 'Abrir el asistente IA de Nests', close: 'Minimizar el chat',
+            openNamed: 'Abrir %s, el asistente IA de Nests',
+            openUnread: 'Abrir el chat — 1 mensaje nuevo',
+            openUnreadNamed: 'Abrir %s, el asistente IA — 1 mensaje nuevo',
             teaser: '¿Te ayudo a elegir tu Nest?', teaserDismiss: 'Descartar',
             subline: 'Nests Hostels · responde en segundos', aiAssistant: 'Asistente IA',
             expand: 'Ampliar el chat', shrink: 'Reducir el chat', menu: 'Más opciones',
@@ -312,10 +337,15 @@
         },
         it: {
             assistantRole: 'Assistente IA di Nests Hostels',
-            placeholder: 'Chiedi qualsiasi cosa a Germán…',
-            greeting: 'Ciao! Sono Germán, l\'assistente IA di Nests. La tua community di viaggio tra Canarie e Ibiza — 14 hostel · 3 isole · 1 Nest Pass.',
-            open: 'Apri Germán, l\'assistente IA di Nests', close: 'Riduci la chat',
-            openUnread: 'Apri Germán — 1 nuovo messaggio',
+            title: 'Assistente IA',
+            placeholder: 'Chiedi qualsiasi cosa…',
+            placeholderNamed: 'Chiedi qualsiasi cosa a %s…',
+            greeting: 'Ciao! Sono l\'assistente IA di Nests. La tua community di viaggio tra Canarie e Ibiza — 14 hostel · 3 isole · 1 Nest Pass.',
+            greetingNamed: 'Ciao! Sono %s, l\'assistente IA di Nests. La tua community di viaggio tra Canarie e Ibiza — 14 hostel · 3 isole · 1 Nest Pass.',
+            open: 'Apri l\'assistente IA di Nests', close: 'Riduci la chat',
+            openNamed: 'Apri %s, l\'assistente IA di Nests',
+            openUnread: 'Apri la chat — 1 nuovo messaggio',
+            openUnreadNamed: 'Apri %s, l\'assistente IA — 1 nuovo messaggio',
             teaser: 'Ti aiuto a scegliere il tuo Nest?', teaserDismiss: 'Chiudi',
             subline: 'Nests Hostels · risponde in pochi secondi', aiAssistant: 'Assistente IA',
             // Not 'Riduci la chat': that is already `close` above, and the two
@@ -349,10 +379,15 @@
         },
         de: {
             assistantRole: 'KI-Assistent von Nests Hostels',
-            placeholder: 'Frag Germán einfach alles…',
-            greeting: 'Hi! Ich bin Germán, der KI-Assistent von Nests. Deine Reise-Community auf den Kanaren & Ibiza — 14 Hostels · 3 Inseln · 1 Nest Pass.',
-            open: 'Germán öffnen, den KI-Assistenten von Nests', close: 'Chat minimieren',
-            openUnread: 'Germán öffnen — 1 neue Nachricht',
+            title: 'KI-Assistent',
+            placeholder: 'Frag einfach alles…',
+            placeholderNamed: 'Frag %s einfach alles…',
+            greeting: 'Hi! Ich bin der KI-Assistent von Nests. Deine Reise-Community auf den Kanaren & Ibiza — 14 Hostels · 3 Inseln · 1 Nest Pass.',
+            greetingNamed: 'Hi! Ich bin %s, der KI-Assistent von Nests. Deine Reise-Community auf den Kanaren & Ibiza — 14 Hostels · 3 Inseln · 1 Nest Pass.',
+            open: 'Den KI-Assistenten von Nests öffnen', close: 'Chat minimieren',
+            openNamed: '%s öffnen, den KI-Assistenten von Nests',
+            openUnread: 'Chat öffnen — 1 neue Nachricht',
+            openUnreadNamed: '%s öffnen, den KI-Assistenten — 1 neue Nachricht',
             teaser: 'Soll ich dir helfen, dein Nest zu finden?', teaserDismiss: 'Schließen',
             subline: 'Nests Hostels · antwortet in Sekunden', aiAssistant: 'KI-Assistent',
             expand: 'Chat vergrößern', shrink: 'Chat verkleinern', menu: 'Weitere Optionen',
@@ -384,10 +419,15 @@
         },
         fr: {
             assistantRole: 'Assistant IA de Nests Hostels',
-            placeholder: 'Demandez tout à Germán…',
-            greeting: 'Salut ! Je suis Germán, l\'assistant IA de Nests. Ta communauté de voyage aux Canaries et à Ibiza — 14 hostels · 3 îles · 1 Nest Pass.',
-            open: 'Ouvrir Germán, l\'assistant IA de Nests', close: 'Réduire le chat',
-            openUnread: 'Ouvrir Germán — 1 nouveau message',
+            title: 'Assistant IA',
+            placeholder: 'Demandez-moi tout…',
+            placeholderNamed: 'Demandez tout à %s…',
+            greeting: 'Salut ! Je suis l\'assistant IA de Nests. Ta communauté de voyage aux Canaries et à Ibiza — 14 hostels · 3 îles · 1 Nest Pass.',
+            greetingNamed: 'Salut ! Je suis %s, l\'assistant IA de Nests. Ta communauté de voyage aux Canaries et à Ibiza — 14 hostels · 3 îles · 1 Nest Pass.',
+            open: 'Ouvrir l\'assistant IA de Nests', close: 'Réduire le chat',
+            openNamed: 'Ouvrir %s, l\'assistant IA de Nests',
+            openUnread: 'Ouvrir le chat — 1 nouveau message',
+            openUnreadNamed: 'Ouvrir %s, l\'assistant IA — 1 nouveau message',
             teaser: 'Besoin d\'aide pour choisir ton Nest ?', teaserDismiss: 'Fermer',
             subline: 'Nests Hostels · répond en quelques secondes', aiAssistant: 'Assistant IA',
             // Not 'Réduire le chat': that is already `close` above, and the two
@@ -431,8 +471,24 @@
     // needs no second formatter and every one-slot caller is untouched.
     function tf(key) {
         var out = String(t(key));
-        for (var i = 1; i < arguments.length; i++) { out = out.replace('%s', arguments[i]); }
+        for (var i = 1; i < arguments.length; i++) { out = fill(out, arguments[i]); }
         return out;
+    }
+
+    // A replacer FUNCTION, not the value itself: handed a string, replace()
+    // reads `$&` and `$'` inside it as patterns, and since 1.15.0 a
+    // tenant-authored name is one of the values that come through here.
+    function fill(text, value) {
+        return text.replace('%s', function () { return value; });
+    }
+
+    // t(), named: the `<key>Named` variant around the assistant's name when a
+    // server has given one (assistantName — storage section), the bare
+    // name-free key otherwise. The only place that choice is made. A key with
+    // no Named variant reads name-free rather than "undefined".
+    function tn(key) {
+        var named = key + 'Named';
+        return (assistantName && t(named) != null) ? tf(named, assistantName) : t(key);
     }
 
     /* ========================================================== storage ===== */
@@ -460,8 +516,30 @@
     var serverOffset = 0;         // Date.parse(server_time) - Date.now(), once
 
     /*
+     * The assistant's display name (contract 1.15.0): the init's
+     * `assistant.name`, typed by the site owner, or null — a site that set
+     * none, an older server, a failed init, a record written before 2.13.2.
+     * NEVER a built-in default: null means name-free wording everywhere, and
+     * tn() and paintAssistant() are the only two readers that turn it into text.
+     *
+     * It has the idle window's problem and gets the idle window's answer.
+     * build() paints the header at BOOT and the resume branch never calls init,
+     * so a name read only off the 201 would be missing on exactly the visits
+     * that return to a conversation: it is persisted with the record and
+     * restored from it. And it is deliberately kept NOWHERE else — no second
+     * key, no sessionStorage. After an owner renames the assistant, anything
+     * outliving the record would show the old name over a greeting that says
+     * the new one. A resumed conversation keeps the name it started under.
+     */
+    var assistantName = null;
+    // The server guarantees 24 characters. This is not that number mirrored by
+    // hand — it only stops a malformed or hostile value from reaching the
+    // header whole, and the header wraps whatever gets through.
+    var ASSISTANT_NAME_MAX = 60;
+
+    /*
      * The record is {uuid, ts, actions, turns, guestTurned, ended, idleHours,
-     * clockOffset} and readStore() hands back the OBJECT,
+     * clockOffset, assistantName} and readStore() hands back the OBJECT,
      * never a bare uuid: a returning guest inside the idle window resumes without
      * ever calling API.init, so the site's welcome elements — its configured
      * quick_prompts, its show_at_init promo — have nowhere else to come from. Up
@@ -494,7 +572,9 @@
      *
      * `idleHours` and `clockOffset` (2.10.0) are the server's two 1.7.0 answers,
      * carried here because the resume branch never reaches the server to ask
-     * again — see storedIdleMs() and nowMs().
+     * again — see storedIdleMs() and nowMs(). `assistantName` (2.13.2) is the
+     * 1.15.0 one, here for the same reason and re-validated on the way out:
+     * localStorage is as untrusted as the wire.
      *
      * Accepted cost: welcome elements can be up to one idle window stale. They
      * are site settings rather than conversation state, so the worst case is a
@@ -523,7 +603,8 @@
                 // it silently vanishes — the same opt-in note validTurns() carries.
                 idleHours: positiveHours(parsed.idleHours),
                 clockOffset: (typeof parsed.clockOffset === 'number' && isFinite(parsed.clockOffset))
-                    ? parsed.clockOffset : 0
+                    ? parsed.clockOffset : 0,
+                assistantName: cleanName(parsed.assistantName)
             };
         } catch (e) { return null; }
     }
@@ -532,6 +613,35 @@
     // finite number above zero, and anything else means the field is not there.
     function positiveHours(value) {
         return (typeof value === 'number' && isFinite(value) && value > 0) ? value : null;
+    }
+
+    // The same shape for the assistant's name: a string with something in it
+    // once whitespace is collapsed, capped, and anything else is "no name". The
+    // server guarantees more than this (a letter first, then letters, digits,
+    // spaces, hyphens, apostrophes) — which is exactly why none of it is
+    // checked here: the name only ever reaches the DOM through textContent and
+    // setAttribute, so safety does not rest on its shape. The last replace()
+    // drops a surrogate pair the cap cut in half.
+    //
+    // The one shape test is "is there anything to SEE": a zero-width space is
+    // not whitespace to \s, and a name made only of such characters would
+    // paint an empty header title. They are tested for, never stripped — a
+    // joiner inside a real name is the name's own business.
+    function cleanName(value) {
+        if (typeof value !== 'string') { return null; }
+        var text = value.replace(/\s+/g, ' ').trim()
+            .slice(0, ASSISTANT_NAME_MAX).replace(/[\uD800-\uDBFF]$/, '').trim();
+        if (!text.replace(/[­​-‏‪-‮⁠-⁤﻿\s]/g, '')) { return null; }
+        return text;
+    }
+
+    // The init body's `assistant` object, reduced to the one string this widget
+    // shows. `disclosure` is deliberately not read: it is byte-identical to the
+    // aiAssistant pack in all five locales, and a pack string can follow
+    // setLocale() — the prefill.hint precedent.
+    function assistantNameOf(raw) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { return null; }
+        return cleanName(raw.name);
     }
 
     /*
@@ -660,7 +770,10 @@
             // which is what makes restoring them on the resume branch load-bearing:
             // a resumed session that did not restore them would write null/0 here
             // on its first turn and silently drop both back to the fallback.
-            idleHours: serverIdleHours, clockOffset: serverOffset
+            idleHours: serverIdleHours, clockOffset: serverOffset,
+            // The 1.15.0 name, on the same terms: a resume that did not restore
+            // it would write null here and lose the name one turn later.
+            assistantName: assistantName
         };
         try {
             window.localStorage.setItem(STORE_KEY, boundedRecord(record));
@@ -937,7 +1050,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.14.0';
+    var BUILT_AGAINST = '1.15.0';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -1126,6 +1239,10 @@
      * ?nc-init-429=<seconds> on the page URL makes init itself answer 429 with
      * that Retry-After — the only way to reach the init half of the throttle copy.
      *
+     * ?nc-assistant=<none|markup|long|string|array> picks the init's 1.15.0
+     * `assistant`; with no knob the fixture names the assistant "Nesti". See
+     * mockAssistant().
+     *
      * The init response carries two chip rows (promptChips + islandChips), and
      * both of promptChips' messages land on a branch above rather than in the
      * catch-all — tapping a welcome chip is meant to demo a real answer.
@@ -1173,6 +1290,50 @@
         function mockInitRetryAfter() {
             var m = /[?&]nc-init-429=(\d+)/.exec(window.location.search);
             return m ? parseInt(m[1], 10) : null;
+        }
+
+        /*
+         * Who the fixture says the guest is talking to (contract 1.15.0). By
+         * default a site whose owner HAS named the assistant — the interesting
+         * case, as with the chip rows in init below, and the only one that
+         * walks the whole seam: init, paint, persist, resume.
+         * `?nc-assistant=<mode>` on the demo URL picks the others:
+         *   none   → no `assistant` key at all — an older server, or a site
+         *            that set no name: name-free wording everywhere
+         *   markup → a name that would run if it were ever parsed as HTML
+         *            (the same sentinel as HOSTILE_PREFILL, never alert())
+         *   long   → a 500-character name; the server's own limit is 24
+         *   string → `assistant` as a bare string
+         *   array  → `assistant` as an array
+         * All four hostile ones must end with no script run and a header whose
+         * controls are still in reach; the last two with no name at all.
+         *
+         * Read at EVERY init, not once: load one mode, reload on another with
+         * the conversation still stored, then press "Start a new chat" — that
+         * is how a repaint is proven rather than assumed, and a constant
+         * fixture would pass it without repainting anything.
+         *
+         * The greeting says the name only where the fixture has one, built from
+         * this object's OWN constant and never through tn(): the mock is
+         * playing the server, which writes the name into its greeting before
+         * the widget has learned it. A knob like the two above, and only that.
+         */
+        var MOCK_NAME = 'Nesti';
+
+        function mockAssistant(body) {
+            var m = /[?&]nc-assistant=([a-z]+)/.exec(window.location.search);
+            var mode = m ? m[1] : '';
+            if (mode === 'none') { return body; }
+            if (mode === 'string') { body.assistant = MOCK_NAME; return body; }
+            if (mode === 'array') { body.assistant = [MOCK_NAME]; return body; }
+            var name = MOCK_NAME;
+            if (mode === 'markup') { name = '<img src=x onerror="window.__ncXss=1">'; }
+            if (mode === 'long') { name = new Array(501).join('W'); }
+            // `disclosure` as the server sends it: its own label, in the
+            // conversation's language. The widget reads past it.
+            body.assistant = { name: name, disclosure: t('aiAssistant') };
+            if (name === MOCK_NAME) { body.greeting = tf('greetingNamed', MOCK_NAME); }
+            return body;
         }
 
         // Two fixtures serve the same promo — the island answer and the
@@ -1311,8 +1472,10 @@
                 if (throttled !== null) {
                     return reply(done, 429, { message: 'Too Many Attempts.' }, 700, throttled);
                 }
-                reply(done, 201, {
+                reply(done, 201, mockAssistant({
                     conversation: { uuid: 'mock-' + Math.random().toString(36).slice(2, 10) },
+                    // The name-free wording; mockAssistant() swaps in the named
+                    // one for the fixture that has a name to say.
                     greeting: t('greeting'),
                     // A site that HAS configured welcome elements — the interesting
                     // case, and the one [] could not reach. TWO quick_replies rows,
@@ -1334,8 +1497,8 @@
                     // what a correct client clock should compute.
                     idle_hours: mockIdleHours(),
                     server_time: new Date().toISOString(),
-                    contract_version: '1.14.0'
-                }, 700);
+                    contract_version: '1.15.0'
+                }), 700);
             },
 
             send: function (uuid, text, done) {
@@ -1996,7 +2159,7 @@
         }
 
         // Explicit stacks win over the preset, so a host can take the body font
-        // from their theme and still keep Germán's Poppins headings.
+        // from their theme and still keep the widget's Poppins headings.
         if (FONT_OK.test(cfg.fontHeading)) { heading = cfg.fontHeading; }
         if (FONT_OK.test(cfg.fontBody)) { body = cfg.fontBody; }
 
@@ -2022,13 +2185,10 @@
         var toggler = el('button', 'nc-toggler');
         // The unread affordance lasts until the first open of the session; while
         // it shows, the accessible name carries the "1 new message" the visual
-        // dot only hints at.
+        // dot only hints at. That name is written by paintAssistant(), below,
+        // like the three other things here that say who the guest is talking to.
         var hasUnread = !readFlag('sessionStorage', FLAG_OPENED);
-        attrs(toggler, {
-            type: 'button',
-            'aria-label': hasUnread ? t('openUnread') : t('open'),
-            'aria-expanded': 'false'
-        });
+        attrs(toggler, { type: 'button', 'aria-expanded': 'false' });
         // The same teal mark as the message avatar and the loader — one logo in
         // one colour rather than three different pictures.
         var togglerIcon = el('img', 'nc-toggler-icon');
@@ -2056,7 +2216,7 @@
 
         /* panel */
         var panel = el('div', 'nc-panel');
-        attrs(panel, { role: 'dialog', 'aria-label': 'Germán — ' + t('assistantRole'), 'aria-modal': 'false' });
+        attrs(panel, { role: 'dialog', 'aria-modal': 'false' });
 
         /* header */
         var header = el('div', 'nc-header');
@@ -2065,7 +2225,12 @@
         attrs(headerLogo, { src: assetBase + 'img/germanavatar.png', alt: '', width: '44', height: '44' });
         var headerText = el('div', 'nc-header-text');
         var nameRow = el('div', 'nc-name-row');
-        nameRow.appendChild(el('h2', 'nc-title', 'Germán'));
+        // Empty until paintAssistant() runs at the end of this function: the
+        // name is the server's (1.15.0) and no built-in one stands in for it.
+        var title = el('h2', 'nc-title');
+        nameRow.appendChild(title);
+        // The AI disclosure, and UNCONDITIONAL: it shows with a name and without
+        // one, and the name never replaces it (guide §3.1).
         var badge = el('span', 'nc-badge', t('aiAssistant'));
         nameRow.appendChild(badge);
         headerText.appendChild(nameRow);
@@ -2173,7 +2338,7 @@
         var input = el('textarea', 'nc-input');
         attrs(input, {
             rows: '1', minlength: '2', maxlength: '2000', required: 'required',
-            placeholder: t('placeholder'), 'aria-label': t('input')
+            'aria-label': t('input')
         });
         var send = el('button', 'nc-send');
         attrs(send, { type: 'submit', 'aria-label': t('send') });
@@ -2209,7 +2374,7 @@
         els = {
             root: root, toggler: toggler, panel: panel, body: body, loader: loader,
             progress: progress, form: form, input: input, send: send, close: closeBtn,
-            badge: badge, subline: subline, expand: expandBtn,
+            title: title, badge: badge, subline: subline, expand: expandBtn,
             // The header menu. Its open state is a class on headerControls
             // (nc-menu-open), not on the toggle: the CSS keys off the container.
             headerControls: headerControls, menuToggle: menuToggle, menu: menu,
@@ -2225,6 +2390,38 @@
             // third live control setLocale() repaints.
             welcome: null, promptsLabel: null, promptButtons: null, restart: null
         };
+        // Name-free here, always: build() runs before any record is read and
+        // long before any init. boot() repaints at once if a stored
+        // conversation carries a name.
+        paintAssistant();
+    }
+
+    /*
+     * THE ASSISTANT SEAM (contract 1.15.0). Four things on screen say who the
+     * guest is talking to — the header title, the dialog's accessible name, the
+     * composer placeholder and the launcher's accessible name — and this is the
+     * only function that writes any of them. It reads three things — the name,
+     * the locale, and whether the unread dot is still showing — so it is called
+     * from every place one of them can change: build(), boot()'s restore, all
+     * three branches of startConversation() (which is how a restart and a 410
+     * re-init reach it), markOpened() for the dot, and setLocale().
+     *
+     * textContent and setAttribute only: the name is tenant-authored, like a
+     * promo title, and never becomes markup.
+     *
+     * The AI disclosure is NOT painted here, on purpose. The badge, the
+     * disclaimer under the composer and assistantRole in the dialog label show
+     * whether or not a name arrives; nothing in this function can take one away.
+     */
+    function paintAssistant() {
+        els.title.textContent = assistantName || t('title');
+        // "Nesti — Nests Hostels AI assistant": the name AND the disclosure, so a
+        // screen-reader user hears both before the transcript (the contract's
+        // Accessibility note). Without a name the role stands alone.
+        els.panel.setAttribute('aria-label',
+            assistantName ? assistantName + ' — ' + t('assistantRole') : t('assistantRole'));
+        els.input.setAttribute('placeholder', tn('placeholder'));
+        els.toggler.setAttribute('aria-label', els.unread ? tn('openUnread') : tn('open'));
     }
 
     /* =========================================================== render ===== */
@@ -4539,7 +4736,8 @@
         if (els.unread) {
             if (els.unread.parentNode) { els.unread.parentNode.removeChild(els.unread); }
             els.unread = null;
-            els.toggler.setAttribute('aria-label', t('open'));
+            // After the handle is cleared: the launcher's label is read off it.
+            paintAssistant();
         }
     }
 
@@ -4735,7 +4933,13 @@
         if (stored) {
             conversationUuid = stored.uuid;
             started = true;
-            if (intro.greeting === null) { intro.greeting = t('greeting'); }
+            // The 1.15.0 name, RESTORED like the 1.7.0 pair below and for the
+            // same reason — the record is this branch's only source, and
+            // persist() serializes whatever this variable holds. Before the
+            // fallback greeting on the next line, which is worded around it.
+            assistantName = stored.assistantName;
+            paintAssistant();
+            if (intro.greeting === null) { intro.greeting = tn('greeting'); }
             // Replayed from the store for the same reason the greeting is
             // defaulted here: this branch never reaches the server, and the
             // welcome elements are the site's, not the conversation's. Without
@@ -4802,7 +5006,16 @@
                 conversationUuid = body.conversation.uuid;
                 started = true;
                 checkContractVersion(body.contract_version);
-                intro.greeting = body.greeting || t('greeting');
+                // The 1.15.0 name. Assigned UNCONDITIONALLY — a restart or a 410
+                // re-init onto a site that has since dropped its name must not
+                // keep the old one — and before the greeting fallback and the
+                // persist() below, which both read it. Painted on a re-init
+                // too: the header names the conversation the guest is now in.
+                // The server's own `greeting` is never touched: where a site's
+                // greeting says the name, the server has already written it in.
+                assistantName = assistantNameOf(body.assistant);
+                paintAssistant();
+                intro.greeting = body.greeting || tn('greeting');
                 // A site can attach welcome elements to the greeting — same request,
                 // zero extra network. Absent on older servers, [] when the site has
                 // configured none, and neither is a fallback for anything: the empty
@@ -4829,7 +5042,18 @@
             } else {
                 // Never strand the guest behind a failed init — greet them anyway
                 // and let the first real turn retry.
-                intro.greeting = t('greeting');
+                //
+                // No server has named THIS conversation, so no name: the one
+                // still painted belongs to a conversation that is gone — a
+                // restart, a 410 re-init, a record that expired after boot
+                // restored it. Guarded on the uuid, because the resume branch
+                // above runs before the initWaiters check: a fast first send
+                // while this init was on the wire can have adopted a record
+                // another tab wrote, name and all, and a bare null here would be
+                // persisted over it on the next turn.
+                if (!conversationUuid) { assistantName = null; }
+                paintAssistant();
+                intro.greeting = tn('greeting');
                 // Invisible on screen by design (the guest gets a greeting and no
                 // error), which is exactly why it is worth reporting: a site whose
                 // key is wrong looks fine and answers nothing. A 429's
@@ -5543,11 +5767,14 @@
 
         // NOT document.documentElement.lang — the host page's language is theirs,
         // not ours.
-        els.input.setAttribute('placeholder', t('placeholder'));
+        //
+        // The title, the dialog label, the placeholder and the launcher label
+        // first, through their one writer. The NAME in them does not change —
+        // it is the server's and is not localized — only the words around it.
+        paintAssistant();
         els.input.setAttribute('aria-label', t('input'));
         els.send.setAttribute('aria-label', t('send'));
         els.close.setAttribute('aria-label', t('close'));
-        els.toggler.setAttribute('aria-label', els.unread ? t('openUnread') : t('open'));
         els.teaserBody.textContent = t('teaser');
         els.teaserClose.setAttribute('aria-label', t('teaserDismiss'));
         els.badge.textContent = t('aiAssistant');
@@ -5643,7 +5870,6 @@
         // the anchor pad and the cue are what a height change has to re-measure.
         // Guarded, so a transcript with neither behaves exactly as it did before.
         if (opts.length || prefills.length) { afterRender(); }
-        els.panel.setAttribute('aria-label', 'Germán — ' + t('assistantRole'));
         // The one control whose label depends on state, not just on locale: it
         // reads "shrink" while the sheet is out.
         els.expand.setAttribute('aria-label', isExpanded() ? t('shrink') : t('expand'));
@@ -5860,6 +6086,19 @@
          */
         var stored = readStore();
         returning = !!stored;
+        /*
+         * The 1.15.0 name, restored HERE as well as on the resume branch. That
+         * branch runs when the panel opens, and the launcher's label is read
+         * while it is still closed — worse, open() calls markOpened() before
+         * it, so the unread label would never once be painted with a name.
+         * Read from the conversation record itself, never a key of its own: it
+         * expires and clears with the conversation, and whichever branch of
+         * startConversation() the guest reaches next settles it again.
+         */
+        if (stored && stored.assistantName) {
+            assistantName = stored.assistantName;
+            paintAssistant();
+        }
         emit('ready', {
             version: VERSION,
             locale: locale,

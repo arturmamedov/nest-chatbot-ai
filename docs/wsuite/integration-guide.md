@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | matches `response-contract.md` 1.14.0 (the server reports the live version as `contract_version` — see §3.1) |
+| **Version** | matches `response-contract.md` 1.15.0 (the server reports the live version as `contract_version` — see §3.1) |
 | **Audience** | Any external website embedding a **custom** chat UI on top of the wSuite chatbot API — e.g. the branded `nest-chatbot-ai` microsite. |
 | **Scope** | The **transport + auth** layer: base URL, the three endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS. |
 | **Not in scope** | The **response envelope** (`reply` / typed `actions[]` / element types). That is fully specified in [`response-contract.md`](response-contract.md) — read it alongside this document; do not duplicate its rules here. |
@@ -68,13 +68,14 @@ Content-Type: application/json
 **`201` response:**
 
 ```json
-{ "conversation": { "uuid": "9b2c…" }, "greeting": "Hi! How can I help?", "actions": [], "idle_hours": 24, "server_time": "2026-08-21T09:46:12+00:00", "contract_version": "1.9.0" }
+{ "conversation": { "uuid": "9b2c…" }, "greeting": "Hi! How can I help?", "assistant": { "name": "Nesti", "disclosure": "AI assistant" }, "actions": [], "idle_hours": 24, "server_time": "2026-10-07T09:46:12+00:00", "contract_version": "1.15.0" }
 ```
 
 | Response field | Type | Since | Notes |
 |---|---|---|---|
 | `conversation.uuid` | `string` | 1.0.0 | The conversation's only public identifier. Persist it. |
-| `greeting` | `string` | 1.0.0 | Render as the first bot bubble. |
+| `greeting` | `string` | 1.0.0 | Render as the first bot bubble. Always a finished string: where a site's greeting says the assistant's name, the server has already written it in. |
+| `assistant` | `object` | **1.15.0** | Who the guest is talking to: `name`, the display name the site owner set for the assistant (omitted when they set none), and `disclosure`, the server's statement that this is an AI (always sent). **Persist it with the conversation record** — see below. Absent on older servers. |
 | `actions` | `array` | 1.5.0 | The same element vocabulary as a turn (greeting-time quick prompts / promo). Render after the greeting like any turn's `actions[]`; always sent (`[]` when unconfigured), absent on pre-1.5.0 servers. |
 | `idle_hours` | `int` | **1.7.0** | The conversation idle window (§5, `410`). **Drive your stored-conversation expiry from this**, not from a constant — see below. |
 | `server_time` | `string` | **1.7.0** | ISO-8601 with offset, at the instant the conversation was created. For a one-off client-clock correction — see below. |
@@ -98,6 +99,24 @@ It is sent as a **duration, not an expiry instant**, on purpose: the expiry move
 #### `server_time` — one clock correction per conversation
 
 **Since 1.7.0.** ISO-8601. Nothing in the guest API dates a message — `turn` is an ordering, not an instant — so a consumer that timestamps its own stored transcript is recording the *sending device's* clock, skew included. Compute `offset = Date.parse(server_time) - Date.now()` once at init and apply it to the stamps you write. It does not address a guest who changes timezone between visits, and it is not a per-turn timestamp. Absent on older servers.
+
+#### `assistant` — the assistant's name, and the AI disclosure
+
+**Since 1.15.0.** `{ "name": "Nesti", "disclosure": "AI assistant" }`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | `string` | The display name the site owner set for the assistant. **Omitted when they set none** — never `null`, never empty. Plain text: a letter first, then letters of any script, digits, spaces, hyphens or apostrophes, at most 24 characters (a server guarantee, so you can size a header against it). Not localized — a name is the same in every language. |
+| `disclosure` | `string` | A short statement that the guest is talking to an AI: `AI assistant`, in the conversation's language (en/es/it/de/fr, English otherwise). Code-emitted and **always sent**. It is not a site setting, so an owner can rename the assistant but cannot remove it. |
+
+Four rules:
+
+- **Show the name wherever you name the assistant** — the header, the input hint, the launcher's label — in place of any name of your own. **Keep a name-free fallback:** `name` is absent for a site that set none, and the whole object is absent on an older server.
+- **A disclosure beside the name — MUST.** A renderer that shows `name` must also show that the assistant is an AI, using `disclosure` or its own translation of it, and must show it **whether or not a name arrives**. The name never stands in for it.
+- **Persist it with the conversation record, and no longer.** Most renderers paint their header before init and never call init on a resume, so a name read only off the init response is missing on exactly the visits that return to a conversation — the `idle_hours` lesson again. Do not cache it beyond the conversation either: after an owner renames the assistant, a longer-lived cache shows the old name over a greeting that says the new one. A resumed conversation keeps the name it started under; that is expected.
+- **Never write the name into `greeting` yourself.** A site's greeting can already say it — the server resolves the owner's placeholder before sending — so `greeting` always arrives finished.
+
+Treat `name` as tenant-authored text: `textContent`, never `innerHTML` ([Security rule](response-contract.md#security-rule-both-widgets)). Whether the assistant also *answers* to its name is the site owner's switch, and nothing a renderer reads: asked who it is, it always says it is an AI, with or without the name.
 
 #### `contract_version` — detecting you're behind
 

@@ -5,7 +5,10 @@ Guidance for Claude Code when working in this repository.
 ## What this repo is
 
 **One drop-in chat widget.** A host website adds a single `<script>` tag and gets the branded
-Germán bubble, talking to the wSuite chatbot API. Vanilla JS, no dependencies, no build step.
+Nests chat bubble, talking to the wSuite chatbot API. Vanilla JS, no dependencies, no build step.
+(The assistant's *name* is not ours: since contract 1.15.0 the site owner sets it in the wSuite
+panel and it arrives with init — see "The assistant's name is data" under Things that will bite
+you.)
 
 ```html
 <script src="https://cdn.nestshostels.com/nest-chatbot/nest-chatbot.js"
@@ -104,11 +107,11 @@ page rather than in production.
 | Section | What lives there |
 |---|---|
 | `config` | reads `data-*`, derives `assetBase` from `script.src`, and resolves two locales: `locale`, the UI's, clamped to the five packs, and `requestLocale`, the preference the init and turn bodies carry — any two-letter primary subtag (contract 1.13.0); `redactForLog()` sits beside `log()` |
-| `i18n` | UI strings per locale (`en es it de fr`) |
-| `storage` | `{uuid, ts, actions, turns, guestTurned, ended, idleHours, clockOffset}` in `localStorage` — the init `actions[]` and the display-only transcript ride along so a resume replays the conversation, not just the welcome; `ts` is last activity. Since 2.10.0 the idle window and the server clock offset are the **server's**, carried in the record because the resume path never calls init; `IDLE_MS` is only the fallback |
+| `i18n` | UI strings per locale (`en es it de fr`); `tn()` picks the named or the name-free variant of the four keys that say who the guest is talking to |
+| `storage` | `{uuid, ts, actions, turns, guestTurned, ended, idleHours, clockOffset, assistantName}` in `localStorage` — the init `actions[]` and the display-only transcript ride along so a resume replays the conversation, not just the welcome; `ts` is last activity. Since 2.10.0 the idle window and the server clock offset are the **server's**, carried in the record because the resume path never calls init; `IDLE_MS` is only the fallback. Since 2.13.2 the assistant's name (contract 1.15.0) rides the same way, validated by `cleanName()` |
 | **`events`** | **the host-page seam** — `emit()`, `snapshot()`, the `wchat:` vocabulary |
 | **`api`** | **the seam** — `init` / `send` / `poll` plus the mock fixtures |
-| `dom` | `el()`, `attrs()`, `svgNode()`, the icon constants, `build()` |
+| `dom` | `el()`, `attrs()`, `svgNode()`, the icon constants, `build()`, and `paintAssistant()` — the one writer of the header title, the dialog label, the placeholder and the launcher label |
 | `render` | bubbles, thinking dots, `renderAction()`, `safeHttpUrl()` |
 | `typing` | the character-by-character reveal |
 | `intro` | the circular-progress loader sequence |
@@ -127,7 +130,7 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.14.0 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.15.0 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
@@ -138,29 +141,31 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 `BUILT_AGAINST` (api section) moves **only** during a sync — it is a claim about what this
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
-rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-09-23 as
-`docs @ chatbot-contract-v1.14.0 (58d534b) · widget @ 58d534b` — the widget SHA is part of the
+rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-10-07 as
+`docs @ chatbot-contract-v1.15.0 (7f032d2) · widget @ 7f032d2` — the widget SHA is part of the
 packet's identity, because the reference renderer legitimately moves between contract tags
-(here the two halves share a sha: 1.14.0 was a real renderer change in the tag commit, as 1.10.0
-was; at 1.12.0 they differed, `43101a6` against `cb8005b`).
-`BUILT_AGAINST` is `'1.14.0'`, in lockstep since release 2.13.1 adopted D-083 and D-084.
+(here the two halves share a sha: 1.15.0 was a real renderer change in the tag commit, as 1.14.0
+and 1.10.0 were; at 1.12.0 they differed, `43101a6` against `cb8005b`).
+`BUILT_AGAINST` is `'1.15.0'`, in lockstep since release 2.13.2 adopted D-090.
 
 **The widget is one step AHEAD of the deployment, and that is the quiet direction.** Measured
-2026-09-23 14:15 UTC off a real init `201` against `nest-mind.laravel.cloud`: `contract_version:
-1.13.0`, `idle_hours: 168`, and `Access-Control-Expose-Headers: X-Chatbot-Contract, Retry-After`.
-The paragraph this replaces called the widget AHEAD of a `1.10.0` server measured 2026-09-15 15:15
-UTC — and it was false within the day: `nest-mind`'s registry records 1.12.0 deployed and read back
-at 16:38 UTC, and 1.13.0 verified live on 2026-09-18 (`73ac652`). So the preference-not-override
-`locale` 2.13.1 sends meets a server that already reads it that way; there is no window in which it
-is still an override, holding a guest to `requestLocale` whatever they write with no switcher left
-to move it. 1.14.0 is tagged in `nest-mind` and not yet deployed, so no live handoff carries
-`prefill` and the preview never appears live — not a defect: the drift warn fires only when the
-**server** is ahead, and the ignore-unknown rule covers the other direction. When the deploy lands,
-the live pre-written message is checked by the owner's own smoke conversation, never by asking for
-a person from here (a real handoff emails staff). The expose header settles the other open question:
-`Retry-After` is in it, so 2.13.0's long-`429` copy is live at last. Re-read `contract_version`
-**and** the expose header off a `201` before concluding anything, exactly as the idle-window entry
-under Open items insists.
+2026-10-07 20:54 UTC off a real init `201` against `nest-mind.laravel.cloud`: `contract_version:
+1.14.0` (and `X-Chatbot-Contract: 1.14.0`), `idle_hours: 168`, `Access-Control-Expose-Headers:
+X-Chatbot-Contract, Retry-After`, and **no `assistant` key**. The paragraph this replaces, measured
+2026-09-23, had the server on 1.13.0 with 1.14.0 tagged and undeployed; that deploy has since
+landed, so a live handoff can now carry `prefill`. 1.15.0 is the one tagged in `nest-mind` and not
+yet deployed. Against this server 2.13.2 therefore learns no name and shows its **name-free**
+wording everywhere, while the tenant's own greeting still reads "I'm Germán, your AI …" — typed by
+hand into the greeting, which is exactly the arrangement 1.15.0 replaces. Not a defect in either
+direction: the drift warn fires only when the **server** is ahead, and absence of `assistant` is the
+normal older-server case. The owner's stated rollout (2026-10-07) is to ship both halves together,
+with `?v=2.13.2` added to the embed tag. That query matters: read the same
+day, nestshostels.com serves the theme copy with `cache-control: max-age=86400` and an unversioned
+tag, so without it a browser can hold 2.13.1 — and its hardcoded name — for a day after the upload.
+When the server reports 1.15.0, compare the header with the init body's `assistant.name` by opening
+the panel; send nothing that asks for a person from here (a real handoff emails staff). Re-read
+`contract_version` **and** the expose header off a `201` before concluding anything, exactly as the
+idle-window entry under Open items insists.
 
 **The upstream repo drives the sync, and it is local.** The platform is `nest-mind`
 (`modules/chatbot/`). Its `docs/consumer-sync.md` is the operational half: §1 is a registry of
@@ -185,7 +190,7 @@ Three endpoints: init a conversation, post a turn, poll an async turn.
 
 ```
 POST {apiBase}/api/v1/chatbot/conversations               → 201 {conversation:{uuid}, greeting,
-                                                                 contract_version}
+                                                                 assistant?, contract_version}
 POST {apiBase}/api/v1/chatbot/conversations/{uuid}/messages → 200 {reply, actions[], turn}
 GET  {apiBase}{async_result.url}                          → 200 {status, reply?, actions?, turn}
 ```
@@ -233,6 +238,54 @@ and "in the guest's language" are different questions (a card's `name` is raw ca
   that and the first turn of a resumed session writes `null` over the window, reverting to 24h
   on the next boot — the same defect, one turn later. Absence stays normal in both directions
   (an older server, an older record) and falls back to `IDLE_MS`.
+- **The assistant's name is data, and it has the idle window's problem.** Since contract 1.15.0
+  the init `201` may carry `assistant {name?, disclosure}`; `name` is what the site owner typed in
+  the wSuite panel and is **omitted** when they set none. No pack holds a name and nothing in this
+  file is a default for one: `assistantName` is `null` until a server says otherwise, and `null`
+  means name-free wording. Five things to keep true:
+  - **One writer.** `paintAssistant()` is the only function that writes the header title, the
+    dialog's accessible name, the composer placeholder or the launcher's accessible name. It reads
+    three things — the name, the locale, and whether the unread dot is still showing — so it is
+    called wherever one of them changes: `build()`, `boot()`, all three branches of
+    `startConversation()`, `markOpened()` (the dot) and `setLocale()`. A
+    restart and a 410 re-init reach it **through** `startConversation()` and have no call of their
+    own — the old name stays up for the round trip rather than flashing name-free.
+  - **Persisted, and restored twice.** `build()` paints at boot and a resume never calls init, so
+    the name rides the record and the resume branch restores it — skip that and `persist()` writes
+    `null` over it one turn later, the `idle_hours` defect exactly. `boot()` restores it **as
+    well**, and that half is easy to delete as redundant: the launcher's label is read while the
+    panel is closed, and `open()` runs `markOpened()` before the resume branch, so without the boot
+    restore `openUnreadNamed` is a pack string that can never paint.
+  - **Nowhere else.** No second key, no `sessionStorage`, no cookie to paint it sooner. After an
+    owner renames the assistant, anything outliving the record shows the old name over a greeting
+    that says the new one. The name-free title a first-time visitor sees for the init round trip
+    is the cost of that rule, not a bug to cache around.
+  - **A failed init clears the name only when there is no conversation.** The guard
+    `if (!conversationUuid)` looks removable and is not: the resume branch runs before the
+    `initWaiters` check, so a fast first send can adopt a record another tab wrote while this
+    tab's init is still on the wire. A bare `null` there is persisted over that record's name on
+    the next turn — reproduced with the guard removed.
+  - **The disclosure never depends on the name.** The `aiAssistant` badge, the `disclaimer` under
+    the composer and `assistantRole` in the dialog label show with a name and without one (guide
+    §3.1, a MUST). The server's `disclosure` string is ignored in favour of our own pack, which is
+    byte-identical in all five locales and can follow `setLocale()` — the `prefill.hint`
+    precedent. `openUnreadNamed` carries the role too ("Open %s, the AI assistant — 1 new
+    message"), which the 2.13.1 string it replaces did not: it is the launcher's label for a
+    returning guest's new session, heard while the panel, and the badge in it, are hidden.
+
+  The name is tenant text: `textContent` / `setAttribute` only, and never written into the
+  server's `greeting`, which arrives finished. The header **wraps** it (three lines, then a
+  clamp) and never truncates a name that fits the server's 24-character guarantee; the row wraps
+  too, so a long name sends the badge under it whole. The title is an `h2` a host's reset can
+  reach, so everything a multi-line title depends on is **declared** on `.nc-title` —
+  `text-transform`, `text-align`, `white-space`, `word-break`, `hyphens` — and
+  `demo/index.html`'s `h2` trap carries the first two (not `white-space: nowrap`, which made the
+  demo page itself scroll sideways on a phone). Three limits worth knowing rather than
+  rediscovering: the heading font's subset stops at U+00FF, so a name like "Łukasz" falls back
+  per glyph; an over-long placeholder is cut at the field's edge with no ellipsis —
+  `text-overflow` does nothing for a textarea's placeholder in Chromium; and all of this layout
+  was measured in Chromium only — the clamp is `-webkit-line-clamp` on a flex item, unverified in
+  Safari and Firefox.
 - **Corrected clock for dates, raw clock for durations.** `nowMs()` (`Date.now() +
   serverOffset`) stamps anything that becomes a **date** — the transcript's `at`, the day
   separators, `dayLabel()`'s "today". Anything measuring a **duration** stays on raw
@@ -577,7 +630,9 @@ are shaped exactly like the real envelope. Drive them from the composer:
 island chips — mirroring a real welcome payload; both prompt messages chain into the table above
 rather than the catch-all reply. Only the island row carries a `heading`, on purpose: one page
 load then shows a headed row and a bare one side by side. It also serves the 1.7.0 init pair,
-`idle_hours` and `server_time`. Since server chips **replace** the widget's own pack block, that
+`idle_hours` and `server_time`, and since 2.13.2 the 1.15.0 `assistant` — by default
+`{ name: 'Nesti', … }` with a greeting that says the name, as a server would have written it.
+Since server chips **replace** the widget's own pack block, that
 means the demo never reaches `showPrompts()` or `setLocale`'s pill-repaint branch: exercising
 the fallback means temporarily setting `Mock.init`'s `actions: []`.
 
@@ -585,6 +640,24 @@ the fallback means temporarily setting `Mock.init`'s `actions: []`.
 get a window short enough to actually cross (`?nc-idle=0.005` is 18 seconds, where a real
 server's smallest step is an hour). A harness knob and only ever that: the whole `Mock` object
 is unreachable without `data-mock`, which a production page never sets.
+
+**`?nc-assistant=<mode>` picks the mock init's `assistant`** (contract 1.15.0). With no knob the
+fixture names the assistant "Nesti". The modes:
+
+| Mode | The init carries | Must end as |
+|---|---|---|
+| *(none)* | `assistant: { name: 'Nesti', disclosure }`, greeting says the name | "Nesti" in the title, dialog label, placeholder and launcher label |
+| `none` | no `assistant` key — an older server, or a site with no name | name-free wording in all four; badge and disclaimer still showing |
+| `markup` | a name that would run if parsed (`window.__ncXss`, the `!prefill` sentinel) | shown as text; `window.__ncXss` stays `undefined` |
+| `long` | a 500-character name | capped at 60, wrapped and clamped; ⋯ and ✕ still in the panel |
+| `string` · `array` | `assistant` as a bare string · as an array | no name at all |
+
+The knob is read at **every** init, and that is how a repaint is proven rather than assumed: load
+one mode, reload on another with the conversation still stored (the resume makes no init, so the
+old name stays — before the panel is even opened, which is the boot restore), then press "Start a
+new chat" and watch the title change once. A constant fixture would pass that test without
+repainting anything. The mock's greeting is built from its own constant and never through `tn()`:
+the mock plays the server, which writes the name in before the widget has learned it.
 
 **`?nc-init-429=<seconds>` makes every mock init answer `429` with that `Retry-After`** — the
 other half of the throttle copy, unreachable from the composer because every keyword runs on the
@@ -764,7 +837,9 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
 - Comments explain **why**, not what. The code says what.
 - Comments and identifiers in English. The old codebase mixed Italian and Spanish comments.
 - Keep the section banners in `nest-chatbot.js` — they are the file's table of contents.
-- Anything user-visible goes through `t()` / `tf()`, never a hardcoded string. **The converse is
+- Anything user-visible goes through `t()` / `tf()`, never a hardcoded string — and anything that
+  says who the guest is talking to goes through `tn()`, which is the only place the named and
+  name-free variants are chosen between. **The converse is
   equally a rule and is the half that gets forgotten:** anything **payload**-supplied reaches the DOM
   through `textContent` and is never re-derived from a pack — repainting a tenant's string from our
   own table is inventing a translation they did not write. Which is which, per element, is
@@ -838,4 +913,12 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   `wchat:locale` kept, the unclamped `requestLocale`, the `prefill` preview and the `00` fix — a
   patch. Removing a visible control and two pack keys while every runtime-API method, getter and
   event name stays asks nothing of a host, and the upstream prompt asked for 2.13.1 too, so nothing
-  was overruled. The next release is **2.13.2** unless a host has to act.
+  was overruled.
+  2.13.2 is the 1.15.0 sync (D-090): a fresh packet and a `BUILT_AGAINST` move, the hardcoded
+  assistant name gone from the file, eight pack keys reworded or added in five locales plus
+  `title`, one new stored field, a header that wraps — and no `data-*` attribute, no
+  `window.NestChatbot` member and no `wchat:*` payload touched. A patch, and the upstream prompt
+  asked for 2.13.2 too. What a guest sees does change (the name is the owner's now, and the header
+  can wrap), but a host's `<script>` tag has nothing new to say; the one thing a host is asked to
+  do — add `?v=2.13.2` so a day-old cached copy cannot keep its old name — is about their cache,
+  not about this file's contract. The next release is **2.13.3** unless a host has to act.

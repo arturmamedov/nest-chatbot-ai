@@ -11,6 +11,10 @@
  * data-property (optional): the property name of the page embedding the widget —
  * seeds the conversation so turn-1 answers are scoped to that property.
  *
+ * data-title: the header title until the server names the assistant (contract
+ * 1.15.0), and for as long as the site has set no name. It stays the launcher's
+ * label either way.
+ *
  * ES5-safe. Every guest/LLM string is rendered via textContent / created DOM
  * nodes — NEVER innerHTML — so a hostile reply cannot inject markup (XSS). The
  * API is reached with the public ws_live embed key; the conversation uuid is the
@@ -55,7 +59,12 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.14.0';
+    var BUILT_AGAINST = '1.15.0';
+
+    // Upper bound on each `assistant` string this widget will paint (1.15.0). The
+    // server already guarantees a short name; this only stops a malformed or
+    // hostile value from blowing the header up.
+    var ASSISTANT_TEXT_MAX = 60;
 
     // ---- state ---------------------------------------------------------------
     var conversationUuid = null;
@@ -74,6 +83,10 @@
     // server that does not send it. Persisted with the record, because the resume
     // path never reaches the server to ask again — see storedIdleMs().
     var serverIdleHours = null;
+    // Who the guest is talking to (1.15.0): `{name, disclosure}`, either of which
+    // may be null, or null against a server that sends neither. Persisted with
+    // the record for the idle window's reason — see cleanAssistant().
+    var assistant = null;
     var els = {};
 
     // ---- localStorage helpers -----------------------------------------------
@@ -110,9 +123,40 @@
                 // in `serverIdleHours` — so a resumed session that did not restore it
                 // would write `null` on its first turn and silently drop the window
                 // back to the 24h fallback on the NEXT boot.
-                idleHours: (typeof parsed.idleHours === 'number' && parsed.idleHours > 0) ? parsed.idleHours : null
+                idleHours: (typeof parsed.idleHours === 'number' && parsed.idleHours > 0) ? parsed.idleHours : null,
+                // Re-validated on the way out, like everything else in the record:
+                // localStorage is as untrusted as the wire.
+                assistant: cleanAssistant(parsed.assistant)
             };
         } catch (e) { return null; }
+    }
+
+    // The init `assistant` object (contract 1.15.0), reduced to the two strings
+    // this widget shows: `name`, the site owner's display name for the assistant
+    // (absent when they set none), and `disclosure`, the server's own statement
+    // that this is an AI (always sent, in the guest's language).
+    //
+    // It has the idle window's problem, so it gets the idle window's answer:
+    // build() paints the header at BOOT and the resume branch never calls init,
+    // so a name read only off the init response would be missing on exactly the
+    // visits that return to a conversation. It is therefore stored with the
+    // record and repainted from it. It is deliberately NOT cached any longer than
+    // that: after an owner renames the assistant, a longer-lived cache would
+    // flash the old name over a conversation the new one greets.
+    //
+    // Absence is normal in both directions — an older server sends no object and
+    // an older record has no field — and both leave the header as build() drew it.
+    function cleanAssistant(raw) {
+        if (!raw || typeof raw !== 'object') { return null; }
+        var name = cleanAssistantText(raw.name);
+        var disclosure = cleanAssistantText(raw.disclosure);
+        return (name || disclosure) ? { name: name, disclosure: disclosure } : null;
+    }
+
+    function cleanAssistantText(value) {
+        if (typeof value !== 'string') { return null; }
+        var text = value.replace(/\s+/g, ' ').trim();
+        return text ? text.slice(0, ASSISTANT_TEXT_MAX) : null;
     }
 
     // The idle window to judge a STORED record by (contract 1.7.0 — O-45).
@@ -140,7 +184,7 @@
         try {
             window.localStorage.setItem(STORE_KEY, JSON.stringify({
                 uuid: uuid, ts: Date.now(), greeting: introGreeting, actions: introActions,
-                idleHours: serverIdleHours
+                idleHours: serverIdleHours, assistant: assistant
             }));
         } catch (e) {}
     }
@@ -227,7 +271,17 @@
             '.wsc-open{display:flex}',
             '.wsc-head{padding:14px 16px;color:#fff;font-weight:600;font-size:15px;display:flex;',
             'align-items:center;justify-content:space-between;background:' + color + '}',
-            '.wsc-close{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1}',
+            // 1.15.0 — the assistant's name and the AI disclosure beside it. A long
+            // title WRAPS, as a long `data-title` always has. The disclosure is
+            // capped at half the heading, which the server's own strings never
+            // reach: the cap is there so a malformed one cannot push the name out
+            // or cover the close button.
+            '.wsc-heading{display:flex;align-items:center;flex:1 1 auto;min-width:0;margin-right:10px}',
+            '.wsc-title{flex:0 1 auto;min-width:0;overflow-wrap:anywhere}',
+            '.wsc-ai{flex:0 0 auto;max-width:50%;overflow:hidden;text-overflow:ellipsis;margin-left:8px;',
+            'padding:1px 7px;border:1px solid rgba(255,255,255,.6);border-radius:999px;font-size:11px;',
+            'font-weight:500;white-space:nowrap}',
+            '.wsc-close{flex:none;background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1}',
             '.wsc-body{flex:1;overflow-y:auto;padding:14px;background:#f6f7f9}',
             '.wsc-msg{max-width:80%;margin:6px 0;padding:9px 12px;border-radius:14px;font-size:14px;',
             'line-height:1.4;word-wrap:break-word;white-space:pre-wrap}',
@@ -296,7 +350,15 @@
         panel.setAttribute('aria-label', title);
 
         var head = el('div', 'wsc-head');
-        head.appendChild(el('span', null, title));
+        var heading = el('span', 'wsc-heading');
+        var titleEl = el('span', 'wsc-title', title);
+        // Empty, and hidden, until an init or a stored record says who the guest
+        // is talking to (1.15.0) — see applyAssistant().
+        var ai = el('span', 'wsc-ai');
+        ai.style.display = 'none';
+        heading.appendChild(titleEl);
+        heading.appendChild(ai);
+        head.appendChild(heading);
         var close = el('button', 'wsc-close', '×'); // ×
         close.setAttribute('type', 'button');
         close.setAttribute('aria-label', 'Close chat');
@@ -322,7 +384,7 @@
         document.body.appendChild(launcher);
         document.body.appendChild(panel);
 
-        els = { launcher: launcher, panel: panel, body: body, input: input, send: send };
+        els = { launcher: launcher, panel: panel, body: body, input: input, send: send, title: titleEl, ai: ai };
 
         launcher.addEventListener('click', toggle);
         close.addEventListener('click', toggle);
@@ -474,8 +536,10 @@
     //
     // 1.14.0 `prefill` (D-084): the message a handoff pre-writes for the guest's
     // WhatsApp or email. The contract's MUST: a renderer that appends it shows it
-    // before the guest leaves the page -- here, a preview under the buttons,
-    // captioned by the server-localized `hint`. The WhatsApp and email links are
+    // before the guest leaves the page -- here, a preview ABOVE the buttons,
+    // captioned by the server-localized `hint`, so it is on screen before any
+    // button is and a screen reader reaches the caption first (nest-chatbot-ai
+    // 2.13.1 found the reference had it under them). The WhatsApp and email links are
     // composed from the preview's CURRENT value when tapped, not once at render.
     // So letting the guest edit the message (a MAY, deferred by the owner) means
     // removing the `readonly` attribute below and nothing else. An edited message
@@ -490,6 +554,8 @@
             preview.setAttribute('rows', '4');
             preview.setAttribute('dir', 'auto'); // a quote may be right-to-left
             preview.setAttribute('aria-label', typeof prefill.hint === 'string' && prefill.hint ? prefill.hint : 'Message to send');
+            if (typeof prefill.hint === 'string' && prefill.hint) { els.body.appendChild(el('div', 'wsc-prefill-hint', prefill.hint)); }
+            els.body.appendChild(preview);
         }
 
         if (action.phone) { channelLink('Call ' + action.phone, 'tel:' + telNumber(action.phone)); }
@@ -508,12 +574,6 @@
                 });
             }
         }
-
-        if (preview) {
-            if (typeof prefill.hint === 'string' && prefill.hint) { els.body.appendChild(el('div', 'wsc-prefill-hint', prefill.hint)); }
-            els.body.appendChild(preview);
-            scrollDown();
-        }
     }
 
     // Rebuild a link's href from the preview at tap time (and once now, so a
@@ -526,9 +586,11 @@
 
     // A dialable number: `+` and the digits when the value is international
     // (`+34 …` or `0034 …`), else the bare digits. `tel:` needs the `+` to dial
-    // abroad; `wa.me` takes the same digits without it.
+    // abroad; `wa.me` takes the same digits without it. The admin form's own
+    // separators go first, so `(+34) 922 …` -- which that form accepts -- still
+    // reads as international.
     function telNumber(value) {
-        var raw = String(value || '').replace(/^\s+/, '');
+        var raw = String(value || '').replace(/[\s.\-()]/g, '');
         var d = digits(raw);
         if (raw.charAt(0) === '+') { return '+' + d; }
         if (raw.slice(0, 2) === '00') { return '+' + d.slice(2); }
@@ -786,6 +848,25 @@
         return a;
     }
 
+    // Paints the header from `assistant` (contract 1.15.0). Called wherever a
+    // conversation is established — after init, on resume, after a restart —
+    // because build() ran at boot, before any of them had a name.
+    //
+    // The name takes `data-title`'s place in the header. The disclosure sits
+    // beside it and does NOT wait for a name: a site that named nothing is still
+    // an AI. Both go in through textContent / setAttribute, never innerHTML — the
+    // name is tenant-authored. With neither, the header is what build() drew.
+    function applyAssistant() {
+        var name = (assistant && assistant.name) || null;
+        var disclosure = (assistant && assistant.disclosure) || null;
+        var heading = name || title;
+
+        els.title.textContent = heading;
+        els.ai.textContent = disclosure || '';
+        els.ai.style.display = disclosure ? '' : 'none';
+        els.panel.setAttribute('aria-label', disclosure ? heading + ' — ' + disclosure : heading);
+    }
+
     // ---- flow ----------------------------------------------------------------
     function toggle() {
         if (removed) { return; }
@@ -808,6 +889,9 @@
             // the server, so the record is the only source for the window, and the
             // first turn of this session is about to write the record back.
             serverIdleHours = stored.idleHours;
+            // Likewise (1.15.0): the header was painted at boot with no name.
+            assistant = stored.assistant;
+            applyAssistant();
             // Paint the welcome only onto an empty transcript. This branch is
             // reached from panel-open, but submit() draws the guest bubble BEFORE
             // it calls us, and a welcome block under a message the guest has
@@ -850,6 +934,11 @@
             serverIdleHours = (typeof data.idle_hours === 'number' && isFinite(data.idle_hours) && data.idle_hours > 0)
                 ? data.idle_hours
                 : null;
+            // 1.15.0. Absent on an older server, which leaves it null and the
+            // header on `data-title`. Applied even when `silent`: the header names
+            // the conversation the guest is now in, it is not part of the welcome.
+            assistant = cleanAssistant(data.assistant);
+            applyAssistant();
             writeStore(conversationUuid);
             checkContractVersion(data.contract_version);
             if (!silent) {

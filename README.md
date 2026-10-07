@@ -1,6 +1,6 @@
 # Nest Chatbot AI
 
-Germán, the Nests Hostels AI assistant, as a drop-in chat bubble for any website.
+The Nests Hostels AI assistant, as a drop-in chat bubble for any website.
 
 Vanilla JavaScript. No dependencies, no build step, no framework. One script tag.
 
@@ -50,6 +50,20 @@ inside it either.
 
 The key must be **public**-scoped — never embed a `full`-scope key or any provider key.
 
+### The assistant's name
+
+There is no attribute for it, on purpose. The name in the header, in the composer's hint and in
+the launcher's label is the one the site owner sets in the wSuite panel; it arrives with each new
+conversation, so renaming the assistant needs no change to your page. A conversation already
+under way keeps the name it started with, and the new one shows from the visitor's next
+conversation. With no name set, the widget says "AI assistant" instead. Named or not, it always
+says it is an AI: the label beside the name and the line under the composer are not optional and
+no setting removes them.
+
+One thing on your side: if your server lets browsers cache the script for a long time, add a
+version query to the tag when you update it (`…/nest-chatbot.js?v=2.13.2`). Releases up to 2.13.1
+carried a built-in name, and a browser still holding one of those shows it until its copy expires.
+
 ### `data-back-button`, and when to turn it off
 
 With the panel open, the device Back button closes it rather than navigating away from your
@@ -91,7 +105,7 @@ loads after it — or use `html #nest-chatbot { … }` and stop caring about ord
 ### Fonts
 
 By default the widget brings its own Poppins and Montserrat (37KB of WOFF2, served from the same
-origin as the script — never Google Fonts), so Germán looks the same on every site he lands on.
+origin as the script — never Google Fonts), so the widget looks the same on every site it lands on.
 
 Those three files are fetched when the page loads, not when the chat opens — the panel exists
 from the start, just hidden. They never delay a paint (`font-display: swap`), but they are 45KB
@@ -267,6 +281,8 @@ NestChatbot.state;
 ## What the visitor gets
 
 - A branded launcher that expands into a chat panel, full-screen on phones.
+- An assistant with the name you gave it in the wSuite panel, always shown beside an "AI
+  assistant" label.
 - Replies typed out character by character, with a thinking indicator while the API works.
 - Booking buttons, contact links (phone, WhatsApp, email) and live availability — beds and
   private rooms grouped, three of each with the rest one tap away, and what the whole party pays

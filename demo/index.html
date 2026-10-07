@@ -72,8 +72,19 @@
            that is the trap working, not a bug. If the widget's header title ever
            turns serif, or a blue ring appears inside the composer or the
            pre-written message's preview, or a CTA pill picks up an underline, the
-           widget has stopped declaring something. */
-        h2 { font-family: Georgia, serif; line-height: 4.5rem; letter-spacing: 0.32px; }
+           widget has stopped declaring something.
+
+           text-transform and text-align are not from that theme. They are the
+           counterparts of what the widget's title depends on since 2.13.2,
+           when it became the site owner's text (the assistant's name) and
+           could wrap: if that name ever shows in capitals, or a long one
+           sits centred in the header, the title has stopped declaring one of
+           them. The title declares white-space too, and that one has NO trap
+           here on purpose — a `white-space: nowrap` on this page's own long
+           headings makes the page scroll sideways on a phone, which breaks
+           the thing the page is for. */
+        h2 { font-family: Georgia, serif; line-height: 4.5rem; letter-spacing: 0.32px;
+             text-transform: uppercase; text-align: center; }
         textarea:focus { box-shadow: 0 0 0 1px #2563eb; outline: 2px solid transparent; }
         a { text-decoration: underline; color: #b1560f; }
 
