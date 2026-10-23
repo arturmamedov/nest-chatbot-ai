@@ -5,6 +5,26 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.13.3 — 2026-10-23
+
+**Contract sync: `BUILT_AGAINST` 1.15.0 → 1.15.1 (D-106), plus a copy change the owner asked for.**
+A patch. Packet: `docs @ chatbot-contract-v1.15.1 (5973478) · widget @ 5973478`, delivered by
+`make-packet.sh`; the three vendored files byte-match the tag.
+
+- **1.15.1 asks nothing of this widget.** It is a wording PATCH. A site can now run a dated
+  *welcome offer* that takes the init card's place while it runs, so the init `promo_card` and a
+  booking-turn `promo_card` may be two different promos with different `id`s. `renderPromoCard()`
+  draws every `promo_card` it is given and caps nothing by type, so both still render, each in its
+  place. No renderer line moved.
+- **The built-in greeting gains "· 1 Community"**, matching the server greeting and the website's
+  hero, in all five locales and in both `greeting` and `greetingNamed`: "… 14 hostels · 3 islands ·
+  1 Nest Pass · 1 Community." (es "· 1 Comunidad", it "· 1 Comunità", de "· 1 Community", fr
+  "· 1 Communauté"). A guest sees this copy only when the server's greeting is unavailable: a
+  returning guest resuming within the idle window, or a failed init.
+- The demo's mock init reports `contract_version: '1.15.1'`.
+- **Deploy:** upload `nest-chatbot.js` to the WordPress theme and set the embed tag's query to
+  `?v=2.13.3`. The theme serves the file with a one-day cache.
+
 ## 2.13.2 — 2026-10-07
 
 **Contract sync: `BUILT_AGAINST` 1.14.0 → 1.15.0 (D-090).** A **patch** by the rule `64ccaa2` set,

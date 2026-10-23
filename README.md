@@ -61,7 +61,7 @@ says it is an AI: the label beside the name and the line under the composer are 
 no setting removes them.
 
 One thing on your side: if your server lets browsers cache the script for a long time, add a
-version query to the tag when you update it (`…/nest-chatbot.js?v=2.13.2`). Releases up to 2.13.1
+version query to the tag when you update it (`…/nest-chatbot.js?v=2.13.3`). Releases up to 2.13.1
 carried a built-in name, and a browser still holding one of those shows it until its copy expires.
 
 ### `data-back-button`, and when to turn it off

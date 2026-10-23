@@ -59,7 +59,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.15.0';
+    var BUILT_AGAINST = '1.15.1';
 
     // Upper bound on each `assistant` string this widget will paint (1.15.0). The
     // server already guarantees a short name; this only stops a malformed or

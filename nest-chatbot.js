@@ -24,9 +24,9 @@
  *   the mailto: subject/body query value, composed from what the preview shows at
  *   tap time. It never enters a wchat:* payload or a log() line.
  *
- * Built against response contract 1.15.0 (BUILT_AGAINST, api section), in
- * lockstep with the packet vendored in docs/wsuite/ — release 2.13.2 is the sync
- * that adopted it (D-090). BUILT_AGAINST records what this code implements, not
+ * Built against response contract 1.15.1 (BUILT_AGAINST, api section), in
+ * lockstep with the packet vendored in docs/wsuite/ — release 2.13.3 is the sync
+ * that adopted it (D-106, a wording PATCH; 1.15.0 came in with 2.13.2, D-090). BUILT_AGAINST records what this code implements, not
  * what the docs say. The server reports its live contract_version at init; the
  * widget warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
@@ -35,7 +35,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.13.2';
+    var VERSION = '2.13.3';
 
     /* =========================================================== config ===== */
 
@@ -242,8 +242,8 @@
             title: 'AI assistant',
             placeholder: 'Ask anything…',
             placeholderNamed: 'Ask %s anything…',
-            greeting: 'Hi! I\'m the Nests AI assistant. Your travel community in the Canaries & Ibiza — 14 hostels · 3 islands · 1 Nest Pass.',
-            greetingNamed: 'Hi! I\'m %s, the Nests AI assistant. Your travel community in the Canaries & Ibiza — 14 hostels · 3 islands · 1 Nest Pass.',
+            greeting: 'Hi! I\'m the Nests AI assistant. Your travel community in the Canaries & Ibiza — 14 hostels · 3 islands · 1 Nest Pass · 1 Community.',
+            greetingNamed: 'Hi! I\'m %s, the Nests AI assistant. Your travel community in the Canaries & Ibiza — 14 hostels · 3 islands · 1 Nest Pass · 1 Community.',
             open: 'Open the Nests AI assistant', close: 'Minimise the chat',
             openNamed: 'Open %s, the Nests AI assistant',
             openUnread: 'Open the chat — 1 new message',
@@ -300,8 +300,8 @@
             title: 'Asistente IA',
             placeholder: 'Pregunta lo que quieras…',
             placeholderNamed: 'Pregunta lo que quieras a %s…',
-            greeting: '¡Hola! Soy el asistente de IA de Nests. Tu comunidad viajera en Canarias e Ibiza — 14 hostels · 3 islas · 1 Nest Pass.',
-            greetingNamed: '¡Hola! Soy %s, el asistente de IA de Nests. Tu comunidad viajera en Canarias e Ibiza — 14 hostels · 3 islas · 1 Nest Pass.',
+            greeting: '¡Hola! Soy el asistente de IA de Nests. Tu comunidad viajera en Canarias e Ibiza — 14 hostels · 3 islas · 1 Nest Pass · 1 Comunidad.',
+            greetingNamed: '¡Hola! Soy %s, el asistente de IA de Nests. Tu comunidad viajera en Canarias e Ibiza — 14 hostels · 3 islas · 1 Nest Pass · 1 Comunidad.',
             open: 'Abrir el asistente IA de Nests', close: 'Minimizar el chat',
             openNamed: 'Abrir %s, el asistente IA de Nests',
             openUnread: 'Abrir el chat — 1 mensaje nuevo',
@@ -340,8 +340,8 @@
             title: 'Assistente IA',
             placeholder: 'Chiedi qualsiasi cosa…',
             placeholderNamed: 'Chiedi qualsiasi cosa a %s…',
-            greeting: 'Ciao! Sono l\'assistente IA di Nests. La tua community di viaggio tra Canarie e Ibiza — 14 hostel · 3 isole · 1 Nest Pass.',
-            greetingNamed: 'Ciao! Sono %s, l\'assistente IA di Nests. La tua community di viaggio tra Canarie e Ibiza — 14 hostel · 3 isole · 1 Nest Pass.',
+            greeting: 'Ciao! Sono l\'assistente IA di Nests. La tua community di viaggio tra Canarie e Ibiza — 14 hostel · 3 isole · 1 Nest Pass · 1 Comunità.',
+            greetingNamed: 'Ciao! Sono %s, l\'assistente IA di Nests. La tua community di viaggio tra Canarie e Ibiza — 14 hostel · 3 isole · 1 Nest Pass · 1 Comunità.',
             open: 'Apri l\'assistente IA di Nests', close: 'Riduci la chat',
             openNamed: 'Apri %s, l\'assistente IA di Nests',
             openUnread: 'Apri la chat — 1 nuovo messaggio',
@@ -382,8 +382,8 @@
             title: 'KI-Assistent',
             placeholder: 'Frag einfach alles…',
             placeholderNamed: 'Frag %s einfach alles…',
-            greeting: 'Hi! Ich bin der KI-Assistent von Nests. Deine Reise-Community auf den Kanaren & Ibiza — 14 Hostels · 3 Inseln · 1 Nest Pass.',
-            greetingNamed: 'Hi! Ich bin %s, der KI-Assistent von Nests. Deine Reise-Community auf den Kanaren & Ibiza — 14 Hostels · 3 Inseln · 1 Nest Pass.',
+            greeting: 'Hi! Ich bin der KI-Assistent von Nests. Deine Reise-Community auf den Kanaren & Ibiza — 14 Hostels · 3 Inseln · 1 Nest Pass · 1 Community.',
+            greetingNamed: 'Hi! Ich bin %s, der KI-Assistent von Nests. Deine Reise-Community auf den Kanaren & Ibiza — 14 Hostels · 3 Inseln · 1 Nest Pass · 1 Community.',
             open: 'Den KI-Assistenten von Nests öffnen', close: 'Chat minimieren',
             openNamed: '%s öffnen, den KI-Assistenten von Nests',
             openUnread: 'Chat öffnen — 1 neue Nachricht',
@@ -422,8 +422,8 @@
             title: 'Assistant IA',
             placeholder: 'Demandez-moi tout…',
             placeholderNamed: 'Demandez tout à %s…',
-            greeting: 'Salut ! Je suis l\'assistant IA de Nests. Ta communauté de voyage aux Canaries et à Ibiza — 14 hostels · 3 îles · 1 Nest Pass.',
-            greetingNamed: 'Salut ! Je suis %s, l\'assistant IA de Nests. Ta communauté de voyage aux Canaries et à Ibiza — 14 hostels · 3 îles · 1 Nest Pass.',
+            greeting: 'Salut ! Je suis l\'assistant IA de Nests. Ta communauté de voyage aux Canaries et à Ibiza — 14 hostels · 3 îles · 1 Nest Pass · 1 Communauté.',
+            greetingNamed: 'Salut ! Je suis %s, l\'assistant IA de Nests. Ta communauté de voyage aux Canaries et à Ibiza — 14 hostels · 3 îles · 1 Nest Pass · 1 Communauté.',
             open: 'Ouvrir l\'assistant IA de Nests', close: 'Réduire le chat',
             openNamed: 'Ouvrir %s, l\'assistant IA de Nests',
             openUnread: 'Ouvrir le chat — 1 nouveau message',
@@ -1050,7 +1050,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.15.0';
+    var BUILT_AGAINST = '1.15.1';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -1497,7 +1497,7 @@
                     // what a correct client clock should compute.
                     idle_hours: mockIdleHours(),
                     server_time: new Date().toISOString(),
-                    contract_version: '1.15.0'
+                    contract_version: '1.15.1'
                 }), 700);
             },
 

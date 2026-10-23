@@ -130,7 +130,7 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.15.0 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.15.1 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
@@ -141,12 +141,12 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 `BUILT_AGAINST` (api section) moves **only** during a sync — it is a claim about what this
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
-rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-10-07 as
-`docs @ chatbot-contract-v1.15.0 (7f032d2) · widget @ 7f032d2` — the widget SHA is part of the
+rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-10-23 as
+`docs @ chatbot-contract-v1.15.1 (5973478) · widget @ 5973478` — the widget SHA is part of the
 packet's identity, because the reference renderer legitimately moves between contract tags
-(here the two halves share a sha: 1.15.0 was a real renderer change in the tag commit, as 1.14.0
-and 1.10.0 were; at 1.12.0 they differed, `43101a6` against `cb8005b`).
-`BUILT_AGAINST` is `'1.15.0'`, in lockstep since release 2.13.2 adopted D-090.
+(here the two halves share a sha because the 1.15.1 bump commit moved the reference's
+`BUILT_AGAINST` too, as 1.15.0, 1.14.0 and 1.10.0 did; at 1.12.0 they differed, `43101a6` against `cb8005b`).
+`BUILT_AGAINST` is `'1.15.1'`, in lockstep since release 2.13.3 adopted D-106.
 
 **The widget is one step AHEAD of the deployment, and that is the quiet direction.** Measured
 2026-10-07 20:54 UTC off a real init `201` against `nest-mind.laravel.cloud`: `contract_version:
