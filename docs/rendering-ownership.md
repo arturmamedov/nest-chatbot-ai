@@ -1,6 +1,6 @@
 # Rendering ownership — what the server supplies, what the widget composes
 
-**About:** the Nest Chatbot drop-in widget (`nest-chatbot.js`), current as of release 2.13.2.
+**About:** the Nest Chatbot drop-in widget (`nest-chatbot.js`), current as of release 2.13.4.
 **For:** anyone asking "who writes this string?" — before changing a renderer, adding an element
 type, or deciding whether something belongs in a pack or on the wire.
 
@@ -9,7 +9,7 @@ This is a **standing reference**, not a proposal and not a release record. The t
 wholesale at each sync), and `docs/proposals/` holds design records addressed to the platform team
 and anchored to the release that produced them. This file is ours, current, and about this renderer.
 
-It answers one question the contract can only answer per-field across its nine element sections,
+It answers one question the contract can only answer per-field across its ten element sections,
 and that the code can only answer by being read: **for each element type, which of the things a
 guest sees comes down the wire, and which does the widget make up?**
 
@@ -30,6 +30,11 @@ guest sees comes down the wire, and which does the widget make up?**
 > Since 1.15.0 the **server** also says **who the guest is talking to**: the init's
 > `assistant.name`, typed by the site owner. It is tenant-authored content like a promo title, so
 > it is the server's — and until 2.13.2 it was the one tenant string this widget made up.
+>
+> Since 1.16.0 the **server** also sends **a form**, and every string a guest reads in it — title,
+> intro, labels, options, placeholders, the submit label and the `submit_message` template — is
+> the server's. The widget composes structure, ids, native controls and the filled message, and
+> adds **no** pack string; the validation bubbles are the browser's own, in the browser's language.
 
 Everything in the table below follows from that, including the case that looks inconsistent at first
 glance — `availability` sends no display text at all, while `property_cards` sends almost nothing
@@ -54,13 +59,14 @@ on an English figure.
 | Element | The server supplies | The widget composes |
 |---|---|---|
 | ***(init)* `assistant`** — not an element; it rides the init `201` once per conversation | `name` — the assistant's display name, **tenant-authored and not localized** (a name is the same in every language), plain text, at most 24 characters, and **omitted** when the site set none. `disclosure` — the server's own "AI assistant" label, localized, always sent. And `greeting`, which arrives finished: where a site's greeting says the name, the server has already written it in. | **Never a name.** With one: the sentence around it — `placeholderNamed`, `openNamed`, `openUnreadNamed`, and `greetingNamed` only where the server sent no greeting — and the role in the dialog label (`name — t('assistantRole')`). Without one: the name-free strings under the same four keys and `t('title')`, the role, as the header title. In both cases the disclosure itself: the `aiAssistant` badge, `t('disclaimer')` and `assistantRole` come from our own pack — `disclosure` is ignored, being byte-identical in all five locales, so that it can follow `setLocale()`. |
-| **`property_cards`** | `name`, `location`, `badge` — raw catalog values, **not** localized. `cta_label` and `more.label` — **localized server-side**. `image`, `url`, and `price_from` (`amount`, `currency`, `period`, `basis`) as data. `total` as an int. | The price *number*, formatted by `Intl.NumberFormat` in the guest's locale (`cardPrice()`); `t('priceFrom')`'s wrapper around it; the `period`/`basis` suffix (`/night`, `per person`); `t('book')` **only** when `cta_label` is absent; `tf('showingOf', n, total)` when there is no `more`; and the carousel's a11y strings (`t('carousel')`, `t('properties')`, the arrow labels). |
+| **`property_cards`** | `name`, `location`, `badge` — raw catalog values, **not** localized. `cta_label`, `more.label` and, since 1.16.0, `reason` ("Fully booked for these dates") — **localized server-side**. `image`, `url`, and `price_from` (`amount`, `currency`, `period`, `basis`) as data. `total` as an int. Since 1.16.0: `stay_total` (`amount`, `currency`, `basis?`) as data, on a stay result only, and the element's `ordering` as a bare enum (`catalog` \| `cheapest` \| `ranked`). | The price *number*, formatted by `Intl.NumberFormat` in the guest's locale (`cardPrice()`); `t('priceFrom')`'s wrapper around it; the `period`/`basis` suffix (`/night`, `per person`); `t('book')` **only** when `cta_label` is absent; `tf('showingOf', n, total)` when there is no `more`; and the carousel's a11y strings (`t('carousel')`, `t('properties')`, the arrow labels). Since 1.16.0: the stay total's words — `tf('stayTotal', '<amount> <currency>')` ("60.00 EUR total"), the figure **verbatim** and never computed from `price_from`, labelled by the availability card's own `t('bedsHeading')` / `t('roomsHeading')` for its `basis` (`cardStay()`, `stayText()`); and the order caption above a rail of two or more, `t('orderCheapest')` / `t('orderRanked')`, **only** for `cheapest` / `ranked` — never for `catalog` or an absent `ordering`, which is not a ranking (`orderText()`). Never a re-sort. |
 | **`promo_card`** | Everything displayed: `title`, `body`, `cta.label` — tenant-authored, resolved per guest locale **all-or-nothing**. Plus `image`, `cta.url`, `style`, `locale`. | **Nothing.** Not one pack string. The widget adds only the `lang` attribute (from `locale`), the `role="region"` named by the payload's own `title`, and layout. A card missing `title`, `body`, `cta.label` or a usable `cta.url` is dropped rather than patched with a default. |
-| **`quick_replies`** | Chip `label` and `heading` — tenant-authored, server-localized. Plus `id`, `locale`. | Only the row's `aria-label` fallback, `t('quickReplies')`, and **only** when there is no `heading`. Never a visible label: substituting our own line over a server row is explicitly forbidden by the contract. |
-| **`link_button`** | `label`, localized server-side. Plus `url` and the `style` hint. | Nothing. The `style` hint is honoured, not composed. |
+| **`quick_replies`** | Chip `label` and `heading` — tenant-authored, server-localized. Plus `id`, `locale` — since 1.16.1 (D-114) any two-letter language a tenant row was translated into (`uk`), taken as given into `lang`, never checked against our five packs. Since 1.16.0 an item may also carry `key` (never displayed — sent back as `action {type:'reply', payload:{key}}` beside the chip's `message`), `image` (an image source, `http`/`https` only) and `image_alt` (what the picture shows). | Only the row's `aria-label` fallback, `t('quickReplies')`, and **only** when there is no `heading`. Never a visible label: substituting our own line over a server row is explicitly forbidden by the contract. A chip `image` becomes a picture tile above the label, `alt` = `image_alt` or `""` (decorative); a picture that fails `safeHttpUrl()` is dropped and the chip kept. |
+| **`link_button`** | `label`, localized server-side. Plus `url`, the `style` hint and, since 1.16.0, `id` (`book` \| `website` \| `directions`). | Nothing. The `style` hint is honoured, not composed, and `id` is never displayed: it is read only into `wchat:action`'s `cta` (`linkCta()`), `null` for an id this build does not know. |
 | **`booking_link`** | `url` only — **no label on the wire at all**. Plus the optional `summary` object. | `t('book')`. |
 | **`contact_channels`** | The raw `phone` / `whatsapp` / `email` **values** and, since 1.14.0, an optional `prefill`: `text` (a server-localized message in the guest's voice around their own words, verbatim), `subject`, and `hint` (a server-localized caption). No labels, no hrefs. | The labels (`tf('call', …)`, `t('whatsapp')`, `tf('email', …)`), the preview's caption and accessible name (`t('prefillCaption')` — `hint` is ignored; the pack carries the server's own translations), **and** every href: `tel:` (separators stripped, then `+` kept, a leading `00` turned into `+`, bare digits otherwise), `https://wa.me/<digits>` (neither `+` nor `00`), `mailto:` — constructed here from the values, never taken verbatim, and since 1.14.0 with `?text=` / `?subject=&body=` appended percent-encoded from what the preview shows at tap time. `prefill.text` itself is payload: the read-only textarea's value, above the links, never repainted, never in an event or a log. |
 | **`availability`** | **No display text.** `room` (the PMS's raw vendor name), `price` / `total` / `currency` as decimal strings and an ISO 4217 code, `basis` as a bare enum (`per_person` \| `per_unit`), `units` as an int, `url`, and the `available` boolean. | **Every word.** The group headings ("Beds in shared rooms" / "Private rooms"), the count nouns ("2 beds"), the unit labels ("per bed"), the fold button ("Show 3 more" / "Show less"), `t('noAvailability')`, and `t('book')` on the trailing CTA. |
+| **`form`** *(since 1.16.0)* | **Every displayed string**: `title`, `intro`, each field's `label`, a `date_range`'s `labels.from` / `labels.to`, a select's option `label`s, `placeholder`s, a `consent` field's `link.label`, the `submit_label` — all localized server-side — and the `submit_message` template. Plus as data: `id`, each field's `name`, `kind`, `required`, `min` / `max`, pre-filled `value`, a select's option `key`s and the consent `link.url`. | **No pack string.** Structure and native controls — a `<form>` named by its `title` (else `submit_label`), a `<label for>` per input with `nc-f-*` ids, two date inputs whose ends are named by `labels` or else by the field's own `label` (never by words this widget would invent), a select's blank first option, `dir="auto"` on free text — and the guest's message: `submit_message` with each `{name}` filled by the chosen option's **label**, a range's `from → to`, or the value typed, shown as their bubble. The validation messages are the browser's, in the browser's language. A form this build cannot draw is dropped whole rather than patched. |
 | **`conversation_ended`** | Nothing displayed — it is a state signal. | `t('newChat')` and the restart affordance around it. |
 | **`async_result`** | Nothing displayed — `url` only. | Nothing; the interim reply is ordinary `reply` text. |
 
@@ -94,6 +100,11 @@ That is load-bearing beyond tidiness: the two Book-button dedupes are **raw-stri
 they work only because the server composes both sides from the same inputs. Normalise either side
 and the dedupe is what breaks.
 
+Since 1.16.0 two more payload strings fall under the same `safeHttpUrl()` rule without being booking
+links: a chip's `image`, which is only ever an image source, and a form `consent` field's
+`link.url`, the privacy notice beside the box. Either one that fails the test is dropped and its
+chip or checkbox kept.
+
 The one place the widget *does* build a href is `contact_channels` — and there it must, because the
 payload carries a phone number, not a link, and since 1.14.0 a pre-written message sent deliberately
 as text, never as a URL. The message enters the link only percent-encoded, as a query value, from
@@ -106,16 +117,19 @@ host's call since 2.13.1; there is no on-screen switcher:
 
 - **Payload text is frozen** once rendered. Repainting a server string from a pack would be
   inventing a translation the tenant did not write. So `promo_card` copy, `quick_replies` labels and
-  headings, `link_button` labels, card names and badges, and the `prefill` preview's text all stay
-  as they arrived. So does the assistant's **name** (1.15.0): `setLocale('es')` turns "Ask Nesti
+  headings, `link_button` labels, card names, badges and (1.16.0) reasons, every string in a `form`,
+  and the `prefill` preview's text all stay as they arrived. So does the assistant's **name** (1.15.0): `setLocale('es')` turns "Ask Nesti
   anything…" into "Pregunta lo que quieras a Nesti…", and the only thing that did not move is the
   name. `paintAssistant()` is that repaint — one function for the header title, the dialog label,
   the placeholder and the launcher label, reading the name it was given and the pack it is in.
 - **Widget text re-derives** on every switch, because re-deriving is the only way it can be right —
-  since 2.13.1 that includes the `prefill` caption and the preview's accessible name. (Not yet
+  since 2.13.1 that includes the `prefill` caption and the preview's accessible name, and since
+  2.13.4 a card's stay-total line and the rail's order caption, re-read from the `data-nc-each` /
+  `data-nc-basis` / `data-nc-order` stamps on `.nc-card-stay` and `.nc-card-order`. (Not yet
   everything: some widget text is painted from packs at render and never repainted — among it the
   `contact_channels` link labels, `t('book')` and `linkButton()`'s `t('open_link')` fallback,
-  `t('noAvailability')`, a card's price line (`t('priceFrom')` and its period/basis suffixes), the
+  `t('noAvailability')`, a card's price line (`t('priceFrom')` and its period/basis suffixes — so
+  on a 1.16.0 stay result the from-price stays in the old language while the total beside it moves), the
   rail's `tf('showingOf', …)` count line, and the carousel's and chip row's accessible names. A known
   gap, not a rule.)
 
@@ -151,7 +165,9 @@ two ever disagree:
 
 - **Server side** — `docs/wsuite/response-contract.md`, the per-element field tables and their
   **Localized** column (§ `link_button`, § `contact_channels`, § `booking_link`, § `availability`,
-  § `property_cards`, § `promo_card`, § `quick_replies`, § `conversation_ended`). For the init
+  § `property_cards` with "Reading `stay_total`", § `promo_card`, § `quick_replies` with "Keyed chips
+  and images", § `form` with "Submitting a form", § `conversation_ended`), and for the `action` a
+  keyed chip or a submit sends back, `docs/wsuite/integration-guide.md` §3.2. For the init
   `assistant`: `docs/wsuite/integration-guide.md` §3.1 ("`assistant` — the assistant's name, and
   the AI disclosure") and the `assistant` paragraphs of the contract's Security rule and
   Accessibility sections.
@@ -161,6 +177,8 @@ two ever disagree:
   label), `propertyCard()`, `cardTitle()`, `cardPrice()`, `renderPropertyCards()`,
   `renderPromoCard()`, `renderQuickReplies()`, `renderChannels()` / `channelLink()` (with
   `telNumber()`, `prefillOf()` and `composeOnTap()` since 2.13.1), `renderAvailability()` and its
-  helpers, and `linkButton()`.
+  helpers, and `linkButton()`. Since 2.13.4: `cardStay()` / `stayText()` / `orderText()`,
+  `chipKey()` / `makeChipHandler()`, `linkCta()`, and the form — `renderForm()`, `formField()` with
+  `textField()` / `selectField()` / `rangeField()` / `consentField()`, and `retireForms()`.
 - **The repaint rule** — `setLocale()` in § `flow`, and `CHANGELOG.md` 2.11.1 § "The card follows
   the language switcher".

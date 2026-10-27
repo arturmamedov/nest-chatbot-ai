@@ -23,10 +23,17 @@
  *   textarea's value, and a link only encodeURIComponent'd, as the wa.me ?text= or
  *   the mailto: subject/body query value, composed from what the preview shows at
  *   tap time. It never enters a wchat:* payload or a log() line.
+ *   The 1.16.0 form is server text like any element: its title, labels and
+ *   options reach the DOM through textContent, setAttribute or a property. What
+ *   the guest fills in reaches the request body and, through the filled
+ *   submit_message, their own bubble and the stored transcript; it never enters
+ *   a wchat:* payload or a log() line either.
  *
- * Built against response contract 1.15.1 (BUILT_AGAINST, api section), in
- * lockstep with the packet vendored in docs/wsuite/ — release 2.13.3 is the sync
- * that adopted it (D-106, a wording PATCH; 1.15.0 came in with 2.13.2, D-090). BUILT_AGAINST records what this code implements, not
+ * Built against response contract 1.16.1 (BUILT_AGAINST, api section), in
+ * lockstep with the packet vendored in docs/wsuite/ — release 2.13.4 is the sync
+ * that adopted it (D-109, D-111, D-112, D-114: the Book panel, keyed and picture
+ * chips, stay totals on cards; D-113's click counting is NOT adopted — this
+ * widget sends no request of its own). BUILT_AGAINST records what this code implements, not
  * what the docs say. The server reports its live contract_version at init; the
  * widget warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
@@ -35,7 +42,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.13.3';
+    var VERSION = '2.13.4';
 
     /* =========================================================== config ===== */
 
@@ -89,30 +96,47 @@
 
     /*
      * What log() may print of a response body: a SHALLOW COPY in which any
-     * action's `prefill` reads '[prefill]'. contact_channels.prefill (contract
-     * 1.14.0) is the guest's own words, and the contract bars it from every log —
-     * data-debug included, because a debug tag left on in production prints to
-     * any visitor's devtools, and the demo page sets it. A copy and never an
-     * edit: the same body is persisted and rendered right after each log line.
-     * Keyed on the field rather than the element type, so an element that ever
-     * carries one too is covered before anyone remembers to add it here.
+     * action's `prefill` reads '[prefill]' and any field's `value` reads
+     * '[value]'. contact_channels.prefill (contract 1.14.0) is the guest's own
+     * words, and the contract bars it from every log — data-debug included,
+     * because a debug tag left on in production prints to any visitor's
+     * devtools, and the demo page sets it. A 1.16.0 form's field values are the
+     * same kind of thing: the server pre-fills them with what the chat knows,
+     * which on a later form is an email or a phone the guest typed. A copy and
+     * never an edit: the same body is persisted and rendered right after each
+     * log line. Keyed on the field rather than the element type, so an element
+     * that ever carries one too is covered before anyone remembers to add it here.
      */
+    function shallowCopy(source) {
+        var copy = {};
+        for (var k in source) {
+            if (Object.prototype.hasOwnProperty.call(source, k)) { copy[k] = source[k]; }
+        }
+        return copy;
+    }
+
     function redactForLog(body) {
         if (!body || !Array.isArray(body.actions)) { return body; }
-        var copy = {};
-        for (var k in body) {
-            if (Object.prototype.hasOwnProperty.call(body, k)) { copy[k] = body[k]; }
-        }
+        var copy = shallowCopy(body);
         copy.actions = [];
         for (var i = 0; i < body.actions.length; i++) {
             var a = body.actions[i];
             if (a && typeof a === 'object' && a.prefill != null) {
-                var shown = {};
-                for (var j in a) {
-                    if (Object.prototype.hasOwnProperty.call(a, j)) { shown[j] = a[j]; }
+                a = shallowCopy(a);
+                a.prefill = '[prefill]';
+            }
+            if (a && typeof a === 'object' && Array.isArray(a.fields)) {
+                var fields = a.fields;
+                a = shallowCopy(a);
+                a.fields = [];
+                for (var f = 0; f < fields.length; f++) {
+                    var field = fields[f];
+                    if (field && typeof field === 'object' && field.value != null) {
+                        field = shallowCopy(field);
+                        field.value = '[value]';
+                    }
+                    a.fields.push(field);
                 }
-                shown.prefill = '[prefill]';
-                a = shown;
             }
             copy.actions.push(a);
         }
@@ -186,6 +210,16 @@
     // the one reset: a restart begins a NEW conversation's life.
     var guestTurned = false;
     var chipRows = [];      // live mid-transcript quick_replies rows — retired on ANY send (1.6.0 one-shot rule)
+    // The 1.16.0 forms still submittable, as {form, set} — retired on ANY send,
+    // exactly like chipRows, but kept on screen disabled rather than removed.
+    var liveForms = [];
+    var fieldSeq = 0;       // ids for a form's <label for> — the only element ids a payload causes
+    // Bumped by every send that passes sendGuestText()'s gate. A form's failed
+    // send gives the form back only if nothing has been sent since — see renderForm.
+    var sendSeq = 0;
+    // False only while replayTranscript() paints an entry that is not the last:
+    // a form can be live on the final reply alone, the chip-row rule.
+    var drawForms = true;
     var ended = false;      // conversation_ended received — composer closed until the guest restarts
     // The DISPLAY-ONLY transcript, oldest first: {r:'bot'|'guest', t:'<final
     // text>', a: actions[]|null, n: <server turn>|null}. Persisted so a reload
@@ -258,6 +292,8 @@
             priceFrom: 'from %s',
             priceNight: '/night', priceStay: '/stay',
             pricePerPerson: 'per person', pricePerUnit: 'per unit',
+            // A card's stay total (1.16.0) and the order caption above a rail.
+            stayTotal: '%s total', orderCheapest: 'Cheapest first', orderRanked: 'Best match first',
             // Availability options (contract 1.8.0; grouped and folded since
             // 2.11.1). Two group headings, two unit labels, two count nouns —
             // PLURAL ONLY, because the unit line exists only for a party above
@@ -316,6 +352,7 @@
             priceFrom: 'desde %s',
             priceNight: '/noche', priceStay: '/estancia',
             pricePerPerson: 'por persona', pricePerUnit: 'por unidad',
+            stayTotal: '%s en total', orderCheapest: 'Los más baratos primero', orderRanked: 'Los más adecuados primero',
             bedsHeading: 'Camas en dormitorio compartido', roomsHeading: 'Habitaciones privadas',
             perBed: 'por cama', perRoom: 'por habitación',
             bedsMany: '%s camas', roomsMany: '%s habitaciones',
@@ -358,6 +395,7 @@
             priceFrom: 'da %s',
             priceNight: '/notte', priceStay: '/soggiorno',
             pricePerPerson: 'a persona', pricePerUnit: 'per unità',
+            stayTotal: '%s in totale', orderCheapest: 'Prima i più economici', orderRanked: 'Prima i più adatti',
             bedsHeading: 'Letti in dormitorio', roomsHeading: 'Camere private',
             perBed: 'per letto', perRoom: 'per camera',
             bedsMany: '%s letti', roomsMany: '%s camere',
@@ -398,6 +436,7 @@
             priceFrom: 'ab %s',
             priceNight: '/Nacht', priceStay: '/Aufenthalt',
             pricePerPerson: 'pro Person', pricePerUnit: 'pro Einheit',
+            stayTotal: '%s insgesamt', orderCheapest: 'Günstigste zuerst', orderRanked: 'Beste Treffer zuerst',
             bedsHeading: 'Betten im Schlafsaal', roomsHeading: 'Privatzimmer',
             perBed: 'pro Bett', perRoom: 'pro Zimmer',
             bedsMany: '%s Betten', roomsMany: '%s Zimmer',
@@ -440,6 +479,7 @@
             priceFrom: 'à partir de %s',
             priceNight: '/nuit', priceStay: '/séjour',
             pricePerPerson: 'par personne', pricePerUnit: 'par unité',
+            stayTotal: '%s au total', orderCheapest: 'Les moins chers d\'abord', orderRanked: 'Les plus adaptés d\'abord',
             bedsHeading: 'Lits en dortoir', roomsHeading: 'Chambres privées',
             perBed: 'par lit', perRoom: 'par chambre',
             bedsMany: '%s lits', roomsMany: '%s chambres',
@@ -733,6 +773,9 @@
      *   - conversation_ended: restored once from the stored `ended` boolean
      *     through endConversation() — one seam, not two.
      * A future element type with a side effect gets its exclusion HERE.
+     * The 1.16.0 `form` is KEPT: it only paints, like a chip row, and its
+     * one-shot rule lives in replayTranscript() — only the final entry's form is
+     * drawn, and drawn live.
      */
     function persistableActions(actions) {
         if (!actions || !actions.length) { return null; }
@@ -921,6 +964,9 @@
      * contact_channels href: it is the property's phone or email, and since
      * 1.14.0 a wa.me / mailto: one can carry contact_channels.prefill — the
      * guest's own words, which the contract bars from every event and log.
+     * Never a 1.16.0 form's values either, nor a chip's key: a form submit is a
+     * guest message, reported as one (source 'form', its length), and a later
+     * form will carry an email or a phone.
      */
     var EVENT_NS = 'wchat';
 
@@ -1021,10 +1067,20 @@
      *         body {locale, property?}            → 201 {conversation:{uuid}, greeting,
      *                                                    contract_version}
      *   turn  POST {apiBase}/api/v1/chatbot/conversations/{uuid}/messages
-     *         body {message, locale}              → 200 {reply, actions[], turn}
+     *         body {message, locale, action?}     → 200 {reply, actions[], turn}
      *   poll  GET  {apiBase}{relative async_result.url}
      *                                             → 200 {status, reply?, actions?, turn}
      *   All three: Authorization: Bearer <public ws_live_ key>.
+     *   The fourth endpoint since 1.16.0, POST …/{uuid}/events (click counting,
+     *   D-113, guide §3.4), is deliberately NOT called, and the init's
+     *   `analytics` flag is not read: this widget sends no request of its own.
+     *
+     * `action` (contract 1.16.0, guide §3.2) rides BESIDE the message, never in
+     * place of it — a keyed chip's {type:'reply', payload:{key}} or a form's
+     * {type:'form', id, payload:{values}}. Sending one is how this widget tells
+     * the server it can draw a `form`: the server sends that element only to a
+     * turn that carried an action (D-109(j)). So every element type up to
+     * BUILT_AGAINST must render here before BUILT_AGAINST moves.
      *
      * Every callback is done(status, data) — the flow section below maps status
      * codes to behaviour.
@@ -1050,7 +1106,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.15.1';
+    var BUILT_AGAINST = '1.16.1';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -1143,10 +1199,16 @@
                 { locale: requestLocale, property: cfg.property || undefined }, done);
         },
 
-        send: function (uuid, text, done) {
-            if (USE_MOCK) { return Mock.send(uuid, text, done); }
+        // The body FIRST, and the mock is handed this same object, so a fixture
+        // sees exactly what the wire would carry — the action included, which is
+        // what lets the mock answer a keyed tap with a form the way the server
+        // does. (init still returns to the mock before building its body.)
+        send: function (uuid, text, action, done) {
+            var body = { message: text, locale: requestLocale };
+            if (action) { body.action = action; }
+            if (USE_MOCK) { return Mock.send(uuid, body, done); }
             request('POST', '/api/v1/chatbot/conversations/' + encodeURIComponent(uuid) + '/messages',
-                { message: text, locale: requestLocale }, done);
+                body, done);
         },
 
         poll: function (path, done) {
@@ -1234,18 +1296,41 @@
      *                 sent as Retry-After (1.11.0): "!429 60" is a per-minute
      *                 refusal, "!429 80000" a daily one, and bare "!429" the
      *                 header-less control that must read exactly as before
+     *   "!kinds"    → a 1.16.0 form with every field kind, required and optional,
+     *                 pre-filled and not; its submit is answered with the KEYS
+     *                 received, so a blank optional field visibly stays out
+     *   "!badform"  → a hostile form (markup in every string, a 120-character
+     *                 label, Arabic, a javascript: consent link, nulls where
+     *                 objects belong) that must render inertly, and a second form
+     *                 with an unknown kind that must not render at all
+     *   "!pictures" → a picture-chip row: one unsafe image (dropped, chip kept),
+     *                 one with no image_alt (alt=""), the keyed "Book a bed" as a
+     *                 tile, and one chip with no key (no action)
+     *   "!ukchips"  → a tenant quick_prompts row on a TURN, locale "uk" (1.15.2,
+     *                 1.16.1): drawn like any row, lang="uk"
      *   anything else → a plain reply
+     *
+     * An ACTION turn (1.16.0) is answered by its action before any keyword is
+     * read — see actionReply(). The welcome row's keyed "Book a bed" chip
+     * answers with the contract's Book form; its submit with cheapest-first
+     * island cards (stay totals, a sold-out reason) or one hostel's availability.
+     * The same chip's text typed without the action reaches "book" instead,
+     * exactly as the server answers a message sent alone.
      *
      * ?nc-init-429=<seconds> on the page URL makes init itself answer 429 with
      * that Retry-After — the only way to reach the init half of the throttle copy.
+     *
+     * ?nc-action-fail=<status> answers every ACTION turn with that status — the
+     * mock-only way to watch a form come back after a failed send.
      *
      * ?nc-assistant=<none|markup|long|string|array> picks the init's 1.15.0
      * `assistant`; with no knob the fixture names the assistant "Nesti". See
      * mockAssistant().
      *
      * The init response carries two chip rows (promptChips + islandChips), and
-     * both of promptChips' messages land on a branch above rather than in the
-     * catch-all — tapping a welcome chip is meant to demo a real answer.
+     * every one of promptChips' messages lands on a branch above rather than in
+     * the catch-all — tapping a welcome chip is meant to demo a real answer; the
+     * keyed "Book a bed" lands on its ACTION, which answers before any text.
      */
     var Mock = (function () {
         var pollCounts = {};
@@ -1289,6 +1374,15 @@
         // throttled. Unset (or not a number) means init succeeds as always.
         function mockInitRetryAfter() {
             var m = /[?&]nc-init-429=(\d+)/.exec(window.location.search);
+            return m ? parseInt(m[1], 10) : null;
+        }
+
+        // ?nc-action-fail=500 refuses every turn that carries an action — a chip
+        // tap with a key, a form submit — with that status. Otherwise a failed
+        // FORM send is unreachable here: the '!500' keyword is typed text, and
+        // typing retires the form before it can fail.
+        function mockActionFail() {
+            var m = /[?&]nc-action-fail=(\d{3})/.exec(window.location.search);
             return m ? parseInt(m[1], 10) : null;
         }
 
@@ -1421,9 +1515,10 @@
         // server-localized and the widget never translates it, so a chip that
         // followed the UI language would be lying about where it came from.
         //
-        // Both messages are chosen to CHAIN into existing fixtures rather than
+        // The messages are chosen to CHAIN into existing fixtures rather than
         // dead-end in the catch-all reply: "hostel" reaches the island-chips
-        // branch and "Pass" the word-bounded promo branch. Deliberately worded
+        // branch, "Pass" the word-bounded promo branch, and the keyed third chip
+        // is answered by its action with the Book form. Deliberately worded
         // apart from the pack's own prompt1/prompt2, so the demo shows at a
         // glance which block is on screen.
         function promptChips() {
@@ -1435,7 +1530,11 @@
                 locale: 'en',
                 items: [
                     { label: 'Find my hostel', message: 'Which hostel should I pick?' },
-                    { label: 'Nest Pass', message: 'What is the Nest Pass?' }
+                    { label: 'Nest Pass', message: 'What is the Nest Pass?' },
+                    // Keyed (1.16.0): the tap sends action {type:'reply',
+                    // payload:{key}} beside this message, and the mock — like
+                    // the server — answers that with the Book form.
+                    { label: 'Book a bed', message: 'I would like to book a bed', key: 'book-a-bed' }
                 ]
             };
         }
@@ -1465,6 +1564,232 @@
             'Second line: my key card stopped working twice this week, the door beeps red, ' +
             'reception said to write here, and I am out until late tonight, so please leave ' +
             'a new card at the desk or tell me where to pick one up before eleven."';
+
+        // ---- the 1.16.0 Book panel and its neighbours (D-111, D-112) ----------
+        // Dates are computed, never literal: the form's bounds are "today" and
+        // "a year from today", exactly as the server builds them, so a fixture
+        // written today still validates next month. Local calendar days — the
+        // date input's own frame.
+        function mockDay(offset) {
+            var d = new Date();
+            d.setDate(d.getDate() + offset);
+            var m = d.getMonth() + 1;
+            var day = d.getDate();
+            return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+        }
+
+        var GALLERY = 'https://nestshostels.com/wp-content/themes/w_neststw/assets/img/gallery/';
+        var RESERVE = 'https://hotels.cloudbeds.com/en/reservation/';
+
+        // The contract's own example form (§form), bounds computed.
+        function bookForm() {
+            return {
+                type: 'form', id: 'book', title: 'Book a bed',
+                fields: [
+                    { name: 'place', kind: 'select', label: 'Hostel or island', required: true, value: 'area:Tenerife',
+                        options: [
+                            { key: 'area:Tenerife', label: 'Every hostel in Tenerife' },
+                            { key: 'duque-nest', label: 'Duque Nest' }
+                        ] },
+                    { name: 'dates', kind: 'date_range', label: 'Dates', required: true,
+                        min: mockDay(0), max: mockDay(365), labels: { from: 'Check-in', to: 'Check-out' } },
+                    { name: 'guests', kind: 'guests', label: 'Guests', min: 1, max: 12 }
+                ],
+                submit_label: 'See prices', submit_message: 'Prices for {place}, {dates}'
+            };
+        }
+
+        // The answer to a Book submit, the way the server shapes it: an island
+        // is cheapest-first cards priced for the stay — a sold-out hostel last,
+        // with a reason and no total — and one hostel is its availability. The
+        // party totals are computed from the SAME party in both, so the island
+        // card and that hostel's own option can never quote one stay two ways:
+        // beds at 78 a head, private doubles at 165 for every two guests. A bed
+        // is always the cheaper of the two, for any party, so the fixed order
+        // below really is cheapest first.
+        function bookAnswer(values) {
+            var dates = (values && values.dates && typeof values.dates === 'object') ? values.dates : {};
+            var from = typeof dates.from === 'string' ? dates.from : mockDay(14);
+            var to = typeof dates.to === 'string' ? dates.to : mockDay(17);
+            var adults = (values && typeof values.guests === 'number') ? values.guests : null;
+            var party = adults || 1;
+            var stay = '?checkin=' + from + '&checkout=' + to + (adults ? '&adults=' + adults : '');
+            var bed = (78 * party).toFixed(2);
+            var rooms = Math.ceil(party / 2);
+            var room = (165 * rooms).toFixed(2);
+            if (values && values.place === 'duque-nest') {
+                return {
+                    reply: 'Duque Nest has space from ' + from + ' to ' + to + ' — the options are just below.',
+                    actions: [{
+                        type: 'availability', available: true,
+                        options: [
+                            { room: 'Mixed dorm', price: '78.00', currency: 'EUR', basis: 'per_person', units: party, total: bed },
+                            { room: 'Private double', price: '165.00', currency: 'EUR', basis: 'per_unit', units: rooms, total: room }
+                        ],
+                        url: RESERVE + 'R5Sn9T' + stay,
+                        summary: { property: 'Duque Nest', check_in: from, check_out: to }
+                    }]
+                };
+            }
+            return {
+                reply: 'Here are the Tenerife hostels for ' + from + ' → ' + to + ', cheapest first.',
+                actions: [{
+                    type: 'property_cards', ordering: 'cheapest', total: 3,
+                    items: [
+                        { key: 'duque-nest', name: 'Duque Nest', location: 'Costa Adeje, Tenerife', image: GALLERY + '1.jpg',
+                            price_from: { amount: '26.00', currency: 'EUR' },
+                            stay_total: { amount: bed, currency: 'EUR', basis: 'per_person' },
+                            cta_label: 'Book now', url: RESERVE + 'R5Sn9T' + stay },
+                        { key: 'medano-nest', name: 'Medano Nest', location: 'El Médano, Tenerife', image: GALLERY + '3.jpg',
+                            price_from: { amount: '22.00', currency: 'EUR', period: 'night', basis: 'per_person' },
+                            stay_total: { amount: room, currency: 'EUR', basis: 'per_unit' },
+                            badge: 'Nest Pass', url: RESERVE + '4VPKYG' + stay },
+                        { key: 'ashavana-nest', name: 'Ashavana Nest', image: GALLERY + '6.jpg',
+                            price_from: { amount: '24.00', currency: 'EUR', period: 'night', basis: 'per_unit' },
+                            reason: 'Fully booked for these dates', url: RESERVE + 'VKSq5o' + stay }
+                    ]
+                }]
+            };
+        }
+
+        // '!kinds': every kind the contract defines, required and optional,
+        // pre-filled and not. The optional range is pre-filled at ONE end, so it
+        // must turn required at both; the second range has no `labels`, so its
+        // ends are named by the field's label; two options are malformed and
+        // must be skipped; {terms} and {nobody} are emptied in the message.
+        function kindsForm() {
+            return {
+                type: 'form', id: 'kinds', title: 'Every kind of field',
+                intro: 'Some are required; the rest you may leave blank.',
+                fields: [
+                    { name: 'name', kind: 'text', label: 'Your name', required: true, placeholder: 'e.g. Ana' },
+                    { name: 'nick', kind: 'text', label: 'What should we call you?', value: 'Ana' },
+                    { name: 'note', kind: 'textarea', label: 'Anything we should know?', placeholder: 'Late arrival, allergies…' },
+                    { name: 'email', kind: 'email', label: 'Email', required: true, value: 'ana@example.com' },
+                    { name: 'phone', kind: 'phone', label: 'Phone', placeholder: '+34 600 000 000' },
+                    { name: 'room', kind: 'select', label: 'Room type', required: true, placeholder: 'Choose…', value: 'private',
+                        options: [
+                            { key: 'dorm', label: 'Bed in a shared room' },
+                            { key: 'private', label: 'Private room' },
+                            { key: '', label: 'skipped: empty key' },
+                            { label: 'skipped: no key' }
+                        ] },
+                    { name: 'dates', kind: 'date_range', label: 'Dates (optional)', min: mockDay(0), max: mockDay(365),
+                        value: { from: mockDay(7) }, labels: { from: 'Check-in', to: 'Check-out' } },
+                    { name: 'stay', kind: 'date_range', label: 'Second stay', required: true, min: mockDay(0), max: mockDay(365) },
+                    { name: 'guests', kind: 'guests', label: 'Guests', required: true, min: 1, max: 12, value: 2 },
+                    { name: 'terms', kind: 'consent', label: 'I agree to be contacted about this booking', required: true,
+                        link: { label: 'Privacy notice', url: 'https://nestshostels.com/privacy' } }
+                ],
+                submit_label: 'Send',
+                submit_message: 'Details for {name} ({email}): {room}, {stay}, {guests} guests{terms}{nobody}'
+            };
+        }
+
+        // '!badform': two forms. The first is hostile in every string — markup
+        // that sets the !prefill sentinel if it is ever parsed, a 120-character
+        // unbroken label the panel must wrap, Arabic (dir="auto"), a javascript:
+        // consent link that must vanish, bounds and values that are not dates or
+        // numbers, null where objects belong, and {constructor}/{__proto__}
+        // tokens that must match nothing — and must still render, inertly. The
+        // second has a kind this build does not know and must not render at all.
+        function badForms() {
+            return [
+                {
+                    type: 'form', id: 'xss', title: '<img src=x onerror="window.__ncXss=1"> Title',
+                    intro: 'مرحبا — <b>not bold</b>',
+                    fields: [
+                        { name: 'who', kind: 'text', required: true,
+                            label: '<script>window.__ncXss=1<\/script> ' + new Array(121).join('W'),
+                            placeholder: '"><img src=x onerror="window.__ncXss=1">', value: '<b>prefill</b>' },
+                        { name: 'rtl', kind: 'textarea', label: 'الاسم الكامل — full name', value: null },
+                        { name: 'pick', kind: 'select', label: 'Pick <i>one</i>', required: true,
+                            options: [
+                                { key: '"><script>window.__ncXss=1<\/script>', label: '<img src=x onerror="window.__ncXss=1">' },
+                                { key: 'ok', label: 'Plain option' },
+                                null
+                            ] },
+                        { name: 'when', kind: 'date_range', label: 'When', min: 'not-a-date', max: '2026-13-45',
+                            value: { from: 'javascript:1', to: '<b>' }, labels: null },
+                        { name: 'n', kind: 'guests', label: 'Guests', min: '1', max: 'lots', value: '3' },
+                        { name: 'ok', kind: 'consent', required: true, label: 'I agree <a href="javascript:void 0">here</a>',
+                            link: { label: 'Privacy <b>notice</b>', url: 'javascript:window.__ncXss=1' } }
+                    ],
+                    submit_label: '<b>Send</b>', submit_message: '{who} picked {pick} {constructor}{__proto__}'
+                },
+                {
+                    type: 'form', id: 'dropped',
+                    fields: [
+                        { name: 'x', kind: 'text', label: 'Fine' },
+                        { name: 'y', kind: 'signature', label: 'A kind this build does not know' }
+                    ],
+                    submit_label: 'Never shown', submit_message: '{x}'
+                }
+            ];
+        }
+
+        // '!pictures': a picture-chip row. Two safe images (one with image_alt,
+        // one without → alt=""), one javascript: image that must be dropped while
+        // its chip stays, the keyed "Book a bed" as a tile (answers with the
+        // form), and one chip with no key at all (sends no action). The island
+        // keys are not ones the mock binds, so those taps fall back to the text —
+        // exactly the server's rule for a key it no longer publishes.
+        function pictureChips() {
+            return {
+                type: 'quick_replies', id: 'finder', locale: 'en', heading: 'Where are you headed?',
+                items: [
+                    { label: 'Tenerife', message: 'Tenerife', key: 'island-tenerife', image: GALLERY + '1.jpg',
+                        image_alt: 'Surfers on the beach at El Médano' },
+                    { label: 'Gran Canaria', message: 'Gran Canaria', key: 'island-gran-canaria', image: GALLERY + '4.jpg' },
+                    { label: 'Ibiza', message: 'Ibiza', key: 'island-ibiza', image: 'javascript:window.__ncXss=1' },
+                    { label: 'Book a bed', message: 'I would like to book a bed', key: 'book-a-bed', image: GALLERY + '6.jpg' },
+                    { label: 'Something else', message: 'What else can you help with?' }
+                ]
+            };
+        }
+
+        // '!ukchips': the 1.15.2 + 1.16.1 row — tenant chips under a TURN's
+        // reply, in a language beyond the five packs (the server translated the
+        // tenant's English, D-114). It must draw like any row, with lang="uk".
+        function ukChips() {
+            return {
+                type: 'quick_replies', id: 'quick_prompts', locale: 'uk',
+                items: [
+                    { label: 'Забронювати ліжко', message: 'Я хочу забронювати ліжко', key: 'book-a-bed' },
+                    { label: 'Nest Pass', message: 'Що таке Nest Pass?' }
+                ]
+            };
+        }
+
+        /*
+         * An action turn is answered BY its action, first, above every text
+         * keyword: the server binds the action before it reads any text
+         * (D-109(j)), and the text of an action turn routinely contains keywords
+         * — "I would like to book a bed" holds `book`, "Prices for Every hostel
+         * in Tenerife" holds `hostel` and `tenerife` (the "it's about"
+         * precedent). Returns null for an action the mock does not bind, which
+         * then falls back to the text — the server's rule for a key it no longer
+         * publishes or a form it never sent.
+         */
+        function actionReply(action) {
+            var payload = (action.payload && typeof action.payload === 'object') ? action.payload : {};
+            if (action.type === 'reply' && payload.key === 'book-a-bed') {
+                return {
+                    reply: 'Let\'s find you a bed — pick a hostel or a whole island, and your dates.',
+                    actions: [bookForm()]
+                };
+            }
+            if (action.type === 'form' && action.id === 'book') {
+                return bookAnswer(payload.values);
+            }
+            if (action.type === 'form' && (action.id === 'kinds' || action.id === 'xss')) {
+                // The KEYS only: proves the blank optional fields were left out
+                // without putting a single value the guest typed on screen.
+                var keys = payload.values ? Object.keys(payload.values) : [];
+                return { reply: 'Received ' + keys.length + ' values: ' + keys.join(', ') + '.', actions: [] };
+            }
+            return null;
+        }
 
         return {
             init: function (done) {
@@ -1497,13 +1822,26 @@
                     // what a correct client clock should compute.
                     idle_hours: mockIdleHours(),
                     server_time: new Date().toISOString(),
-                    contract_version: '1.15.1'
+                    contract_version: '1.16.1'
                 }), 700);
             },
 
-            send: function (uuid, text, done) {
+            // Handed the request BODY that API.send built — {message, locale,
+            // action?} — so a fixture sees exactly what the wire carries.
+            send: function (uuid, body, done) {
+                var text = typeof body.message === 'string' ? body.message : '';
                 var q = text.toLowerCase();
                 turn += 1;
+
+                if (body.action && typeof body.action === 'object') {
+                    var failing = mockActionFail();
+                    if (failing !== null) { return reply(done, failing, null); }
+                    var bound = actionReply(body.action);
+                    if (bound) {
+                        bound.turn = turn;
+                        return reply(done, 200, bound);
+                    }
+                }
 
                 // "!429 80000" → a 429 whose Retry-After is 80000. The number is
                 // passed for any forced status, as the transport does not: only a
@@ -1527,7 +1865,8 @@
                         reply: 'This reply carries an element type this widget has never heard of.',
                         actions: [
                             { type: 'totally_new_thing', payload: { a: 1 } },
-                            { type: 'link_button', label: 'But this one still renders', url: 'https://nestshostels.com' }
+                            // An id this widget does not know: drawn the same, cta null.
+                            { type: 'link_button', id: 'brochure', label: 'But this one still renders', url: 'https://nestshostels.com' }
                         ],
                         turn: turn
                     });
@@ -1624,6 +1963,42 @@
                                 hint: 'Your message is ready below — check it, then press Send.'
                             }
                         }],
+                        turn: turn
+                    });
+                }
+
+                // ---- 1.16.0 fixtures, harness-only ----------------------------
+                // '!'-prefixed startsWith tests, like the ones above. None of
+                // '!kinds' '!badform' '!pictures' '!ukchips' is a prefix of
+                // another, or of any '!' name above.
+                if (q.indexOf('!kinds') === 0) {
+                    return reply(done, 200, {
+                        reply: 'Here is every kind of field the contract defines.',
+                        actions: [kindsForm()],
+                        turn: turn
+                    });
+                }
+
+                if (q.indexOf('!badform') === 0) {
+                    return reply(done, 200, {
+                        reply: 'Two forms follow — only the first may render, and nothing in it may run.',
+                        actions: badForms(),
+                        turn: turn
+                    });
+                }
+
+                if (q.indexOf('!pictures') === 0) {
+                    return reply(done, 200, {
+                        reply: 'Pick one.',
+                        actions: [pictureChips()],
+                        turn: turn
+                    });
+                }
+
+                if (q.indexOf('!ukchips') === 0) {
+                    return reply(done, 200, {
+                        reply: 'Звісно! Ось що ще можна запитати:',
+                        actions: [ukChips()],
                         turn: turn
                     });
                 }
@@ -1884,9 +2259,9 @@
                     return reply(done, 200, {
                         reply: 'Here is everything for Las Eras — booking, the website, and how to find us.',
                         actions: [
-                            { type: 'link_button', label: 'Book now', url: 'https://hotels.cloudbeds.com/en/reservation/uudLs6', style: 'primary' },
-                            { type: 'link_button', label: 'Visit our website', url: 'https://nestshostels.com' },
-                            { type: 'link_button', label: 'Get directions', url: 'https://maps.google.com/?q=Las+Eras+Nest+Hostel' }
+                            { type: 'link_button', id: 'book', label: 'Book now', url: 'https://hotels.cloudbeds.com/en/reservation/uudLs6', style: 'primary' },
+                            { type: 'link_button', id: 'website', label: 'Visit our website', url: 'https://nestshostels.com' },
+                            { type: 'link_button', id: 'directions', label: 'Get directions', url: 'https://maps.google.com/?q=Las+Eras+Nest+Hostel' }
                         ],
                         turn: turn
                     });
@@ -1979,11 +2354,11 @@
                             // trio used to point at book.nestshostels.com, which no
                             // card carries — that is why the old fixture could
                             // never catch D-043(c).
-                            { type: 'link_button', label: 'Book now', url: 'https://hotels.cloudbeds.com/en/reservation/4VPKYG?checkin=2026-10-10&checkout=2026-10-13&adults=2', style: 'primary' },
+                            { type: 'link_button', id: 'book', label: 'Book now', url: 'https://hotels.cloudbeds.com/en/reservation/4VPKYG?checkin=2026-10-10&checkout=2026-10-13&adults=2', style: 'primary' },
                             // Shares the NAME-LESS item's url → must render: a
                             // dropped card suppresses nothing.
-                            { type: 'link_button', label: 'Visit our website', url: 'https://nestshostels.com' },
-                            { type: 'link_button', label: 'Get directions', url: 'https://maps.google.com/?q=Las+Eras+Nest+Hostel' }
+                            { type: 'link_button', id: 'website', label: 'Visit our website', url: 'https://nestshostels.com' },
+                            { type: 'link_button', id: 'directions', label: 'Get directions', url: 'https://maps.google.com/?q=Las+Eras+Nest+Hostel' }
                         ],
                         turn: turn
                     });
@@ -2109,7 +2484,13 @@
     function injectStyles() {
         var link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = assetBase + 'css/nest-chatbot.css';
+        // The release rides the stylesheet's url: assetBase is built from
+        // script.src with its query dropped, so the embed tag's ?v=<version>
+        // reaches this file only, and a host's day-long cache could pair a new
+        // widget with the old stylesheet — a release that adds a renderer would
+        // draw it unstyled under the host's own form rules until the cache ran
+        // out. The fonts it loads resolve against the path, not the query.
+        link.href = assetBase + 'css/nest-chatbot.css?v=' + encodeURIComponent(VERSION);
         document.head.appendChild(link);
     }
 
@@ -2991,7 +3372,14 @@
     // `kind` is what the events call this button. It is the CALLER's to say —
     // four element types share this one renderer, and "a Book button was
     // clicked" is worth much less than which element put it there.
-    function linkButton(label, url, style, row, rendered, kind) {
+    /*
+     * `cta` names WHICH button this is on the wchat:action event (2.13.4), in
+     * the vocabulary of guide §3.4's click events: `book`, `website`,
+     * `directions`, `more`, `promo`, or a contact channel. Written only from the
+     * fixed values the callers pass — a link_button's payload `id` goes through
+     * linkCta() first — so no payload string ever lands in the attribute.
+     */
+    function linkButton(label, url, style, row, rendered, kind, cta) {
         var href = safeHttpUrl(url);
         if (!href) { log('dropped a non-http(s) url', url); return row; }
         var link = el('a', 'nc-action' + (style === 'primary' ? ' nc-action--primary' : ''), label || t('open_link'));
@@ -2999,7 +3387,7 @@
         // Read back by the one delegated click listener in wire() — see the
         // events section. A data attribute rather than a closure per anchor: a
         // replayed 40-turn transcript can carry dozens of these.
-        attrs(link, { 'data-wchat-el': kind || 'link_button' });
+        attrs(link, { 'data-wchat-el': kind || 'link_button', 'data-wchat-cta': cta || null });
         if (style) { attrs(link, { 'data-wchat-style': style }); }
         if (!row) {
             row = el('div', 'nc-action-row');
@@ -3009,6 +3397,15 @@
         if (rendered) { rendered[href] = true; }
         afterRender();
         return row;
+    }
+
+    // link_button.id (contract 1.16.0, D-111(e)): which button the server named.
+    // Never displayed; read only into the wchat:action `cta`. One this widget
+    // does not know is drawn the same and reported as null.
+    var LINK_CTAS = ['book', 'website', 'directions'];
+
+    function linkCta(id) {
+        return LINK_CTAS.indexOf(id) === -1 ? null : id;
     }
 
     function renderActions(actions, bubble, rendered) {
@@ -3083,7 +3480,8 @@
             // contract calls redundant, never harmful.
             case 'link_button':
                 if (cardUrls[action.url]) { return row; } // a card in this list carries the same CTA (D-043(c))
-                return linkButton(action.label, action.url, action.style, row, rendered, 'link_button');
+                return linkButton(action.label, action.url, action.style, row, rendered, 'link_button',
+                    linkCta(action.id));
 
             case 'booking_link':
                 // LIVE since 1.10.0 (D-073), and dormant for every release before
@@ -3095,7 +3493,7 @@
                 // card's. `cardUrls` rather than `rendered` because the pre-scan
                 // does not care which of the two came first in actions[].
                 if (cardUrls[action.url]) { return row; }
-                return linkButton(t('book'), action.url, 'primary', row, rendered, 'booking_link');
+                return linkButton(t('book'), action.url, 'primary', row, rendered, 'booking_link', 'book');
 
             case 'availability':
                 return renderAvailability(action, rendered);
@@ -3114,6 +3512,15 @@
 
             case 'promo_card':
                 renderPromoCard(action);
+                return null;
+
+            // The 1.16.0 form. Sent only to a turn that carried an action, so it
+            // reaches this widget only because the chip taps and form submits
+            // here send one. Closes the CTA group whether or not it draws: a
+            // replay that skips an earlier entry's form (drawForms) must group
+            // that turn's buttons exactly as the live turn did.
+            case 'form':
+                if (drawForms) { renderForm(action); }
                 return null;
 
             // The turn cap (1.6.0). No visual payload of its own — the reply
@@ -3347,7 +3754,7 @@
         // reference widget returned early here until 1.10.0 and did exactly that.
         var row = null;
         if (action.url && !(rendered && rendered[action.url])) {
-            row = linkButton(t('book'), action.url, 'primary', null, rendered, 'availability');
+            row = linkButton(t('book'), action.url, 'primary', null, rendered, 'availability', 'book');
         }
         afterRender();
         return row;
@@ -3469,7 +3876,7 @@
         // 1.14.0 a wa.me / mailto: href can also carry the guest's pre-written
         // message (?text= / &body=), which the contract forbids in any event or
         // log — a second reason, and the stronger one.
-        attrs(link, { 'data-wchat-el': 'contact_channels', 'data-wchat-channel': channel });
+        attrs(link, { 'data-wchat-el': 'contact_channels', 'data-wchat-channel': channel, 'data-wchat-cta': channel });
         // Only the wa.me channel navigates — open it in a new tab so the guest
         // keeps the host page: navigating it away would drop the chat
         // mid-handoff. The reference does the same since 1.14.0 (until then this
@@ -3536,10 +3943,13 @@
      * as an ordinary guest turn through the same seam the composer uses, so the
      * transcript reads exactly as if the guest had written it.
      *
-     * Chips carry NO urls, by contract — the widget's link surface stays
-     * link_button / contact_channels. An item that arrives with a `url` key is
-     * still rendered as a chip and the key is ignored; honouring it here would
-     * quietly widen the surface that safeHttpUrl() exists to keep narrow.
+     * Chips carry NO navigation url, by contract — the widget's link surface
+     * stays link_button / contact_channels. An item that arrives with a `url` key
+     * is still rendered as a chip and the key is ignored; honouring it here would
+     * quietly widen the surface that safeHttpUrl() exists to keep narrow. Since
+     * 1.16.0 an item may carry an `image`: an image SOURCE only, under the same
+     * http(s) rule as a card photo, and a chip whose image fails it keeps its
+     * label and loses only the picture.
      *
      * Labels are payload strings — server-authored and already server-localized —
      * so they go through el()/textContent and never through t().
@@ -3614,6 +4024,7 @@
             row.appendChild(head);
         }
         var chips = 0;
+        var tiles = false;
         for (var i = 0; i < action.items.length; i++) {
             var item = action.items[i] || {};
             // The message IS the chip: without one there is nothing to send, so a
@@ -3625,14 +4036,29 @@
             // other payload string on this branch is guarded the same way, and a
             // malformed label costs the label only, never the chip.
             var label = (typeof item.label === 'string' && item.label) ? item.label : item.message;
-            var chip = el('button', 'nc-prompt', label);
+            // A picture makes the chip a small tile, photo above label — the card
+            // photo's pattern, alt included: decorative ('') unless image_alt
+            // says more than the label. An unimaged chip keeps the exact DOM it
+            // always had.
+            var picture = safeHttpUrl(item.image);
+            var chip;
+            if (picture) {
+                chip = el('button', 'nc-prompt nc-chip-tile');
+                var img = el('img', 'nc-chip-img');
+                attrs(img, { src: picture, alt: typeof item.image_alt === 'string' ? item.image_alt : '', loading: 'lazy' });
+                chip.appendChild(img);
+                chip.appendChild(el('span', 'nc-chip-label', label));
+                tiles = true;
+            } else {
+                chip = el('button', 'nc-prompt', label);
+            }
             attrs(chip, { type: 'button' });
             // `parent` is passed by showWelcome() and by nothing else (see this
             // function's header), so it already distinguishes the site's welcome
             // row from a mid-transcript one — no new argument to thread through
             // renderAction()'s switch to tell the two apart in the events.
             chip.addEventListener('click',
-                makeChipHandler(item.message, parent ? 'welcome-chip' : 'chip'));
+                makeChipHandler(item.message, parent ? 'welcome-chip' : 'chip', chipKey(item)));
             row.appendChild(chip);
             chips++;
         }
@@ -3643,6 +4069,7 @@
         // the old test would mount a row whose every item was malformed as a
         // lone question with nothing to tap.
         if (!chips) { return; }
+        if (tiles) { row.classList.add('nc-chip-row--tiles'); }
         (parent || els.body).appendChild(row);
         // Only mid-transcript rows register for the one-shot retirement (1.6.0):
         // a welcome row already retires with the wrapper removeWelcome() sweeps,
@@ -3676,11 +4103,400 @@
         if (hadFocus && els.input && !els.input.disabled) { els.input.focus(); }
     }
 
+    /*
+     * Keyed chips (contract 1.16.0): an item that carries a `key` sends
+     * action {type:'reply', payload:{key}} BESIDE its message. Sending it is how
+     * this widget tells the server it can draw what the chip answers with — a
+     * `form` arrives only on a turn that carried an action (D-109(j)). The text
+     * is still the chip's `message`, never its label: the transcript reads as
+     * the guest's own words, and a server older than 1.16.0 sees exactly the
+     * tap it always did. A key the server no longer publishes is not an error;
+     * the turn falls back to the text. Validated once here, built per tap.
+     */
+    function chipKey(item) {
+        return (typeof item.key === 'string' && item.key.length >= 1 && item.key.length <= 64) ? item.key : null;
+    }
+
     // A factory, not a closure written inside the loop: `var` is function-scoped,
     // so an inline handler would close over the loop's own `item` and every chip
     // would end up sending the last message.
-    function makeChipHandler(message, source) {
-        return function () { sendGuestText(message, source); };
+    function makeChipHandler(message, source, key) {
+        return function () {
+            sendGuestText(message, source, key ? { type: 'reply', payload: { key: key } } : null);
+        };
+    }
+
+    /* -- form (contract 1.16.0) ----------------------------------------------
+     * The Book panel's element, and any form after it: fields the server built
+     * from the conversation and the catalog, drawn as native controls and sent
+     * back as ONE turn — the filled submit_message as the guest's words, the
+     * values as an action beside it. Sent only to a turn that carried an action,
+     * so it reaches this widget through a keyed chip or an earlier form only.
+     *
+     * Every string a guest reads is the server's — title, intro, labels,
+     * options, placeholders, the submit label, the message template — and goes in
+     * through el()/attrs() or a DOM property, never markup. No pack string is
+     * added: the widget composes structure and the filled message and nothing
+     * else (docs/rendering-ownership.md). The validation bubbles are the
+     * browser's own, in the browser's language.
+     *
+     * Fail closed: a field this build cannot draw drops the WHOLE form — a guest
+     * cannot submit a form with a field missing. Fields are built into a detached
+     * fieldset and the form is mounted only once every one has passed, so half a
+     * form never reaches the page. Every nested read is type-checked:
+     * renderActions() has no try, and the final reply's form is replayed from a
+     * stored record, which is as untrusted as the wire.
+     */
+    var FORM_KINDS = ['text', 'textarea', 'email', 'phone', 'select', 'date_range', 'guests', 'consent'];
+    var TEXT_TYPES = { text: 'text', email: 'email', phone: 'tel' };
+    // Guide §3.2: a string value over 500 characters is a 422, and so is an id
+    // over 64. Either would refuse every submit of the form, not just one.
+    var VALUE_MAX = 500;
+    var FORM_ID_MAX = 64;
+
+    function formText(value) {
+        return (typeof value === 'string' && value.trim()) ? value : null;
+    }
+
+    // A real calendar day in Y-m-d, not just the shape: '2026-13-45' passes the
+    // pattern and is no date at all.
+    function isDay(value) {
+        if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) { return false; }
+        var d = new Date(value + 'T00:00:00Z');
+        return isFinite(d.getTime()) && d.toISOString().slice(0, 10) === value;
+    }
+
+    // UTC arithmetic, so no timezone moves the day; '' for a non-date rather
+    // than the RangeError toISOString() throws on one.
+    function shiftDay(day, by) {
+        if (!isDay(day)) { return ''; }
+        var d = new Date(day + 'T00:00:00Z');
+        d.setUTCDate(d.getUTCDate() + by);
+        return d.toISOString().slice(0, 10);
+    }
+
+    function isWhole(value) {
+        return typeof value === 'number' && isFinite(value) && Math.floor(value) === value;
+    }
+
+    // Prefixed and counted: a <label for> needs a document-wide id, and these
+    // are the only ids a payload causes this widget to write.
+    function fieldId() {
+        fieldSeq += 1;
+        return 'nc-f-' + fieldSeq;
+    }
+
+    function fieldLabel(text, forId) {
+        return attrs(el('label', 'nc-fill-label', text), { 'for': forId, dir: 'auto' });
+    }
+
+    /*
+     * Each kind draws itself into `set` and returns its READER, or null when it
+     * cannot be drawn — which drops the whole form. A reader returns
+     * {value, show} for a filled field (`show` is what its {name} placeholder
+     * becomes in the guest's message), null for a blank optional one — left out
+     * of `values`, never sent as null or "" — or false when it cannot be sent as
+     * it stands.
+     */
+    function textField(set, field, required) {
+        var id = fieldId();
+        var guests = field.kind === 'guests';
+        var input;
+        if (field.kind === 'textarea') {
+            input = el('textarea', 'nc-fill-control nc-fill-area');
+            input.rows = 3;
+        } else {
+            input = el('input', 'nc-fill-control');
+            input.type = guests ? 'number' : TEXT_TYPES[field.kind];
+        }
+        input.id = id;
+        input.required = required;
+        if (typeof field.placeholder === 'string') { input.placeholder = field.placeholder; }
+        if (guests) {
+            input.step = '1';
+            attrs(input, { inputmode: 'numeric' });
+            if (isWhole(field.min)) { input.min = String(field.min); }
+            if (isWhole(field.max)) { input.max = String(field.max); }
+            if (isWhole(field.value)) { input.value = String(field.value); }
+        } else {
+            input.maxLength = VALUE_MAX;
+            attrs(input, { dir: 'auto' });
+            // maxLength stops typing, not a value set from here: a longer prefill
+            // would pass native validation and be refused on every submit.
+            if (typeof field.value === 'string' && field.value.length <= VALUE_MAX) { input.value = field.value; }
+        }
+        var wrap = el('div', 'nc-fill-field');
+        wrap.appendChild(fieldLabel(field.label, id));
+        wrap.appendChild(input);
+        set.appendChild(wrap);
+        return function () {
+            if (guests) {
+                if (input.value === '') { return required ? false : null; }
+                var count = input.valueAsNumber;
+                return isWhole(count) ? { value: count, show: String(count) } : false;
+            }
+            var text = input.value.trim();
+            if (!text) { return required ? false : null; }
+            return { value: text, show: text };
+        };
+    }
+
+    // The option KEY goes back to the server and the LABEL into the guest's
+    // message; a select with no option this build can draw is not drawn at all.
+    function selectField(set, field, required) {
+        if (!Array.isArray(field.options)) { return null; }
+        var id = fieldId();
+        var select = el('select', 'nc-fill-control');
+        select.id = id;
+        select.required = required;
+        var blank = el('option', null, typeof field.placeholder === 'string' ? field.placeholder : '');
+        blank.value = '';
+        select.appendChild(blank);
+        // Object.create(null): keys are payload strings, and one named
+        // 'constructor' must not phantom-match (cardUrls' reason).
+        var labels = Object.create(null);
+        var count = 0;
+        for (var i = 0; i < field.options.length; i++) {
+            var o = field.options[i];
+            if (!o || typeof o !== 'object' || !formText(o.key) || !formText(o.label)) { continue; }
+            var option = el('option', null, o.label);
+            option.value = o.key;
+            if (o.key === field.value) { option.selected = true; }
+            labels[o.key] = o.label;
+            select.appendChild(option);
+            count++;
+        }
+        if (!count) { return null; }
+        var pick = el('div', 'nc-fill-pick');
+        pick.appendChild(select);
+        var wrap = el('div', 'nc-fill-field');
+        wrap.appendChild(fieldLabel(field.label, id));
+        wrap.appendChild(pick);
+        set.appendChild(wrap);
+        return function () {
+            var key = select.value;
+            if (!key) { return required ? false : null; }
+            return { value: key, show: labels[key] };
+        };
+    }
+
+    /*
+     * Two native date inputs, named by the server's `labels` (else both by the
+     * field's own label — never by words this widget would invent). Check-out
+     * can never come before, or on, the check-in: its `min` follows the
+     * check-in on every input, so the browser itself refuses the wrong order.
+     * The check-in stops a day short of `max`, or a last-day check-in would leave
+     * no check-out to pick. Half a range is never sent: an optional range turns
+     * required at both ends the moment either end has a value.
+     */
+    function rangeField(set, field, required) {
+        var gid = fieldId();
+        var value = (field.value && typeof field.value === 'object') ? field.value : {};
+        var names = (field.labels && typeof field.labels === 'object') ? field.labels : {};
+        var group = el('div', 'nc-fill-field');
+        attrs(group, { role: 'group', 'aria-labelledby': gid });
+        group.appendChild(attrs(el('div', 'nc-fill-label', field.label), { id: gid, dir: 'auto' }));
+        var range = el('div', 'nc-fill-range');
+        var inputs = [];
+        for (var i = 0; i < 2; i++) {
+            var end = i === 0 ? 'from' : 'to';
+            var input = el('input', 'nc-fill-control');
+            input.type = 'date';
+            input.id = gid + '-' + end;
+            if (isDay(field.min)) { input.min = field.min; }
+            if (isDay(field.max)) { input.max = i === 0 ? shiftDay(field.max, -1) : field.max; }
+            if (isDay(value[end])) { input.value = value[end]; }
+            var cell = el('div', 'nc-fill-end');
+            if (formText(names[end])) {
+                var sub = fieldLabel(names[end], input.id);
+                sub.classList.add('nc-fill-sub');
+                cell.appendChild(sub);
+            } else {
+                attrs(input, { 'aria-label': field.label });
+            }
+            cell.appendChild(input);
+            range.appendChild(cell);
+            inputs.push(input);
+        }
+        group.appendChild(range);
+        set.appendChild(group);
+        var from = inputs[0];
+        var to = inputs[1];
+        // Reads the DOM's sanitised values, never the payload: the browser has
+        // already turned anything that is not a date into ''.
+        function sync() {
+            var floor = isDay(from.value) ? shiftDay(from.value, 1) : '';
+            if (isDay(field.min) && (!floor || floor < field.min)) { floor = field.min; }
+            if (floor) { to.min = floor; } else { to.removeAttribute('min'); }
+            from.required = to.required = required || !!(from.value || to.value);
+        }
+        for (var e = 0; e < 2; e++) {
+            inputs[e].addEventListener('input', sync);
+            inputs[e].addEventListener('change', sync);
+        }
+        sync();
+        return function () {
+            var a = from.value;
+            var b = to.value;
+            if (!a && !b) { return required ? false : null; }
+            if (!isDay(a) || !isDay(b) || b <= a) { return false; }
+            return { value: { from: a, to: b }, show: a + ' → ' + b };
+        };
+    }
+
+    // Never pre-ticked: the contract defines no consent prefill, and a box
+    // ticked for the guest is not their consent. The privacy link is drawn only
+    // for an http(s) url and is not a CTA — no data-wchat-el, so it never
+    // reaches wchat:action.
+    function consentField(set, field, required) {
+        var id = fieldId();
+        var box = el('input', 'nc-fill-box');
+        box.type = 'checkbox';
+        box.id = id;
+        box.required = required;
+        var wrap = el('div', 'nc-fill-check');
+        wrap.appendChild(box);
+        wrap.appendChild(fieldLabel(field.label, id));
+        var link = (field.link && typeof field.link === 'object') ? field.link : null;
+        var href = link ? safeHttpUrl(link.url) : null;
+        if (href && formText(link.label)) {
+            var a = el('a', 'nc-fill-link', link.label);
+            attrs(a, { href: href, target: '_blank', rel: 'noopener noreferrer', dir: 'auto' });
+            wrap.appendChild(a);
+        } else if (link) {
+            log('dropped a consent link that is not http(s) or has no label');
+        }
+        set.appendChild(wrap);
+        return function () {
+            if (box.checked) { return { value: true, show: '' }; }
+            return required ? false : null;
+        };
+    }
+
+    function formField(set, field) {
+        if (!field || typeof field !== 'object' || !formText(field.name) || !formText(field.label) ||
+            FORM_KINDS.indexOf(field.kind) === -1) { return null; }
+        var required = field.required === true;
+        if (field.kind === 'select') { return selectField(set, field, required); }
+        if (field.kind === 'date_range') { return rangeField(set, field, required); }
+        if (field.kind === 'consent') { return consentField(set, field, required); }
+        return textField(set, field, required);
+    }
+
+    function renderForm(action) {
+        if (!formText(action.id) || action.id.length > FORM_ID_MAX ||
+            !Array.isArray(action.fields) || !action.fields.length ||
+            !formText(action.submit_label) || !formText(action.submit_message)) {
+            log('dropped a form this build cannot send');
+            return;
+        }
+        var form = el('form', 'nc-fill');
+        // tabindex -1: the landing spot retireForms() moves focus to.
+        attrs(form, { 'aria-label': formText(action.title) || action.submit_label, tabindex: '-1' });
+        // No <legend>: a disabled fieldset leaves its first legend's controls
+        // enabled. And no `name` on any control, so not even an accidental
+        // native submit could put a value into the host page's url.
+        var set = el('fieldset', 'nc-fill-set');
+        if (formText(action.title)) { set.appendChild(attrs(el('div', 'nc-fill-title', action.title), { dir: 'auto' })); }
+        if (formText(action.intro)) { set.appendChild(attrs(el('div', 'nc-fill-intro', action.intro), { dir: 'auto' })); }
+        var readers = [];
+        var seen = Object.create(null);
+        for (var i = 0; i < action.fields.length; i++) {
+            var field = action.fields[i];
+            var reader = formField(set, field);
+            // Two fields sharing a name would overwrite each other's value — a
+            // field silently missing from the submit, so the same rule.
+            if (!reader || seen[field.name]) {
+                log('dropped a form with a field this build cannot draw', action.id);
+                return;
+            }
+            seen[field.name] = true;
+            readers.push({ name: field.name, read: reader });
+        }
+        var submit = el('button', 'nc-action nc-action--primary nc-fill-submit', action.submit_label);
+        attrs(submit, { type: 'submit' });
+        set.appendChild(submit);
+        form.appendChild(set);
+        var entry = { form: form, set: set };
+
+        // No `novalidate`: the browser validates required, min/max, the date
+        // order and the integer step BEFORE this fires, with its own messages.
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            if (busy || removed || ended || set.disabled) { return; }
+            // Spaces alone satisfy a native `required`. Emptied, they fail it
+            // with the browser's message, rather than being sent as a blank
+            // where the template promised a value.
+            var controls = set.elements;
+            for (var c = 0; c < controls.length; c++) {
+                var control = controls[c];
+                if (control.required && typeof control.value === 'string' && control.value && !control.value.trim()) {
+                    control.value = '';
+                }
+            }
+            if (!form.reportValidity()) { return; }
+            // Null-prototype, so a {constructor} or {__proto__} token matches
+            // nothing and is emptied like any token naming no field.
+            var values = Object.create(null);
+            var shown = Object.create(null);
+            var filled = 0;
+            for (var r = 0; r < readers.length; r++) {
+                var answer = readers[r].read();
+                if (answer === false) { return; }
+                if (answer) {
+                    values[readers[r].name] = answer.value;
+                    shown[readers[r].name] = answer.show;
+                    filled++;
+                }
+            }
+            // `values` is required on the wire: an all-blank submit is a 422.
+            if (!filled) { return; }
+            // ONE pass with a function replacer: a value the guest typed that
+            // itself reads "{email}" stays text, and a `$&` in it stays literal
+            // (fill()'s reason). The server fills its own copy the same way.
+            var message = action.submit_message.replace(/\{([^{}\s]+)\}/g, function (match, key) {
+                return shown[key] != null ? shown[key] : '';
+            }).trim();
+            if (!message) { return; }
+            // sendGuestText() passes the same gate checked above, so it WILL
+            // count this send — taken before the call, because a transport that
+            // fails synchronously runs onFail inside it.
+            var mine = sendSeq + 1;
+            sendGuestText(message, 'form', { type: 'form', id: action.id, payload: { values: values } }, function () {
+                // Given back only to a guest who has sent nothing since: a later
+                // send retired it on purpose, and the one-shot rule outranks
+                // the retry. Never into a wiped, ended or dead widget.
+                if (sendSeq !== mine || removed || ended || !els.body.contains(form)) { return; }
+                set.disabled = false;
+                if (liveForms.indexOf(entry) === -1) { liveForms.push(entry); }
+            });
+        });
+
+        els.body.appendChild(form);
+        liveForms.push(entry);
+        // Never focused on arrival — the guest did not open it (contract,
+        // Accessibility) — and never scrolled to.
+        afterRender();
+    }
+
+    /**
+     * The form's one-shot rule, the twin of retireChipRows(): ANY send retires
+     * every live form, the submit's own included. A retired form stays on screen,
+     * disabled, as the record of what was sent. Disabling a focused control
+     * drops focus to <body>, so focus moves FIRST — onto the form itself rather
+     * than the composer: the form is still on screen, and focusing the composer
+     * after a tap-submit pops a phone's keyboard over the answer about to land.
+     * preventScroll, because the send's own anchor is the one deliberate move.
+     */
+    function retireForms() {
+        for (var i = 0; i < liveForms.length; i++) {
+            var entry = liveForms[i];
+            if (entry.form.contains(document.activeElement) && entry.form !== document.activeElement) {
+                entry.form.focus({ preventScroll: true });
+            }
+            entry.set.disabled = true;
+        }
+        liveForms = [];
     }
 
     /* --------------------------------------------------- property carousel --- */
@@ -3755,6 +4571,17 @@
         attrs(track, { role: 'list' });
         wrap.appendChild(track);
 
+        // What the order MEANS (1.16.0): the server's `ordering`, labelled only
+        // when it says the order is a ranking — `cheapest` (a stay result, by
+        // stay_total, sold-out hostels last) or `ranked` (a match, best first).
+        // Absent or `catalog` is the catalog's order and is never called a
+        // ranking. The cards are drawn as given either way, never re-sorted. And
+        // from two cards up only: an order of one is the dots' furniture.
+        var order = (action.ordering === 'cheapest' || action.ordering === 'ranked') ? action.ordering : null;
+        if (order && count > 1) {
+            els.body.appendChild(attrs(el('div', 'nc-card-order', orderText(order)), { 'data-nc-order': order }));
+        }
+
         var fadeL = attrs(el('div', 'nc-car-fade nc-car-fade--l'), { 'aria-hidden': 'true' });
         var fadeR = attrs(el('div', 'nc-car-fade nc-car-fade--r'), { 'aria-hidden': 'true' });
         wrap.appendChild(fadeL);
@@ -3798,11 +4625,40 @@
         var moreUrl = more ? safeHttpUrl(more.url) : null;
         if (moreUrl && typeof more.label === 'string' && more.label) {
             // Label is server-localized — textContent via linkButton, never t().
-            linkButton(more.label, moreUrl, null, null, rendered, 'property_cards_more');
+            linkButton(more.label, moreUrl, null, null, rendered, 'property_cards_more', 'more');
         } else if (typeof action.total === 'number' && action.total > count) {
             els.body.appendChild(el('div', 'nc-car-count', tf('showingOf', count, action.total)));
         }
         afterRender();
+    }
+
+    /*
+     * A card's stay total (contract 1.16.0, "Reading stay_total"): the cheapest
+     * option's party total from live availability — the availability option's
+     * `total` and `basis`, and printed the way that card prints it: the server's
+     * amount and currency verbatim ("60.00 EUR"), never reformatted, never
+     * computed from price_from. Labelled by the availability card's own group
+     * headings, so a bed total reads the same in both places. Absent for a
+     * hostel whose price the server could not read — no line at all, then.
+     * Pack words around a payload figure, so the words repaint on setLocale()
+     * from the stamps and the figure does not.
+     */
+    function stayText(each, basis) {
+        return tf('stayTotal', each) + (basis ? ' · ' + optionsHeadingText(basis) : '');
+    }
+
+    function cardStay(total) {
+        // Both halves or nothing: an amount with no currency is half a quote,
+        // and the contract gives stay_total as {amount, currency, basis?}.
+        if (!total || typeof total !== 'object' || !formText(total.amount) || !formText(total.currency)) { return null; }
+        var each = total.amount + ' ' + total.currency;
+        var basis = knownBasis(total);
+        return attrs(el('div', 'nc-card-stay', stayText(each, basis)),
+            { 'data-nc-each': each, 'data-nc-basis': basis || null });
+    }
+
+    function orderText(order) {
+        return t(order === 'cheapest' ? 'orderCheapest' : 'orderRanked');
     }
 
     /**
@@ -3852,15 +4708,24 @@
         if (typeof item.location === 'string' && item.location) {
             body.appendChild(el('div', 'nc-card-loc', item.location));
         }
+        // Why the card sits where it does (1.16.0) — "Fully booked for these
+        // dates" on a stay result. Server-localized prose, so textContent.
+        if (formText(item.reason)) {
+            body.appendChild(attrs(el('div', 'nc-card-reason', item.reason), { dir: 'auto' }));
+        }
         var price = cardPrice(item.price_from);
         if (price) { body.appendChild(price); }
+        // BESIDE price_from, never in its place: price_from stays the static
+        // from-price, stay_total is what this stay costs from live availability.
+        var stay = cardStay(item.stay_total);
+        if (stay) { body.appendChild(stay); }
 
         // cta_label (1.6.0) is server-localized Book text — prefer it, and keep
         // the pack's "Book now" as the fallback (empty string falls back too).
         var book = el('a', 'nc-card-book',
             (typeof item.cta_label === 'string' && item.cta_label) ? item.cta_label : t('book'));
         attrs(book, { href: href, target: '_blank', rel: 'noopener noreferrer' });
-        attrs(book, { 'data-wchat-el': 'property_card', 'data-wchat-index': String(index) });
+        attrs(book, { 'data-wchat-el': 'property_card', 'data-wchat-index': String(index), 'data-wchat-cta': 'book' });
         body.appendChild(book);
 
         card.appendChild(body);
@@ -4164,8 +5029,10 @@
         var card = el('div', 'nc-promo' + (action.style === 'highlight' ? ' nc-promo--highlight' : ''));
         // A region NAMED BY ITS TITLE (contract → Accessibility), not a live one:
         // .nc-body is already non-live and the announcer speaks only replies.
-        // aria-label with the title string, not aria-labelledby — nothing in this
-        // widget emits element ids. The gates above guarantee title is non-empty.
+        // aria-label with the title string, not aria-labelledby — besides the
+        // root's own, the only ids this widget writes are a 1.16.0 form's
+        // (nc-f-*, for its <label for>). The gates above guarantee title is
+        // non-empty.
         attrs(card, { role: 'region', 'aria-label': action.title });
         // locale (1.6.0) names the language of the block's DISPLAYED text — mark
         // it up so a screen reader does not read Spanish copy with an English
@@ -4190,7 +5057,7 @@
 
         var link = el('a', 'nc-promo-cta', cta.label);
         attrs(link, { href: href, target: '_blank', rel: 'noopener noreferrer' });
-        attrs(link, { 'data-wchat-el': 'promo_card' });
+        attrs(link, { 'data-wchat-el': 'promo_card', 'data-wchat-cta': 'promo' });
         card.appendChild(link);
 
         els.body.appendChild(card);
@@ -4416,6 +5283,13 @@
             // the FINAL turn — retire everything painted so far before it.
             // (A final guest turn carries no chips, so it needs no case.)
             if (i === transcript.length - 1) { retireChipRows(); }
+            // Forms follow the same rule by a different route: one on an earlier
+            // entry is not drawn at all, because a redraw would show the server's
+            // prefill rather than what the guest sent, and the guest bubble under
+            // it already is the record. Skipped in renderAction — never filtered
+            // out of `a` — so a replayed turn groups its buttons exactly as the
+            // live one did. The final reply's form comes back live.
+            drawForms = (i === transcript.length - 1);
             var turn = transcript[i];
             // turn.at is null for anything stored before 2.8.1 — that is the
             // signal for "no day pill, no title", and it is why addBubble
@@ -4433,6 +5307,7 @@
             if (turn.a) { renderActions(turn.a, bubble, Object.create(null)); }
         }
         replaying = false;
+        drawForms = true;
 
         // A guest who read the greeting and navigated without typing has a
         // one-turn transcript: no intro animation, but the welcome block and
@@ -5075,12 +5950,17 @@
      * reply carries — so "the guest sent something" means exactly one thing:
      * the welcome block goes, the bubble lands, the turn is queued.
      *
-     * Deliberately takes only the text: it is called straight from click
-     * handlers that have no form event and nothing to do with the composer, so
-     * it never touches els.input and never preventDefault()s anything.
+     * Takes the text the guest will SEE — never anything else as the message —
+     * plus, since 1.16.0, what a tap or a submit means: `action` rides beside
+     * the text to the server (a keyed chip's, a form's), and `onFail` is the
+     * caller's to give its form back if the turn does not land. It is called
+     * straight from click and submit handlers that have nothing to do with the
+     * composer, so it never touches els.input and never preventDefault()s
+     * anything.
      */
-    function sendGuestText(text, source) {
+    function sendGuestText(text, source, action, onFail) {
         if (busy || removed || ended) { return; }
+        sendSeq += 1;
         guestTurned = true;
         removeWelcome();
         // ANY send retires every chip row on screen (the 1.6.0 one-shot rule) —
@@ -5088,6 +5968,9 @@
         // land on the composer, and welcome rows are not registered, so the two
         // sweeps never fight over a node.
         retireChipRows();
+        // ...and every live form, the same rule for 1.16.0's other one-shot
+        // element — including the form whose submit this is.
+        retireForms();
         // BEFORE the bubble lands, so its own afterRender() cannot ride a follow
         // left armed by the previous reply: every turn starts from a still view.
         followStream = false;
@@ -5114,16 +5997,17 @@
         transcript.push({ r: 'guest', t: text, a: null, n: null, at: when });
         persist();
         // The LENGTH, never the text. This is the seam every guest turn passes
-        // through — composer, prompt pill, chip — so `source` is the only place
-        // that can say whether the widget's own affordances are earning their
-        // space, and it is measurable nowhere else.
+        // through — composer, prompt pill, chip, form — so `source` is the only
+        // place that can say whether the widget's own affordances are earning
+        // their space, and it is measurable nowhere else. Neither the action nor
+        // a form's values ever join this payload: a later form carries an email.
         emit('message', {
             source: source || 'composer',
             length: text.length,
             turns: transcript.length,
             locale: locale
         });
-        ensureConversation(function () { sendMessage(text, false); });
+        ensureConversation(function () { sendMessage(text, false, action || null, onFail || null); });
     }
 
     function submit(e) {
@@ -5163,7 +6047,16 @@
         return isLongThrottle(retryAfter) ? t('retryLater') : t('retry');
     }
 
-    function sendMessage(text, isRetry) {
+    /*
+     * `action` and `onFail` travel with the text through every path that sends
+     * it again — the queue, the 410/404 resend — because the server reads the
+     * action off the turn that carries it. onFail runs wherever this turn ends
+     * without a reply the guest can act on: a failed init or re-init, a 429, any
+     * other failure. Never on a 403 (the widget is gone) and never after a
+     * restart (the epoch guard returns first, and the restart dropped the init
+     * waiters) — there is no form left to give back.
+     */
+    function sendMessage(text, isRetry, action, onFail) {
         if (!conversationUuid) {
             // A failed re-init lands here; a throttled one deserves the
             // throttle copy — "try again shortly" or, past a daily cap, "come
@@ -5175,13 +6068,14 @@
             // that matters and is not derivable from the other. retryAfter null
             // for the same reason: the init event already carries the header.
             emit('error', { phase: 'turn', status: 0, retrying: false, retryAfter: null });
+            if (onFail) { onFail(); }
             return;
         }
 
         // One turn in flight at a time. submit() gates on busy, but several
         // messages queued behind one init drain here together — serialize them
         // (their guest bubbles are already on screen, in order).
-        if (busy) { sendQueue.push(text); return; }
+        if (busy) { sendQueue.push({ text: text, action: action, onFail: onFail }); return; }
 
         busy = true;
         els.send.disabled = true;
@@ -5194,7 +6088,7 @@
         // claim pollResult() has always made about its poll.
         var epoch = chatEpoch;
 
-        API.send(conversationUuid, text, function (status, body, retryAfter) {
+        API.send(conversationUuid, text, action, function (status, body, retryAfter) {
             // BEFORE busy, and the order is load-bearing. A restart (the header
             // menu, mid-conversation) already cleared busy, and a guest who has
             // since sent into the NEW conversation has set it again - clearing
@@ -5299,7 +6193,7 @@
                 // IDLE_MS fallback: an older server that sends no idle_hours, or
                 // records written by one that have not been rewritten since.
                 emit('error', { phase: 'turn', status: status, retrying: true, retryAfter: null });
-                startConversation(function () { sendMessage(text, true); });
+                startConversation(function () { sendMessage(text, true, action, onFail); });
                 return;   // the retry's own callback drains the queue
             }
 
@@ -5315,20 +6209,30 @@
             if (status === 429) {
                 addBubble('bot', throttleCopy(retryAfter));
                 emit('error', { phase: 'turn', status: 429, retrying: false, retryAfter: retryAfter });
+                if (onFail) { onFail(); }
                 // Past a daily cap every turn queued behind this one is refused
                 // too, for hours, and each would paint the same "come back later"
                 // under the last. One answer covers them — their guest bubbles
                 // are already on screen and in the record — the same way
                 // endConversation() empties the queue when nothing more can be
                 // answered. A short wait keeps draining: a minute's limit may
-                // well have reopened by the time the next one goes.
-                if (isLongThrottle(retryAfter)) { sendQueue = []; }
+                // well have reopened by the time the next one goes. A dropped
+                // turn is a failed one: its form, if it had one, is offered back
+                // (and declines unless nothing was sent after it — renderForm).
+                if (isLongThrottle(retryAfter)) {
+                    var dropped = sendQueue;
+                    sendQueue = [];
+                    for (var di = 0; di < dropped.length; di++) {
+                        if (dropped[di].onFail) { dropped[di].onFail(); }
+                    }
+                }
                 drainSend();
                 return;
             }
 
             addBubble('bot', t('error'));
             emit('error', { phase: 'turn', status: status, retrying: false, retryAfter: null });
+            if (onFail) { onFail(); }
             drainSend();
         });
     }
@@ -5338,7 +6242,8 @@
         // same canned refusal — endConversation() already emptied the queue, and
         // this guard keeps a race from re-draining into it.
         if (removed || ended || busy || !sendQueue.length) { return; }
-        sendMessage(sendQueue.shift(), false);
+        var next = sendQueue.shift();
+        sendMessage(next.text, false, next.action, next.onFail);
     }
 
     /**
@@ -5365,6 +6270,9 @@
         // BEFORE the composer closes: retireChipRows()'s focus rescue lands on
         // els.input, which must still be enabled to take it.
         retireChipRows();
+        // A capped conversation takes no submit either. retireForms() hands
+        // focus to the retired form itself, which stays on screen.
+        retireForms();
 
         var restart = el('button', 'nc-action nc-action--primary nc-restart', t('newChat'));
         attrs(restart, { type: 'button' });
@@ -5387,7 +6295,10 @@
         // not a leftover: the composer has just been disabled and the guest MUST
         // be able to reach the only live control — the focus rule outranks the
         // scroll rule.
-        if (els.form.contains(document.activeElement)) { restart.focus(); }
+        // Or standing on a retired form, whose own submit the cap answered.
+        var onForm = document.activeElement && document.activeElement.closest &&
+            document.activeElement.closest('#nest-chatbot .nc-fill');
+        if (els.form.contains(document.activeElement) || onForm) { restart.focus(); }
         els.input.disabled = true;
         els.send.disabled = true;
         afterRender();
@@ -5440,7 +6351,8 @@
         // above a finished greeting is the intro half-played.
         els.loader.classList.add('nc-hidden');
         chipRows = [];            // already retired; the wipe below removes any remnant
-        transcript = [];                     // a NEW conversation shares no history with the old one
+        liveForms = [];           // the wipe below takes the forms; nothing may re-enable one
+        transcript = [];                   // a NEW conversation shares no history with the old one
         pollEntries = Object.create(null);   // any orphaned poll handle died with its epoch
         followStream = false;     // a follow armed for the old reply must not ride into the new one
         lastDayKey = null;        // the wipe below takes every pill with it; a stale day here
@@ -5865,11 +6777,24 @@
                 prefills[pi].textContent = t('prefillCaption');
             }
         }
+        // The 1.16.0 card lines: a stay total's words and the order caption are
+        // ours around the server's figure and enum — the 2.11.1 rule, read back
+        // from the same kind of stamp. The card's price_from line is still in
+        // the documented not-yet-repainted gap.
+        var stays = els.body.querySelectorAll('.nc-card-stay, .nc-card-order');
+        for (var ci = 0; ci < stays.length; ci++) {
+            var sn = stays[ci];
+            if (sn.classList.contains('nc-card-order')) {
+                sn.textContent = orderText(sn.getAttribute('data-nc-order'));
+            } else {
+                sn.textContent = stayText(sn.getAttribute('data-nc-each'), sn.getAttribute('data-nc-basis') || '');
+            }
+        }
         // A relabelled card can change height — "Camas en dormitorio compartido"
         // wraps where "Beds in shared rooms" did not — and so can a caption, and
         // the anchor pad and the cue are what a height change has to re-measure.
-        // Guarded, so a transcript with neither behaves exactly as it did before.
-        if (opts.length || prefills.length) { afterRender(); }
+        // Guarded, so a transcript with none of them behaves exactly as before.
+        if (opts.length || prefills.length || stays.length) { afterRender(); }
         // The one control whose label depends on state, not just on locale: it
         // reads "shrink" while the sheet is out.
         els.expand.setAttribute('aria-label', isExpanded() ? t('shrink') : t('expand'));
@@ -5936,6 +6861,8 @@
          * they are re-created on every replay. Every tagged anchor lives inside
          * els.body, so this covers link_button / booking_link / availability /
          * property_card / promo_card and any element type that tags one later.
+         * A form's consent link is deliberately NOT tagged: it is a privacy
+         * notice, not a call to action.
          *
          * Inside #nest-chatbot, so teardown()'s outside-the-root listener
          * count is untouched by it.
@@ -5953,6 +6880,12 @@
                 channel: node.getAttribute('data-wchat-channel') || null,
                 style: node.getAttribute('data-wchat-style') || null,
                 index: index === null ? null : Number(index),
+                // WHICH button (2.13.4), in guide §3.4's click vocabulary:
+                // book · website · directions · more · promo · phone ·
+                // whatsapp · email, or null for a link_button whose id this
+                // widget does not know. Written at render from fixed values
+                // only (linkButton, channelLink, propertyCard, renderPromoCard).
+                cta: node.getAttribute('data-wchat-cta') || null,
                 // Present for http(s) CTAs and deliberately absent for contact
                 // channels, whose href IS the property's phone number or email
                 // (see channelLink) — and, since 1.14.0, may carry the guest's

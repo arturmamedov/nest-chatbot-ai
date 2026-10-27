@@ -17,8 +17,11 @@ Shipped in **2.8.2** as a patch — additive, no `data-*` attribute, nothing new
 the packet has since moved to **1.6.2** in `2.9.0` (D-047, an emission rule), to **1.7.0**
 in `2.10.0` (D-050), to **1.9.0** in `2.11.0` (D-067, D-071, 2026-08-27), to **1.10.0** in
 `2.12.0` (D-072, D-073, 2026-08-28), to **1.12.0** in `2.13.0` (D-078, D-079, 2026-09-15;
-`wchat:error` gained `retryAfter`) and to **1.14.0** in `2.13.1` (D-083, D-084, 2026-09-23) —
-none of which changes the event surface: no name moved, no payload lost a field. 1.10.0 is
+`wchat:error` gained `retryAfter`), to **1.14.0** in `2.13.1` (D-083, D-084, 2026-09-23), to
+**1.15.0** in `2.13.2` (D-090, 2026-10-07), to **1.15.1** in `2.13.3` (D-106, 2026-10-23) and to
+**1.16.1** in `2.13.4` (D-109, D-111, D-112, D-114, 2026-10-27; `wchat:action` gained `cta`,
+`wchat:message` gained the `source` value `form`) — none of which changes the event surface: no
+name moved, no payload lost a field. 1.10.0 is
 worth a line here because it looked like it might: a booking turn may now carry a
 `property_cards` beside its `availability`, so `wchat:reply.elements` can list the pair, and the
 Book button the dedupe suppresses emits nothing — the information turn's existing behaviour, not a
@@ -29,7 +32,14 @@ its name and `{from, to}` and now fires only for a host's `setLocale()` — the 
 is gone — and the WhatsApp and email links, which since 1.14.0 can carry the guest's pre-written
 message, keep `url: null`, so that message never reaches a `wchat:*` event. It does sit in the
 anchor's `href`, where a host's own link-click tracking can read it; README § Measuring it tells
-hosts to exclude those links.
+hosts to exclude those links. 2.13.4 added two things, both additive. `wchat:action.cta` names
+**which** button was clicked in the platform's own click vocabulary (guide §3.4) — `book`,
+`website`, `directions`, `more`, `promo`, `phone`, `whatsapp`, `email`, or `null` for a
+`link_button` with no `id` or one the widget does not know — every `link_button` from a server
+before 1.16.0, the deployment's 1.15.1 included — from fixed values written at render, never a
+payload string. And a 1.16.0 `form` submit is a guest message like any other, so it fires `wchat:message`
+with `source: 'form'` and its `length`; what the guest filled in — dates and a party today, an
+email or a phone on a later form — never enters a payload.
 
 **The upstream ask at the foot of this document was sent, and granted.** `idle_hours` landed in
 contract 1.7.0 and the widget adopted it in 2.10.0, which changes one thing described here for
@@ -106,6 +116,16 @@ is out of scope for this repo by construction.**
 A host that listens to nothing pays nothing, which is why there is deliberately no `data-*`
 attribute to disable it.
 
+**Contract 1.16.0 offers the other route, and 2.13.4 does not take it.** D-113 added a fourth
+endpoint, `POST …/{uuid}/events`, and an init flag `analytics: true`, so the wSuite panel can count
+CTA clicks itself: two enums and the turn per click, to the same origin the widget already posts
+turns to. That is still a request of the widget's own, which is what this section rules out, so
+the 2.13.4 sync neither reads `analytics` nor calls the endpoint. Whether a same-origin, opt-in,
+enum-only POST sits inside or outside this constraint's intent was asked as a separate decision
+(the 1.16.1 packet's APPENDIX-A), and this section stands as written until it is answered. The
+`cta` field above uses the same vocabulary on purpose: a host already has, in its own analytics,
+what that endpoint would count.
+
 ---
 
 ## The event surface
@@ -122,9 +142,9 @@ Dispatched from `els.root`, never `window`: events bubble, so a host listener on
 | `wchat:ready` | `boot()` | `version`, `locale`, `mock`, `returning`, `storedTurns`, `expanded` | the denominator; **how many arrivals are returning guests** | whether they ever open it |
 | `wchat:open` | `open()`, after `playIntro()` | `source`, `firstOpen`, `resumed`, `turns` | open rate; **whether the teaser converts** (`source:'teaser'`) | why they opened |
 | `wchat:close` | `close()` | `source`, `turns` | dwell time, paired with `open`; **whether the guest was leaving the page or putting the chat away** (`source:'back'` vs `'close'`) | whether they got what they came for |
-| `wchat:message` | `sendGuestText()` | `source`, `length`, `turns`, `locale` | **engagement** — read-only vs typed; whether the prompt pills and server chips earn their space | what they asked |
+| `wchat:message` | `sendGuestText()` | `source`, `length`, `turns`, `locale` | **engagement** — read-only vs typed; whether the prompt pills and server chips earn their space; since 2.13.4 **how often the Book panel is submitted** (`source:'form'`) | what they asked, or what they filled in |
 | `wchat:reply` | `sendMessage()` 200; again on poll resolution | `turn`, `length`, `elements[]`, `async`, `resolved`, `ended`, `latencyMs` | **how slow the bot is**; which element types actually reach guests | reply quality; whether it was right |
-| `wchat:action` | delegated click in `els.body` | `element`, `url`, `channel`, `style`, `index` | **the conversion** — which Book / WhatsApp / card was clicked | whether the booking completed |
+| `wchat:action` | delegated click in `els.body` | `element`, `cta` (since 2.13.4), `url`, `channel`, `style`, `index` | **the conversion** — which Book / WhatsApp / card was clicked, and through `cta` which kind of button, Website and Directions included | whether the booking completed |
 | `wchat:error` | every non-200 branch | `phase`, `status`, `retrying`, `retryAfter` (since 2.13.0) | **429s on shared hostel wifi** — and, through `retryAfter`, whether one was a minute's wait or a daily cap (contract 1.11.0) — 403 origin refusals, transport failures — all invisible before this | why the server failed |
 | `wchat:ended` | `endConversation()` | `turns` | how often the turn cap bites | whether the guest minded |
 | `wchat:restart` | `restartConversation()` | `source`, `turns` | whether "start a new chat" is used, and **whether it was chosen or forced** (`source`) | why they wanted a fresh thread |
@@ -133,7 +153,8 @@ Dispatched from `els.root`, never `window`: events bubble, so a host listener on
 
 `source` enums: `open` — `toggler` \| `teaser` \| `auto` \| `api`. `close` — `toggler` \|
 `close` \| `escape` \| `back` \| `api` (`back` added in 2.10.3 with the device Back button;
-additive, so a patch). `message` — `composer` \| `prompt` \| `chip` \| `welcome-chip`.
+additive, so a patch). `message` — `composer` \| `prompt` \| `chip` \| `welcome-chip` \|
+`form` (`form` added in 2.13.4 with the 1.16.0 form; additive, so a patch).
 `restart` — `menu` \| `ended` (added in 2.10.2 with the header menu; additive, so a patch).
 There is deliberately no `api` in that last one: nothing on `window.NestChatbot` restarts a
 conversation, so the enum's fallback is `ended` — the one listener a bare function reference
@@ -166,7 +187,9 @@ before it is used as a proxy for satisfaction.
   a WhatsApp or email href can also carry the guest's own pre-written message (`prefill`), which
   the contract bars from analytics events and logs — one more reason the exclusion is absolute.
   It is absolute for **our** events only: the href is on the anchor, and a host's generic
-  link-click tag reads it there, which no payload rule can prevent.
+  link-click tag reads it there, which no payload rule can prevent. `cta` (2.13.4) is no
+  exception to any of this: it is an enum, so a contact click carries `cta: 'whatsapp'` and still
+  `url: null`. A form's consent link is not tagged at all — a privacy notice, not a call to action.
 - **`wchat:reply` fires twice for an async turn**, truthfully: the guest saw two answers land.
   `resolved` separates them, and the resolved one's `latencyMs` is the full poll wait, which is
   the number worth having for gated booking turns.

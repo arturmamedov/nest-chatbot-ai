@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Version** | matches `response-contract.md` 1.15.1 (the server reports the live version as `contract_version` — see §3.1) |
+| **Version** | matches `response-contract.md` 1.16.1 (the server reports the live version as `contract_version` — see §3.1) |
 | **Audience** | Any external website embedding a **custom** chat UI on top of the wSuite chatbot API — e.g. the branded `nest-chatbot-ai` microsite. |
-| **Scope** | The **transport + auth** layer: base URL, the three endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS. |
+| **Scope** | The **transport + auth** layer: base URL, the four endpoints, the API-key model, the request/response flow, errors, rate limits, and CORS. |
 | **Not in scope** | The **response envelope** (`reply` / typed `actions[]` / element types). That is fully specified in [`response-contract.md`](response-contract.md) — read it alongside this document; do not duplicate its rules here. |
 
 This platform ships its own drop-in bubble widget at [`../resources/widget/chatbot.js`](../resources/widget/chatbot.js). It is the **canonical, security-reviewed reference implementation** of everything below — when in doubt about a detail, read how `chatbot.js` does it. A custom UI (a different form factor: full-page, branded, multi-page) is a first-class alternative consumer of the exact same API and contract; both coexist.
@@ -40,15 +40,16 @@ Authorization: Bearer ws_live_<prefix>.<secret>
 
 ---
 
-## 3. The three endpoints and the turn flow
+## 3. The four endpoints and the turn flow
 
 | Step | Method + path | Route name | Success |
 |---|---|---|---|
 | **Init** | `POST /api/v1/chatbot/conversations` | `chatbot.v1.conversations.store` | `201` |
 | **Turn** | `POST /api/v1/chatbot/conversations/{uuid}/messages` | `chatbot.v1.conversations.messages.store` | `200` |
 | **Poll** | `GET /api/v1/chatbot/conversations/{uuid}/turns/{turn}` | `chatbot.v1.conversations.turns.show` | `200` |
+| **Event** *(since 1.16.0)* | `POST /api/v1/chatbot/conversations/{uuid}/events` | `chatbot.v1.conversations.events.store` | `204` |
 
-All three require the `Authorization` header from §2. `{uuid}` is the conversation's public identifier (sequential DB ids never leave the API).
+All four require the `Authorization` header from §2. `{uuid}` is the conversation's public identifier (sequential DB ids never leave the API).
 
 ### 3.1 Init — start a conversation
 
@@ -79,6 +80,7 @@ Content-Type: application/json
 | `actions` | `array` | 1.5.0 | The same element vocabulary as a turn (greeting-time quick prompts / promo). Render after the greeting like any turn's `actions[]`; always sent (`[]` when unconfigured), absent on pre-1.5.0 servers. |
 | `idle_hours` | `int` | **1.7.0** | The conversation idle window (§5, `410`). **Drive your stored-conversation expiry from this**, not from a constant — see below. |
 | `server_time` | `string` | **1.7.0** | ISO-8601 with offset, at the instant the conversation was created. For a one-off client-clock correction — see below. |
+| `analytics` | `bool` | **1.16.0** | `true` when this site counts button clicks; **absent otherwise** — never `false`. Report clicks (§3.4) only while it is `true`, and **persist it with the conversation record**: your resume path never calls init. Absent on older servers, which is the same as "do not report". |
 | `contract_version` | `string` | 1.2.0 | The live contract version; also in the `X-Chatbot-Contract` header. |
 
 Persist `uuid` (the reference widget keys it to `localStorage` per API key). Render `greeting` as the first bot bubble.
@@ -145,6 +147,45 @@ Content-Type: application/json
 |---|---|---|---|
 | `message` | `string` | yes | Max length = `wsuite.chatbot.message.max_length` (default **2000**). |
 | `locale` | `string` (≤5) | no | **Since 1.3.0; its meaning changed in 1.13.0.** The visitor's **preferred** language — it answers until the guest writes theirs. See below. |
+| `action` | `object` | no | **Since 1.16.0.** What the guest's tap or submit means, beside the `message` — never instead of it. See below. |
+
+#### `action` — a keyed chip, or a form submit
+
+**Since 1.16.0** (D-111(a)). One shape, `{type, id?, payload?}`, and two kinds:
+
+```json
+{ "message": "I would like to book a bed", "action": { "type": "reply", "payload": { "key": "book-a-bed" } } }
+{ "message": "Prices for Duque Nest, 2026-11-03 → 2026-11-06",
+  "action": { "type": "form", "id": "book", "payload": { "values": { "place": "duque-nest", "dates": { "from": "2026-11-03", "to": "2026-11-06" } } } } }
+```
+
+| Field | Notes |
+|---|---|
+| `type` | `reply` — a tap on a `quick_replies` item that carries a `key`; `form` — a [`form`](response-contract.md#form--a-form-the-guest-fills-in-the-chat) submit. Anything else is `422`. |
+| `id` | `form` only, required: the form's `id`, ≤ 64 characters. |
+| `payload.key` | `reply` only, required: the chip's `key`, ≤ 64 characters. |
+| `payload.values` | `form` only, required: at most 20 values — a string ≤ 500 characters, an integer, `true`, or a date range `{from, to}` of two `Y-m-d` strings. Leave a blank optional field out. |
+
+Three things to know:
+
+- **`message` is always what the guest sees** — the chip's `message`, or the form's filled
+  `submit_message` — so the transcript stays readable, and a server older than 1.16.0, which does not
+  read `action`, answers the message exactly as before.
+- **Sending `action` declares that you render every element up to your `BUILT_AGAINST`.** The server
+  sends a `form` only to a turn that carried one; the same chip's message sent alone is answered as an
+  ordinary turn. Send it only once you draw `form`.
+- **Only the shape is a `422`.** A key the tenant no longer publishes, or a form value the server no
+  longer offers (a hostel closed since the form was sent), is not an error: the turn falls back to the
+  message's text, or the reply asks again.
+
+#### Prices in a date picker — optional, from the price API
+
+The Book form sends no per-night prices. A renderer that wants them in its date picker reads them
+itself, with the same embed key and origin: `GET /api/v1/pms/prices/nights?properties=<slug>&from=<first>&to=<last>&summary=1`,
+the slug being a hostel option's `key` in the form (an `area:` option has none). Written against
+**price contract 0.4.0** (`docs/price-contract.md`, §4 and §4.1), which is pre-1.0 and may change — so
+treat the read as a decoration: when it fails, draw the picker without prices. The answer to a submit
+never depends on it; the server reads its own live prices.
 
 #### `locale` — the visitor's preference vs. the guest's own language
 
@@ -152,7 +193,7 @@ Content-Type: application/json
 
 `locale` is the visitor's **preferred** language, and it answers only where the guest has not yet shown theirs: the turns before their first message that does. Sending the browser's language on every turn is fine and is what it is for — its primary subtag (`navigator.language.split('-')[0]`), since a full tag can exceed 5 characters (`es-419`, see Format); it no longer overrides what the guest writes, as it did from 1.3.0 until 1.13.0. When a turn carries none, the conversation's stored locale (the init `locale`, §3.1) is the preference.
 
-- **Any language.** The reply language is not restricted to a fixed list: a guest who writes Ukrainian is answered in Ukrainian. Server-localized strings (canned lines, chip messages, "Book now") exist in en/es/it/de/fr and fall back to English for any other language, and tenant content falls back to its base locale. You may therefore send the browser's primary language unclamped (`uk`) rather than the nearest language your UI supports — the server records it and answers the pre-writing turns in it.
+- **Any language.** The reply language is not restricted to a fixed list: a guest who writes Ukrainian is answered in Ukrainian. Server-localized strings (canned lines, chip messages, "Book now") exist in en/es/it/de/fr and fall back to English for any other language, and tenant content falls back to its base locale — except, **since 1.16.1** (D-114), an answer the server gives without the model to a tapped chip, which with the chips under it is translated once from the tenant's English into the guest's language. You may therefore send the browser's primary language unclamped (`uk`) rather than the nearest language your UI supports — the server records it and answers the pre-writing turns in it.
 - **A UI language switcher** no longer forces the reply language once the guest has written in another one. If you keep one, it sets the preference: the first turns' language and your own chrome.
 - **Format.** Send a full tag if that is what you have — only the 2-letter primary subtag is used (`es-ES` → `es`), and the field is capped at 5 characters (longer → `422`, so truncate a long tag yourself). Validation is by **shape, not by registry**: any two ASCII letters are accepted and passed straight to the model, deliberately — the reply language is not restricted to a fixed list. A value that yields no 2-letter primary subtag (`spa`, `1`, empty) is ignored rather than erroring, and the conversation's stored locale serves as the preference instead. Sending a code that is not a real language (`zz`) is therefore honored as a preference, not corrected — send what the browser actually reports.
 - **Scope.** The turn's resolved language — the preference, or the guest's own — sets the generated prose and the server-localized element labels ("Book now") together. It does not translate the guest's own message or re-translate the transcript.
@@ -185,15 +226,47 @@ Authorization: Bearer ws_live_...
 
 Recommended cadence: **~2s → 5s backoff, give up ≈120s**. On `ready`/`failed`, replace the interim bubble's text with `reply` and render `actions`. This endpoint has its **own lighter rate limit** (§6) so polling never eats the turn budget.
 
+### 3.4 Event — report a click on a call to action
+
+**Since 1.16.0** (D-113), and **only while the init's `analytics` is `true`**. When the guest clicks
+a call to action the chat drew, report which one:
+
+```
+POST /api/v1/chatbot/conversations/{uuid}/events
+Authorization: Bearer ws_live_...
+Content-Type: application/json
+
+{ "type": "cta_click", "element": "availability", "cta": "book", "turn": 3 }
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `type` | yes | `cta_click`. |
+| `element` | yes | The element the button belongs to: `link_button` · `booking_link` · `availability` · `property_cards` · `promo_card` · `contact_channels`. |
+| `cta` | yes | Which button, and it must be one the element carries: `link_button` → its `id` (`book` · `website` · `directions`); `booking_link`, `availability` → `book`; `property_cards` → `book` (a card's button) or `more` (the "see all" link); `promo_card` → `promo`; `contact_channels` → `phone` · `whatsapp` · `email`. |
+| `turn` | no | The `turn` of the reply the button came with; leave it out for the welcome's elements. |
+
+- **Never send a URL, a label, a `prefill` or anything the guest typed.** The server reads these
+  four fields only and stores two enums and the turn; an unknown value is `422`, an unknown key is
+  ignored.
+- **Always `204`, and fire and forget.** A site that does not count clicks, or a conversation past
+  its cap, stores nothing and still answers `204`. Resolution is the turn endpoint's (`404`, `410`),
+  but **never re-init on an event's `404`/`410`** — a lost click is not a dead conversation, and an
+  event never extends the conversation's idle window.
+- **Do not hold the click.** Send it as the link opens. If your links open in a new tab, a plain request
+  survives the click (the reference widget uses its ordinary XHR); if one can unload your page, use
+  `fetch(…, {keepalive: true})`. `navigator.sendBeacon` cannot carry the `Authorization` header.
+- It has its **own rate limit** (§6), so reporting never spends the guest's turns.
+
 ---
 
 ## 4. Rendering elements
 
-The element types (`link_button`, `contact_channels`, `booking_link`, `availability`, `async_result`, `property_cards`, `promo_card`, `quick_replies`, `conversation_ended`) and their fields are the authority of [`response-contract.md`](response-contract.md) — implement against that. Three **MUST** rules a consumer cannot skip (all demonstrated in `chatbot.js` `renderAction` / `safeHttpUrl`):
+The element types (`link_button`, `contact_channels`, `booking_link`, `availability`, `async_result`, `property_cards`, `promo_card`, `quick_replies`, `form`, `conversation_ended`) and their fields are the authority of [`response-contract.md`](response-contract.md) — implement against that. Three **MUST** rules a consumer cannot skip (all demonstrated in `chatbot.js` `renderAction` / `safeHttpUrl`):
 
 1. **Ignore unknown `type`s.** New element types ship server-side ahead of any given UI. Skip a type you don't render; never break on it.
 2. **`async_result.url` must be treated as relative.** It always begins with `/`. Resolve it against `{API_BASE}` (§1) and **reject any non-relative value.** This structurally keeps the Bearer key on your own origin.
-3. **Render as text, links and images only for `http(s)`.** Put all guest/LLM/element strings into the DOM via `textContent` / `setAttribute` / created nodes — **never `innerHTML`** (XSS). Honor element **`url` *and* `image`** fields only for `http`/`https` schemes — that means `link_button`, `booking_link`, `availability`, `property_cards` items (`url` **and** `image`) and its element-level `more.url`, and `promo_card` (`image` **and** `cta.url`, which is tenant-authored). Anything else is dropped. Construct `tel:` / `mailto:` / `https://wa.me/<digits>` yourself from `contact_channels` values, never verbatim — and **since 1.14.0**, if you append `contact_channels.prefill` (the handoff's pre-written message) to those links, show its text before the guest can leave the page, percent-encode it into the `text` / `subject` / `body` query value only, and keep it out of analytics and logs (the contract's `prefill` rules). `quick_replies` items carry no URLs at all. The authoritative inventory is [`response-contract.md`](response-contract.md)'s security rule — every URL-bearing field it adds inherits this.
+3. **Render as text, links and images only for `http(s)`.** Put all guest/LLM/element strings into the DOM via `textContent` / `setAttribute` / created nodes — **never `innerHTML`** (XSS). Honor element **`url` *and* `image`** fields only for `http`/`https` schemes — that means `link_button`, `booking_link`, `availability`, `property_cards` items (`url` **and** `image`) and its element-level `more.url`, and `promo_card` (`image` **and** `cta.url`, which is tenant-authored). Anything else is dropped. Construct `tel:` / `mailto:` / `https://wa.me/<digits>` yourself from `contact_channels` values, never verbatim — and **since 1.14.0**, if you append `contact_channels.prefill` (the handoff's pre-written message) to those links, show its text before the guest can leave the page, percent-encode it into the `text` / `subject` / `body` query value only, and keep it out of analytics and logs (the contract's `prefill` rules). `quick_replies` items carry no navigation URL — since 1.16.0 an item's `image` is an image source under the same rule, as is a `form` `consent` field's `link.url`. The authoritative inventory is [`response-contract.md`](response-contract.md)'s security rule — every URL-bearing field it adds inherits this.
 
 ---
 
@@ -203,9 +276,9 @@ The element types (`link_button`, `contact_channels`, `booking_link`, `availabil
 |---|---|---|
 | `401` | Missing/invalid/revoked key, or token not prefixed `ws_live_`. | Fatal — bad key. Stop. |
 | `403` | Init: `chatbot.enabled` is off for the site. Or: key scope not admitted. Or: the request `Origin` is not on the site's allow-list (§7) — body `{"message":"Origin not allowed."}`. | Hide the widget silently (register your origin — §7 — if the allow-list is the cause). |
-| `404` | **Endpoint-specific — see below.** Turn: unknown/foreign `uuid`. Poll: the turn row is not visible to this request (or is not an async turn). | Turn: treat the conversation as gone → **re-init** (as for `410`). Poll: treat as **transient** → keep backing off until give-up. |
-| `410` | Conversation idled out (24h since last activity). **Endpoint-specific — see below.** | Turn: **re-init transparently** (open a new conversation, optionally resend the last message once) — the reference widget does this automatically. Poll: **stop polling and do not re-init** — keep the interim reply. |
-| `422` | Init: no site resolved for the key. | Configuration error. |
+| `404` | **Endpoint-specific — see below.** Turn: unknown/foreign `uuid`. Poll: the turn row is not visible to this request (or is not an async turn). Event: unknown/foreign `uuid`. | Turn: treat the conversation as gone → **re-init** (as for `410`). Poll: treat as **transient** → keep backing off until give-up. Event: drop the click and **never re-init** (§3.4). |
+| `410` | Conversation idled out (24h since last activity). **Endpoint-specific — see below.** | Turn: **re-init transparently** (open a new conversation, optionally resend the last message once) — the reference widget does this automatically. Poll: **stop polling and do not re-init** — keep the interim reply. Event: drop the click and **never re-init** (§3.4). |
+| `422` | Init: no site resolved for the key. Turn: a malformed `message`, `locale` or `action` (§3.2). Event: an unknown `type`, `element` or `cta`, or a `cta` the element does not carry (§3.4). | Configuration error, or a renderer bug: fix the request. A turn's `422` stores nothing. |
 | `429` | Rate limit exceeded (§6). | Read `Retry-After`: about a minute → back off, show a soft "one moment" message and retry; much longer (a daily cap, up to 24h) → say "come back later" and do not retry. |
 
 Note: turn/poll **content** is always `200`; the non-200s above are resolution/auth failures only.
@@ -225,14 +298,15 @@ The reference widget implements all four: `sendMessage` treats `404` like `410` 
 
 ## 6. Rate limits
 
-Two independent buckets (turns and polls never eat each other's budget). **Each enforces a per-visitor budget and a per-key site ceiling**, and the guest bucket also enforces both **per day** — a `429` means whichever limit tripped:
+Three independent buckets (turns, polls and click events never eat each other's budget). **Each enforces a per-visitor budget and a per-key site ceiling**, and the guest bucket also enforces both **per day** — a `429` means whichever limit tripped:
 
 | Bucket | Per visitor (key + IP) | Per key (whole site) | Route |
 |---|---|---|---|
 | `chatbot-guest` | **20 / min** and **100 / day** | **300 / min** and **300 / day** | init + turn |
 | `chatbot-poll` | **60 / min** | **900 / min** | poll |
+| `chatbot-event` | **20 / min** | **300 / min** | event (since 1.16.0) |
 
-Tunable per deployment via `WSUITE_CHATBOT_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_POLL_PER_MINUTE`, `WSUITE_CHATBOT_SITE_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_SITE_POLL_PER_MINUTE`, and `WSUITE_CHATBOT_THROTTLE_PER_DAY` / `WSUITE_CHATBOT_SITE_THROTTLE_PER_DAY`.
+Tunable per deployment via `WSUITE_CHATBOT_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_POLL_PER_MINUTE` / `WSUITE_CHATBOT_EVENT_PER_MINUTE`, `WSUITE_CHATBOT_SITE_THROTTLE_PER_MINUTE` / `WSUITE_CHATBOT_SITE_POLL_PER_MINUTE` / `WSUITE_CHATBOT_SITE_EVENT_PER_MINUTE`, and `WSUITE_CHATBOT_THROTTLE_PER_DAY` / `WSUITE_CHATBOT_SITE_THROTTLE_PER_DAY`.
 
 **A daily `429` is long — read `Retry-After` (since 1.11.0).** The daily windows are a rolling 24 hours from the first counted request, not a calendar day. Every `429` carries `Retry-After` (seconds until the limit that refused it reopens), readable cross-origin: about a minute means a per-minute limit — back off and retry; hours mean a daily cap — tell the guest to come back later (or offer the hostel's contact channels) instead of "try again in a moment", and stop retrying. A refused request is never counted against any limit. The site daily ceiling exists to stop an automated flood spending the tenant's AI budget; reaching it alerts the platform operator, and real traffic sits far below it. These HTTP throttles are the abuse layer; the real per-provider AI cost limiting lives inside the platform gateway and is invisible to consumers.
 

@@ -61,7 +61,7 @@ says it is an AI: the label beside the name and the line under the composer are 
 no setting removes them.
 
 One thing on your side: if your server lets browsers cache the script for a long time, add a
-version query to the tag when you update it (`…/nest-chatbot.js?v=2.13.3`). Releases up to 2.13.1
+version query to the tag when you update it (`…/nest-chatbot.js?v=2.13.4`). Releases up to 2.13.1
 carried a built-in name, and a browser still holding one of those shows it until its copy expires.
 
 ### `data-back-button`, and when to turn it off
@@ -154,7 +154,7 @@ NestChatbot.toggle();
 NestChatbot.setLocale('es');  // the widget's labels, and the visitor's preferred reply language from the next message
 NestChatbot.destroy();
 NestChatbot.locale;    // 'es' — the widget's display language
-NestChatbot.version;   // '2.13.1'
+NestChatbot.version;   // '2.13.4'
 NestChatbot.state;     // a snapshot — see Measuring it, below
 ```
 
@@ -189,9 +189,9 @@ Events bubble from the widget's own container, so a listener on `document` or `w
 | `wchat:ready` | the widget has booted | `version`, `locale`, `mock`, `returning`, `storedTurns`, `expanded` |
 | `wchat:open` | the panel opens | `source` (`toggler` \| `teaser` \| `auto` \| `api`), `firstOpen`, `resumed`, `turns` |
 | `wchat:close` | the panel closes | `source` (`toggler` \| `close` \| `escape` \| `back` \| `api`), `turns` |
-| `wchat:message` | the visitor sends a message | `source` (`composer` \| `prompt` \| `chip` \| `welcome-chip`), `length`, `turns`, `locale` |
+| `wchat:message` | the visitor sends a message | `source` (`composer` \| `prompt` \| `chip` \| `welcome-chip` \| `form`), `length`, `turns`, `locale` |
 | `wchat:reply` | a reply arrives | `turn`, `length`, `elements[]`, `async`, `resolved`, `ended`, `latencyMs` |
-| `wchat:action` | a booking / contact / card button is clicked | `element`, `url`, `channel`, `style`, `index` |
+| `wchat:action` | a booking / contact / card button is clicked | `element`, `cta`, `url`, `channel`, `style`, `index` |
 | `wchat:error` | a request fails | `phase` (`init` \| `turn` \| `poll`), `status`, `retrying`, `retryAfter` |
 | `wchat:ended` | the conversation hits its turn cap | `turns` |
 | `wchat:restart` | the visitor starts a new chat | `source` (`menu` \| `ended`), `turns` |
@@ -219,9 +219,22 @@ widget falls back to **24 hours** — that is a floor for older servers, not a d
 yours. Ask your window off an init response rather than assuming it, because the number moves
 without the widget changing.
 
+**Which button.** Since 2.13.4 `wchat:action` carries `cta`, the same vocabulary the wSuite
+platform uses for its own click counting (integration guide §3.4): `book`, `website`,
+`directions`, `more` (a card rail's "see all"), `promo`, `phone`, `whatsapp` or `email`. A Book
+button reads `book` whichever element drew it — a link button, a booking link, an availability
+card or a hostel card. A link button reads its server-given name, so `cta` tells Website from
+Directions without parsing the `url` — but only from a server on contract 1.16.0 or later, which is
+the first to name its link buttons. Until then, and for a name the widget does not recognise, a
+link button reads `null`: on today's 1.15.1 deployment every link button does.
+
 **No message text is ever in an event.** Payloads carry counts, enums and booleans: `length` is a
 character count, `elements[]` lists element types. What the visitor wrote and what the assistant
-replied never reach a payload. `wchat:action` carries the `url` of the button that was clicked so
+replied never reach a payload — and neither does anything typed into a form in the chat (the Book
+panel's place, dates and party today, possibly an email or a phone in a later one): a form submit
+is a visitor message, reported as `wchat:message` with `source: 'form'` and its `length`. (The
+stay itself still reaches you the way it always has: the Book button the answer carries is a
+server-composed url with the dates and party in its query, and `wchat:action` carries that url.) `wchat:action` carries the `url` of the button that was clicked so
 you can attribute a booking, and deliberately carries **no** `url` for phone, WhatsApp and email
 links — `channel` tells you which was used without putting contact details, or the message the
 visitor is about to send, in the event. Since contract 1.9.0 that url is composed by the
@@ -241,6 +254,14 @@ session-replay tool that records attributes. Exclude `#nest-chatbot a.nc-channel
 `wa.me` / `mailto:` URL — from those triggers, make sure GA4's built-in outbound-click measurement
 is not recording these links' URLs (switching it off in favour of a GTM trigger you control is the
 simplest way), and count contact clicks with `wchat:action` and its `channel` instead.
+
+**A form tag can see the widget's forms.** The composer has always been a real `<form>`, and since
+2.13.4 the Book panel is a second one. GA4 enhanced measurement's **form interactions** and GTM's
+form-submission triggers listen for form submits page-wide, so they may record one every time a
+visitor sends a message or presses the panel's button. The
+widget's submit never navigates and puts no value into a URL, and its controls carry no `name`
+attributes, but a tag that reads field values off the page could. Exclude `#nest-chatbot form`
+from those triggers, and count submits with `wchat:message` (`source: 'form'`) instead.
 
 **Three counting notes.** On the turn that hits the cap, `wchat:ended` arrives *before* that
 turn's `wchat:reply` — the reply event is emitted last so it can report `ended: true`
@@ -288,6 +309,14 @@ NestChatbot.state;
   private rooms grouped, three of each with the rest one tap away, and what the whole party pays
   when the server knows it — rendered from the API's structured response, never parsed out of the
   reply text.
+- A Book panel: tapping "Book a bed" opens a short form in the chat — a hostel or a whole island,
+  the dates, the party size — already filled in with what the conversation knows. Its answer is
+  live prices for that stay: one hostel's rooms and beds, or the island's hostels as cards,
+  cheapest first, each with what the stay costs in total beside its usual from-price, and a
+  fully booked hostel saying so. Nothing is booked from the chat; the Book buttons lead to the
+  booking page with the stay already filled in.
+- Suggestion chips that can carry a picture, and that keep appearing under answers, in the
+  visitor's language.
 - When they ask for a person, a message to that property's team already written in their
   language and shown above the WhatsApp and email buttons, so they can read it before it opens in
   their app. Nothing is sent until they press Send there.

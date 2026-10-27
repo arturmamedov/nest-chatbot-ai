@@ -53,9 +53,12 @@ rule — the alternative to shipping the files was always a second origin, never
 
 Every guest, LLM and element-supplied string reaches the DOM via `textContent`,
 `setAttribute`, or a created node. This is the response contract's explicit security rule
-(`docs/wsuite/response-contract.md` §Security rule), not a stylistic preference. The one form
-**value** is the 1.14.0 `prefill` preview — `preview.value = text` on a read-only textarea, the
-rule's own first option for the guest's quoted words — and it is still never markup.
+(`docs/wsuite/response-contract.md` §Security rule), not a stylistic preference. Form **values**
+are the one other way in, and they are still never markup: the 1.14.0 `prefill` preview —
+`preview.value = text` on a read-only textarea, the rule's own first option for the guest's quoted
+words — and, since 1.16.0, a `form`'s pre-fills and option keys, set through DOM properties
+(`input.value`, `option.value`) while every label, title and option text goes in through
+`textContent` (`renderForm()` and its per-kind `*Field()` helpers).
 
 The one `DOMParser` call (`svgNode`) exists solely to turn the module-local SVG constants into
 nodes. It must never be reachable from network or guest input. If you find yourself wanting to
@@ -95,10 +98,16 @@ wherever this stylesheet is *silent*: a theme's bare `h2` or `textarea` rule mat
 element directly, and a direct match beats inheritance from `#nest-chatbot` however specific
 that ancestor selector is. So anything a framework reset touches has to be **declared** on
 our side — see the reset block at the top of `css/nest-chatbot.css`. The cure is never
-`!important` and never more specificity; ours already outranks theirs on every property it
-states. `demo/index.html` carries the counterpart traps (a global `h2`, `textarea:focus` and
-`a` rule copied from a real customer's Tailwind theme), so a regression shows up on the demo
-page rather than in production.
+`!important` and never more specificity than the attacker's own shape demands; ours already
+outranks theirs on every property it states. The one measured exception to "1,1,0 is enough" is
+the 1.16.0 form's `<input>`s: themes qualify input rules by type — `#top input[type="text"]`,
+Enfold's `<body id="top">`, is 1,1,1 — so those controls are matched through their form
+(`.nc-fill .nc-fill-control`, 1,2,0) and the demo page carries that trap too. `demo/index.html` carries the counterpart traps (a global `h2`, `textarea:focus` and
+`a` rule copied from a real customer's Tailwind theme, and since 2.13.4 a caricature of
+`@tailwindcss/forms` plus a theme's `label` and `fieldset` rules for the 1.16.0 form — `input`,
+`select`, `[type="checkbox"]`, `label`, `fieldset`, and `fieldset textarea`, which reaches the
+form's textarea and never the composer's), so a regression shows up on the demo page rather than
+in production.
 
 ## Architecture
 
@@ -112,7 +121,7 @@ page rather than in production.
 | **`events`** | **the host-page seam** — `emit()`, `snapshot()`, the `wchat:` vocabulary |
 | **`api`** | **the seam** — `init` / `send` / `poll` plus the mock fixtures |
 | `dom` | `el()`, `attrs()`, `svgNode()`, the icon constants, `build()`, and `paintAssistant()` — the one writer of the header title, the dialog label, the placeholder and the launcher label |
-| `render` | bubbles, thinking dots, `renderAction()`, `safeHttpUrl()` |
+| `render` | bubbles, thinking dots, `renderAction()`, `safeHttpUrl()`; since 2.13.4 the 1.16.0 `form` (`renderForm()`, one `*Field()` helper per kind, `retireForms()`) beside the chip rows it shares the one-shot rule with |
 | `typing` | the character-by-character reveal |
 | `intro` | the circular-progress loader sequence |
 | `flow` | open/close, submit, status handling, teardown, the async poll, the header ⋯ menu, the Back-button history entry |
@@ -130,7 +139,7 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.15.1 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.16.1 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
@@ -141,31 +150,31 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 `BUILT_AGAINST` (api section) moves **only** during a sync — it is a claim about what this
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
-rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-10-23 as
-`docs @ chatbot-contract-v1.15.1 (5973478) · widget @ 5973478` — the widget SHA is part of the
+rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-10-27 as
+`docs @ chatbot-contract-v1.16.1 (bfdecf5) · widget @ 7cbfdd0` — the widget SHA is part of the
 packet's identity, because the reference renderer legitimately moves between contract tags
-(here the two halves share a sha because the 1.15.1 bump commit moved the reference's
-`BUILT_AGAINST` too, as 1.15.0, 1.14.0 and 1.10.0 did; at 1.12.0 they differed, `43101a6` against `cb8005b`).
-`BUILT_AGAINST` is `'1.15.1'`, in lockstep since release 2.13.3 adopted D-106.
+(here the two halves differ, as they did at 1.12.0 — `43101a6` against `cb8005b` — where 1.15.1,
+1.15.0, 1.14.0 and 1.10.0 shared one sha because the bump commit moved the reference's
+`BUILT_AGAINST` too). `BUILT_AGAINST` is `'1.16.1'`, in lockstep since release 2.13.4 adopted
+D-109, D-111, D-112 and D-114 (D-113's click counting deliberately not).
 
 **The widget is one step AHEAD of the deployment, and that is the quiet direction.** Measured
-2026-10-07 20:54 UTC off a real init `201` against `nest-mind.laravel.cloud`: `contract_version:
-1.14.0` (and `X-Chatbot-Contract: 1.14.0`), `idle_hours: 168`, `Access-Control-Expose-Headers:
-X-Chatbot-Contract, Retry-After`, and **no `assistant` key**. The paragraph this replaces, measured
-2026-09-23, had the server on 1.13.0 with 1.14.0 tagged and undeployed; that deploy has since
-landed, so a live handoff can now carry `prefill`. 1.15.0 is the one tagged in `nest-mind` and not
-yet deployed. Against this server 2.13.2 therefore learns no name and shows its **name-free**
-wording everywhere, while the tenant's own greeting still reads "I'm Germán, your AI …" — typed by
-hand into the greeting, which is exactly the arrangement 1.15.0 replaces. Not a defect in either
-direction: the drift warn fires only when the **server** is ahead, and absence of `assistant` is the
-normal older-server case. The owner's stated rollout (2026-10-07) is to ship both halves together,
-with `?v=2.13.2` added to the embed tag. That query matters: read the same
-day, nestshostels.com serves the theme copy with `cache-control: max-age=86400` and an unversioned
-tag, so without it a browser can hold 2.13.1 — and its hardcoded name — for a day after the upload.
-When the server reports 1.15.0, compare the header with the init body's `assistant.name` by opening
-the panel; send nothing that asks for a person from here (a real handoff emails staff). Re-read
-`contract_version` **and** the expose header off a `201` before concluding anything, exactly as the
-idle-window entry under Open items insists.
+2026-10-27 15:32 UTC off a real init `201` against `nest-mind.laravel.cloud`: `contract_version:
+1.15.1` (and `X-Chatbot-Contract: 1.15.1`), `idle_hours: 168`, `Access-Control-Expose-Headers:
+X-Chatbot-Contract, Retry-After`, and an `assistant` object naming "Nesti". So 1.15.x is deployed,
+and the name path built in 2.13.2 now has a name to paint: the header, the dialog label, the
+placeholder and the launcher say the owner's name rather than the name-free wording. 1.16.1 is
+tagged in `nest-mind` and runs only on the owner's local checkout (`https://nest-mind.test`, Herd,
+which reads and writes the production database) — against the deployment 2.13.4 is never sent a
+`form`, because the server sends one only to a turn carrying an `action` and a 1.15.1 server
+ignores the field. Not a defect in either direction: the drift warn fires only when the **server**
+is ahead. The rollout is both halves together, with `?v=2.13.4` on the embed tag — nestshostels.com
+serves the theme copy with `cache-control: max-age=86400`, so without the query a browser can hold
+the previous release for a day after the upload. Since 2.13.4 the query reaches the stylesheet
+too: `injectStyles()` appends `?v=<VERSION>` itself, because `assetBase` drops the script's query
+and a release that adds a renderer would otherwise draw it unstyled until the host's cache ran out. Send nothing that asks for a person from a test
+page (a real handoff emails staff). Re-read `contract_version` **and** the expose header off a `201`
+before concluding anything, exactly as the idle-window entry under Open items insists.
 
 **The upstream repo drives the sync, and it is local.** The platform is `nest-mind`
 (`modules/chatbot/`). Its `docs/consumer-sync.md` is the operational half: §1 is a registry of
@@ -186,12 +195,15 @@ registry, and a corrected gate condition into a doc whose own header reads "Desi
 here is built" while their authoritative `decisions.md` kept the incomplete one. Both reached
 origin before anyone noticed.
 
-Three endpoints: init a conversation, post a turn, poll an async turn.
+Three of the four endpoints: init a conversation, post a turn, poll an async turn. The fourth,
+`POST …/{uuid}/events` (1.16.0, D-113, click counting), is **not** called, and the init's
+`analytics` flag is not read — see "The widget never phones home".
 
 ```
 POST {apiBase}/api/v1/chatbot/conversations               → 201 {conversation:{uuid}, greeting,
-                                                                 assistant?, contract_version}
+                                                                 assistant?, analytics?, contract_version}
 POST {apiBase}/api/v1/chatbot/conversations/{uuid}/messages → 200 {reply, actions[], turn}
+     body {message, locale, action?}
 GET  {apiBase}{async_result.url}                          → 200 {status, reply?, actions?, turn}
 ```
 
@@ -202,7 +214,9 @@ the text is **tenant-authored content** (a promo, a chip, a property's name or C
 guest's own words quoted back (since 1.14.0, `contact_channels.prefill`, whose `hint` caption this
 widget replaces with its own pack string), and the widget composes it when it is **chrome around
 structured data** the server deliberately sent as data — which is why `promo_card` uses no pack
-string at all and `availability` uses nothing but. Two traps live there too: "from the server"
+string at all and `availability` uses nothing but. A 1.16.0 `form` is the first case: every string
+in it is the server's, and the widget composes only structure, ids, native controls and the filled
+message. Two traps live there too: "from the server"
 and "in the guest's language" are different questions (a card's `name` is raw catalog, its
 `cta_label` is localized), and the split is exactly the rule for what `setLocale()` may repaint.
 
@@ -330,7 +344,8 @@ and "in the guest's language" are different questions (a card's `name` is raw ca
   (guide §3.1); the ignore-unknown rule keeps the widget functional. That warn is the sole
   exception to the `data-debug` logging gate.
 - **Do not send chat history.** The turn body is `{message}` plus the optional per-turn
-  `locale`, and that `locale` is `requestLocale`, never the UI `locale`: since contract 1.13.0
+  `locale` and, since 2.13.4, the optional `action` (below) — built in `API.send()`, and nothing
+  else, ever. The `locale` is `requestLocale`, never the UI `locale`: since contract 1.13.0
   (D-083) it is the visitor's *preferred* language, not an override — it answers only until the
   guest writes in their own, and then the server keeps to theirs. It still rides **every** turn,
   where the reference sends it at init only: a resumed conversation never re-inits, and a host's
@@ -339,6 +354,42 @@ and "in the guest's language" are different questions (a card's `name` is raw ca
   `localStorage` (since 2.8.0) so a returning guest sees their conversation — it must never
   enter a request body. An earlier version accumulated a `chatHistory` array with no purpose at
   all; the stored transcript is not that: it exists to be replayed, never to be sent.
+- **Sending `action` is a declaration, not a detail.** Since contract 1.16.0 the turn body may
+  carry `action` beside the `message` — never instead of it: a keyed chip's
+  `{type:'reply', payload:{key}}` (`makeChipHandler(message, source, key)`, the key validated once
+  by `chipKey()`) or a form's `{type:'form', id, payload:{values}}` (`renderForm()`). The server
+  sends a `form` **only** to a turn that carried one (D-109(j)), so sending it tells the server
+  this build draws every element up to `BUILT_AGAINST` — which is why `BUILT_AGAINST` may move only
+  once every element type of the new contract renders here. The `message` stays the chip's
+  `message` (never its label) or the form's filled `submit_message`, so the transcript reads as
+  the guest's own words and an older server answers exactly what it always did. `sendGuestText()`
+  is still the one seam: `action` and the form's `onFail` ride from it through `sendMessage()`,
+  the queue (`{text, action, onFail}` entries) and the 410/404 resend, because the server reads the
+  action off the turn that carries it.
+- **A form is one-shot like a chip row, but it stays on screen.** `retireForms()` disables every
+  live form's `<fieldset>` on ANY send — the submit's own included — and in `endConversation()`;
+  the values stay visible as the record of what was sent. Focus moves first, onto the `<form>`
+  itself (`tabindex=-1`, `preventScroll`), not the composer: the form is still on screen, and
+  focusing the composer after a tap-submit pops a phone's keyboard over the answer. A failed send
+  gives the form back through its `onFail` — the no-uuid branch (a failed init or re-init), a 429,
+  any other failure, never a 403 or after a restart — but only while `sendSeq` is still the value
+  the submit took: a guest who has sent anything since retired it on purpose, and the contract's
+  one-shot rule outranks the retry. Forms are kept by `persistableActions()` and replayed by the
+  chip-row rule: only the **final** entry's form is drawn, live (`drawForms`); an earlier one is not
+  drawn at all, because a redraw would show the server's pre-fill rather than what the guest sent
+  and the guest bubble below it is the record. Skipped in `renderAction()`, never filtered out of
+  `a`, so a replayed turn groups its buttons exactly as the live one did. This departs from the
+  1.16.1 sync prompt's "restore it disabled" — an owner decision.
+- **A form validates natively, in the browser's language.** No `novalidate`: required, `min`/`max`,
+  the integer step and the date order (the check-out's `min` follows the check-in on every input;
+  the check-in stops a day short of `max`) are the browser's checks and the browser's messages,
+  not pack strings. `reportValidity()` focuses — and so can scroll to — the first invalid field,
+  a guest-caused exception to the one-move-per-turn rule (see the transcript section). Two
+  refusals are the widget's own, both because the server would 422 every submit: an all-blank
+  submit sends nothing (`values` is required), and a form whose `id` is over 64 characters, or a
+  text pre-fill over 500, is never drawn or never filled. Fail closed otherwise: a kind this build
+  does not know, a field without `name`/`kind`/`label`, two fields sharing a name, or a select with
+  no drawable option drops the **whole** form.
 - **Every request faces two rate limits** (guide §6), on two independent buckets: a
   per-**visitor** budget keyed on key + client IP (20/min turn, 60/min poll) and a
   per-**key** site ceiling (300/min turn, 900/min poll); a `429` means whichever tripped.
@@ -357,7 +408,8 @@ and "in the guest's language" are different questions (a card's `name` is raw ca
   is filtered silently), which `data-debug` cannot gate. **Absent, unexposed or a date form is
   `null` and keeps the old copy** — unknown never becomes "come back later". And **nothing retries
   a 429 automatically**, then or now; a long one also empties `sendQueue`, since every queued turn
-  would be refused the same way.
+  would be refused the same way — and since 2.13.4 each dropped entry's `onFail` runs, so a form
+  queued behind it is offered back (and declines unless nothing was sent after it).
 - **`actions[]` is always an array**, never null. Render elements in order.
 - **Ignore unknown element types silently.** The server ships new types ahead of any given
   widget. Throwing on one would take the whole reply down. Adding support for a new type is
@@ -368,7 +420,9 @@ and "in the guest's language" are different questions (a card's `name` is raw ca
   works.
 - **Construct `tel:` / `mailto:` / `wa.me` hrefs yourself** from `contact_channels` values.
   Never use a payload string verbatim as an href. Element `url` fields are honoured only for
-  `http`/`https` (`safeHttpUrl`). `telNumber()` is the one rule for both numbers, and it mirrors
+  `http`/`https` (`safeHttpUrl`) — since 1.16.0 that includes a chip's `image` (an image source
+  only: dropped when it fails, chip kept) and a form `consent` field's `link.url` (no link when it
+  fails). `telNumber()` is the one rule for both numbers, and it mirrors
   the platform's admin rule rather than the reference: strip spaces, dots, hyphens and parentheses
   from the **whole** value, then `+` and the digits for a `+` value, `+` and the digits after `00`
   for a `00` one, bare digits otherwise. So `(+34) 922 123 456` dials `tel:+34922123456` and
@@ -407,7 +461,7 @@ Set on the `<script>` tag. `document.currentScript.dataset` reads them at boot.
 | `data-z-index` | `2147483000` | For hosts with their own stacking conflicts. Same CSS-default mechanism as `data-color`. |
 | `data-auto-open` | `false` | See the Back-button caveat below — an auto-opened panel's history entry is skippable until the guest taps something. |
 | `data-back-button` | `true` | The device Back button closes the panel. **The only opt-OUT boolean in `cfg`** (`!== 'false'`, not `=== 'true'`) — see the Back-button section. |
-| `data-debug` | `false` | Gates **all** `console` output — sole exception: the one-time contract-drift warn (guide §3.1). The three full-body logs (`init`, `turn`, `poll`) print `redactForLog()`'s shallow copy, every `prefill` read as `'[prefill]'`: a debug tag left on in production prints to any visitor's devtools, and the demo sets it. |
+| `data-debug` | `false` | Gates **all** `console` output — sole exception: the one-time contract-drift warn (guide §3.1). The three full-body logs (`init`, `turn`, `poll`) print `redactForLog()`'s shallow copy, every `prefill` read as `'[prefill]'` and, since 2.13.4, every field `value` (a form's pre-fills) as `'[value]'`: a debug tag left on in production prints to any visitor's devtools, and the demo sets it. No request body is logged at all. |
 | `data-mock` | `false` | Serves replies from the local fixtures instead of the API — the dev harness. The demo page sets it; never a production page. |
 
 Runtime API: `window.NestChatbot` → `{ version, open, close, toggle, destroy, setLocale, locale,
@@ -429,6 +483,13 @@ icons inline and fonts self-hosted: a host trusts exactly one extra origin, ours
 our own assets. The host page decides where the events land. A host that listens to nothing
 pays nothing, which is why there is deliberately **no** `data-*` attribute to disable it.
 
+**Contract 1.16.0's click counting is not adopted** (D-113): a fourth endpoint,
+`POST …/{uuid}/events`, gated on an init flag `analytics: true`, that would count CTA clicks in
+the wSuite panel. It is a request of the widget's own — to the same origin it already posts turns
+to, but its own nonetheless — so 2.13.4 neither reads `analytics` nor calls the endpoint. Whether
+that route sits inside or outside this section's intent was asked as a separate decision (the
+1.16.1 packet's APPENDIX-A); until it is answered, this section stands as written.
+
 Four rules the section states and the code has to keep true:
 
 - **Dispatch from `els.root`, never `window`.** Events bubble, so a host listener on `window`
@@ -447,6 +508,15 @@ Four rules the section states and the code has to keep true:
   events and our logs, never about the host's: the composed href sits on the anchor from the
   moment it renders, so a host's own link-click tracking (GTM's Click URL, GA4's outbound clicks)
   reads it whatever we emit — README § Measuring it tells hosts to exclude `a.nc-channel`.
+  Since 2.13.4 two more things hold. **A form's values never travel**: a submit is a guest message,
+  reported as one (`wchat:message`, `source: 'form'`, its `length`), and a later form will carry an
+  email or a phone; nor does a chip's `key`. And **`wchat:action` says which button** through `cta`
+  — guide §3.4's click vocabulary (`book` · `website` · `directions` · `more` · `promo` · `phone` ·
+  `whatsapp` · `email`, `null` for a `link_button` with no `id` or one this build does not know —
+  which is every `link_button` until the server is on 1.16.0: the deployment's 1.15.1 names none), written at render
+  into `data-wchat-cta` from fixed values only (`linkCta()` vets a payload `id` against
+  `LINK_CTAS`), never a payload string. A form's consent link carries no `data-wchat-el`: it is a
+  privacy notice, not a call to action.
 - **`emit()` is a no-op before `build()` and after `teardown()`.** Both guards, deliberately:
   the second is a consequence of detaching the root, the first is a contract.
 - **Every name is a commitment.** Adding an event is a patch; renaming or removing one is a
@@ -471,7 +541,9 @@ is the second half of that defence and the reason the enum can be trusted.
 ### The typography seam is exactly two custom properties
 
 Every `font-family` in `css/nest-chatbot.css` is `var(--nc-font-heading)`, `var(--nc-font-body)`
-or `inherit` — twelve sites, no exceptions. That invariant is the whole reason `data-fonts` is free:
+or `inherit` — thirteen sites, no exceptions (the thirteenth, since 2.13.4, is the form's
+`.nc-fill .nc-fill-control, .nc-fill-label`, `inherit` for the reason `.nc-prefill` gives: a host's
+`#top input[type="text"]` would otherwise outrank the reset). That invariant is the whole reason `data-fonts` is free:
 override the two vars and nothing on screen matches `nc-Poppins` / `nc-Montserrat`, an
 `@font-face` whose family goes unmatched is **never fetched**, and the host pays zero font bytes
 with no second stylesheet and no build step. **Hardcode a family name in one rule and that
@@ -513,6 +585,12 @@ cards. The ⌄ cue (`.nc-scroll-cue`) is the way to the latest content.
 That is a rule with a reason. It used to pin the bottom from a dozen sites including every eighth
 character of the reveal, so any reply taller than the panel scrolled its own opening line away
 while the guest read it. **If you are adding a render path, call `afterRender()`, never a scroll.**
+
+Two exceptions move the view, and both are the guest's doing or the focus rule's, never a
+render's: `endConversation()` focusing the restart button (the composer has just closed), and,
+since 2.13.4, a form's `reportValidity()`, which focuses — and the browser scrolls to — the first
+invalid field when the guest presses submit. A form never focuses or scrolls on arrival, and the
+focus `retireForms()` moves uses `preventScroll`.
 
 Three things are easy to get wrong here:
 
@@ -609,7 +687,7 @@ are shaped exactly like the real envelope. Drive them from the composer:
 | `book` | `booking_link` with a stay summary |
 | `contact` | `contact_channels` (phone + whatsapp + email) with a 1.14.0 `prefill` (text + subject + hint — the contract's own example): the caption and a read-only preview **above** the links, inside `.nc-channels`. The WhatsApp and email hrefs compose from the preview's current value at render, on `input` and on click; remove `readonly` in devtools, edit, and the tap sends the edited text |
 | `rooms` | `availability` — the 1.8.0 showcase: a per-bed and a per-room option carrying `basis`/`units`/`total`, rendered verbatim as "2 beds · 200.00 EUR total", plus one option without the trio that must render exactly as before |
-| `link` | three `link_button`s (book / website / directions), one with `style: primary` |
+| `link` | three `link_button`s (book / website / directions), one with `style: primary`, each carrying its 1.16.0 `id` — a click reports `cta` `book` / `website` / `directions` on `wchat:action` |
 | `cardstay` | the 1.10.0 pair (D-073): `[property_cards (one item), availability]` on one turn, card **first**, CTA url == `availability.url`. Exactly **one** Book affordance may render — the card's — and all three option rows must survive it (a party row, a single-unit row, one option with no `basis`/`units`/`total`; three groups of one, so no fold button). Suppression path: the per-turn `rendered` set |
 | `cardbook` | the other arm: `[property_cards, booking_link]`, equal urls, and **no** `cta_label` so both would have said "Book now". Suppression path: the `cardUrls` pre-scan — the branch that was dormant from 2.5.0 until 1.10.0. Tested **above** `book`: these are `indexOf` matches and `cardbook` contains `book` |
 | `available` | `async_result` — interim reply, then the poll replaces it in place; the final is an `availability` sharing the interim's **server-composed** url byte-for-byte (1.9.0, no `adults` — unstated party), so the per-turn dedupe must leave exactly **one** Book button; the final's option is the singular "1 bed" total path |
@@ -618,17 +696,23 @@ are shaped exactly like the real envelope. Drive them from the composer:
 | `pass` `offer` | `promo_card` alone (`pass` is word-bounded: "compass" falls through) — Spanish copy with `locale: 'es'` (→ `lang`) and a `\n` in the body (pre-wrap) |
 | `human` | the 1.12.0 unbound handoff (D-079): the reply asks which hostel and offers that team's contact (1.14.0 wording — it no longer says staff were told), over a `quick_replies` row with `id: 'property_choice'` and **thirteen** chips (catalog names, alphabetical, no `locale`, no `heading`) — and **no** `contact_channels`. The row must wrap whole inside a 400px panel. A chip sends `It's about <name>` verbatim, which answers as a bound handoff does since 1.14.0 — a reply pointing at the buttons plus the server's contact-offer line, and that hostel's `contact_channels` with a `prefill` quoting the `human` message; that answer branch sits **above** every content keyword, because a hostel name inside it must never be caught by an `indexOf` test |
 | `!cap` | the turn-cap reply: `contact_channels` + `conversation_ended` last — composer closes, "start a new chat" appears — and **no** `prefill` (the contract never puts one on the turn-cap reply), so it is the plain-links control |
-| `!unknown` | an unrecognised element type (must be ignored, sibling still renders) |
+| `!unknown` | an unrecognised element type (must be ignored, sibling still renders); the sibling `link_button` carries `id: 'brochure'`, an id this build does not know — drawn the same, `cta: null` |
 | `!xss` | a hostile reply and a `javascript:` url (both must be inert) |
 | `!prefill` | a hostile `prefill` — markup (an `onerror` img and a `script`, both setting the `window.__ncXss` sentinel), both quotes, `&amp;`/`&`, `?text=x#frag`, `%20`, `+`, a skin tone and a ZWJ family, an Arabic paragraph (the RTL branch of `dir="auto"`), a newline, ~500 characters — with `whatsapp` written `0034 600 111 222` and a subject carrying `& # ?`. The preview shows it as text, nothing runs, the decoded `text`/`body`/`subject` round-trip byte-for-byte, and wa.me gets `34600111222`. Not named `!xss…`: that test is a startsWith |
 | `!nowhatsapp` | `phone` `0034 822 000 000` + `email` + `prefill`, no `whatsapp`: `tel:+34822000000`, and the email link still carries the message — the preview waits for a WhatsApp **or** email link that renders |
 | `!busy` | the server's busy reply keeping a raised handoff's `contact_channels`, `prefill` included (1.14.0, D-084(h)) — `actions[]` renders on a busy `200` like on any other |
 | `!410` `!403` `!429` `!500` | forces that status |
 | `!429 60` `!429 80000` | a `429` carrying that `Retry-After` (1.11.0): 60 keeps "try again in a moment", 80000 shows "come back later". Bare `!429` is the header-less control and must read as `60` does, with `retryAfter: null` |
+| *tap* **Book a bed** | the 1.16.0 Book panel (D-111, D-112), from the welcome row's keyed chip: the tap carries `action {type:'reply', payload:{key:'book-a-bed'}}` beside its message, and the mock — like the server — answers that with the contract's own `form` (a hostel or an island, the dates with computed bounds, an optional party). Submit *Every hostel in Tenerife*: the guest bubble reads "Prices for Every hostel in Tenerife, *from* → *to*", the form stays on screen disabled, and the answer is `property_cards` with `ordering: 'cheapest'` — two cards with a `stay_total` (one per bed, one per room) under their `price_from`, a third with `reason: 'Fully booked for these dates'` and no total, a "Cheapest first" caption, never re-sorted. Submit *Duque Nest*: that hostel's `availability`, its party totals computed from the same party as the island cards' — beds at 78 a head, doubles at 165 for every two guests, so the bed card is cheaper for any party and the fixed order really is cheapest first. The action is answered **first**, above every keyword (`actionReply()`, the "it's about" precedent: "I would like to **book** a bed" and "Prices for Every **hostel** in **Tenerife**" both hold keywords); typing the chip's text without the action reaches `book` instead, exactly as the server answers a message sent alone |
+| `!kinds` | a `form` with every kind — `text`, `textarea`, `email`, `phone`, `select`, two `date_range`s, `guests`, `consent` — required and optional, pre-filled and not: an optional range pre-filled at one end (both ends turn required), a range with no `labels` (named by the field's label), two malformed options (skipped), a consent with a privacy link. Its submit is answered with the **keys** received, so a blank optional field visibly stays out and the answer itself carries no value (the guest bubble above it is the filled `submit_message`, values and all, by design). `room` is required: the contract promises every `{name}` in a template names a required field |
+| `!badform` | two forms. The first is hostile in every string — markup setting the `window.__ncXss` sentinel, a 120-character unbroken label, Arabic (`dir="auto"`), a `javascript:` consent link, bounds and values that are not dates or numbers, `null` where objects belong, `{constructor}` / `{__proto__}` tokens — and must render inertly: no script runs, the label wraps inside the panel, the link is gone. The second has a `kind` this build does not know and must not render at all |
+| `!pictures` | a `quick_replies` row of picture chips (1.16.0 `image`): one with `image_alt`, one without (`alt=""`), one `javascript:` image (dropped, chip kept), the keyed **Book a bed** as a tile (answers with the form), and one chip with no key (sends no `action`) |
+| `!ukchips` | a tenant `quick_prompts` row under a **turn's** reply (1.15.2) with `locale: 'uk'` (1.16.1, D-114): drawn like any row, `lang="uk"` — nothing checks a row's `locale` against the five packs |
 
 `Mock.init` returns **two** `quick_replies` rows — the tenant's "try asking" prompts and the
 island chips — mirroring a real welcome payload; both prompt messages chain into the table above
-rather than the catch-all reply. Only the island row carries a `heading`, on purpose: one page
+rather than the catch-all reply, and since 2.13.4 the prompts row's third chip, **Book a bed**,
+carries a `key` and opens the Book panel. Only the island row carries a `heading`, on purpose: one page
 load then shows a headed row and a bare one side by side. It also serves the 1.7.0 init pair,
 `idle_hours` and `server_time`, and since 2.13.2 the 1.15.0 `assistant` — by default
 `{ name: 'Nesti', … }` with a greeting that says the name, as a server would have written it.
@@ -665,12 +749,19 @@ turn endpoint after init has already succeeded. Open the panel (the `init` `wcha
 `retryAfter`), then send anything: the re-init is refused again and the guest sees the copy the
 number earns. Same knob rules as `?nc-idle`. **The mock never exercises `request()`** — the
 header-reading line itself is only proven over a real XHR, so a change there wants a
-cross-origin fake that sends `Retry-After` both exposed and **un**exposed. The same holds for
-request **bodies**: `API.init` / `API.send` return to the mock before building one, so the
-`locale` a turn carries (`requestLocale`) exists only on the real transport. Observe it with
-Playwright's `page.route()` against a fake `data-api-base` on the host page's own origin —
-same-origin, so no preflight — reading `request.postDataJSON()`, or with the 2.13.0 cross-origin
-fake.
+cross-origin fake that sends `Retry-After` both exposed and **un**exposed. Request **bodies** are
+half-covered since 2.13.4: `API.send` builds `{message, locale, action?}` **before** its mock
+branch and hands that same object to `Mock.send(uuid, body, done)`, so a fixture answers what the
+wire would carry — it is how the keyed chip earns its form. `API.init` still returns to the mock
+before building its body. Either way the serialized bytes exist only on the real transport.
+Observe them with Playwright's `page.route()` against a fake `data-api-base` on the host page's
+own origin — same-origin, so no preflight — reading `request.postDataJSON()`, with CDP `Fetch`
+interception, or with the 2.13.0 cross-origin fake.
+
+**`?nc-action-fail=<status>` answers every turn that carries an `action` with that status** — a
+keyed tap, a form submit. It is the mock-only way to watch a form come back after a failed send
+(`onFail`): `!500` is typed text, and typing retires the form before it can fail. Same knob rules
+as `?nc-idle`.
 
 The demo page also carries the host-side half of the events seam — one listener on the
 umbrella `wchat` event, logging to the console and to `window.wchatLog`. Driving the table
@@ -853,7 +944,10 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   and the header ⋯ menu. In the last two, hiding a focused node is the control's *main* path
   rather than an edge case: pressing ⌄ scrolls to the bottom, which is exactly the condition
   that hides ⌄, and every way of dismissing the menu hides an item the guest may be standing
-  on. It is a rule, not a case.
+  on. It is a rule, not a case. **Disabling counts too**: a disabled focused control drops focus
+  to `<body>` exactly like a removed one, which is why `retireForms()` (2.13.4) moves focus onto
+  the retiring form *before* it disables the fieldset — the main path again, since the guest
+  pressing submit is standing in the form the send retires.
 - Never touch `document.documentElement.lang`, the host's `<body>`, or anything outside
   `#nest-chatbot`. The host page is not ours. **Session history is the one deliberate
   exception** (2.10.3, the Back button) — which is exactly why it is the only behaviour in the
@@ -921,4 +1015,14 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   asked for 2.13.2 too. What a guest sees does change (the name is the owner's now, and the header
   can wrap), but a host's `<script>` tag has nothing new to say; the one thing a host is asked to
   do — add `?v=2.13.2` so a day-old cached copy cannot keep its old name — is about their cache,
-  not about this file's contract. The next release is **2.13.3** unless a host has to act.
+  not about this file's contract.
+  2.13.3 is the 1.15.1 sync (D-106), a wording row that moved no renderer line, plus the
+  built-in greeting's "· 1 Community" in five locales — a patch on both counts.
+  2.13.4 is the 1.15.2 + 1.16.0 + 1.16.1 sync (D-109, D-111, D-112, D-114): a fresh packet and a
+  `BUILT_AGAINST` move, the Book panel's `form`, keyed and picture chips, stay totals, reasons and
+  an order caption on cards, three pack keys in five locales, one additive `wchat:action` field
+  (`cta`) and one additive `wchat:message` `source` value (`form`) — and no `data-*` attribute and
+  no `window.NestChatbot` member. A patch: the upstream prompt asked for a minor, 2.14.0, "since a
+  guest-visible feature lands", and was overruled by this rule — new UI behaviour is patch-shaped
+  here, and a host is asked only to move the embed tag's query to `?v=2.13.4`, which is about their
+  cache. The next release is **2.13.5** unless a host has to act.

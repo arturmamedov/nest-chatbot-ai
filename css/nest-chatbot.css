@@ -161,7 +161,9 @@
    Measured on nestshostels.com (Tailwind preflight + @tailwindcss/forms): a
    #2563eb ring painted through box-shadow inside the composer, and Poppins at a
    72px line-height on the header title, which made the header 37px taller than
-   designed. Add a tag here if build() ever creates one.
+   designed. Add a tag here if build() ever creates one — or a renderer: input,
+   select, label and fieldset are the 1.16.0 form's (renderForm), whose own
+   rules below state everything else a theme's form reset reaches.
 
    svg is in the list for exactly that reason — build() creates icons and the
    intro ring. Sizing is the part this block does not cover: .nc-icon states
@@ -176,7 +178,11 @@
 #nest-chatbot form,
 #nest-chatbot button,
 #nest-chatbot svg,
-#nest-chatbot textarea {
+#nest-chatbot textarea,
+#nest-chatbot input,
+#nest-chatbot select,
+#nest-chatbot label,
+#nest-chatbot fieldset {
     font-family: inherit;
     line-height: normal;
     letter-spacing: normal;
@@ -840,8 +846,8 @@
    between two of them.
 
    No font-family here on purpose — #nest-chatbot's own var(--nc-font-body)
-   inherits down to this node. Declaring one would make a thirteenth site of a
-   typography seam whose entire value is that there are exactly twelve, and
+   inherits down to this node. Declaring one would make a fourteenth site of a
+   typography seam whose entire value is that there are exactly thirteen, and
    data-fonts would quietly stop covering everything. */
 #nest-chatbot .nc-day {
     align-self: center;
@@ -971,7 +977,7 @@
    clamped either — a truncated question is worse than a two-line one, and the
    contract's 60 characters are advisory.
 
-   No font-family: a div inherits from #nest-chatbot, so this adds no thirteenth
+   No font-family: a div inherits from #nest-chatbot, so this adds no fourteenth
    site to the two-custom-property typography seam. 600, not 500 — only 400 and
    600 faces ship. */
 #nest-chatbot .nc-chip-head {
@@ -981,6 +987,42 @@
     line-height: 1.4;
     color: var(--nc-text);
     overflow-wrap: break-word;
+}
+
+/* A chip with a picture (contract 1.16.0 `image`): a small tile, photo above
+   label, still the .nc-prompt it always was — same outline, same font, same tap.
+   A row holding one aligns to the top, so a tile beside a plain pill does not
+   stretch the pill to its height. The photo is the card's: no size or ratio is
+   guaranteed, so it crops to cover, and the teal shows while it loads or if it
+   never does — no onerror, the card photo's precedent. */
+#nest-chatbot .nc-chip-row--tiles {
+    align-items: flex-start;
+}
+
+#nest-chatbot .nc-chip-tile {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    width: 112px;
+    padding: 6px 6px 8px;
+    border-radius: 14px;
+    text-align: center;
+}
+
+#nest-chatbot .nc-chip-img {
+    display: block;
+    width: 100%;
+    height: 64px;
+    object-fit: cover;
+    border-radius: 9px;
+    background: var(--nc-primary);
+}
+
+#nest-chatbot .nc-chip-label {
+    display: block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 /* thinking dots */
@@ -1057,13 +1099,15 @@
    .nc-action supplies the pill; this strips the UA button chrome the anchor
    variants never carry — a <button> does not inherit font-family, and ships its
    own border. The focus ring is the house pattern the anchors get from the UA. */
-#nest-chatbot .nc-restart {
+#nest-chatbot .nc-restart,
+#nest-chatbot .nc-fill-submit {
     font-family: var(--nc-font-body);
     border: none;
     cursor: pointer;
 }
 
-#nest-chatbot .nc-restart:focus-visible {
+#nest-chatbot .nc-restart:focus-visible,
+#nest-chatbot .nc-fill-submit:focus-visible {
     outline: 2px solid var(--nc-secondary);
     outline-offset: 2px;
 }
@@ -1277,7 +1321,7 @@
    card shares one edge, and tabular numerals so the digits line up down that edge
    — the difference between a list and a table of prices. The string is the
    server's, via textContent; nothing here formats, rounds or derives it. No
-   font-family: a div inherits from #nest-chatbot, so this adds no thirteenth site
+   font-family: a div inherits from #nest-chatbot, so this adds no fourteenth site
    to the two-custom-property typography seam. */
 #nest-chatbot .nc-option-figure {
     font-weight: 600;
@@ -1441,13 +1485,47 @@
     overflow-wrap: break-word;
 }
 
-/* The auto margin belongs to whichever of the two comes first: the price line
-   normally, the book link when the item ships no price. That is what keeps every
-   card's CTA on one baseline even though `location` and `price_from` are both
-   optional-omitted on the wire and the cards stretch to a shared height. */
+/* Why the card sits where it does (1.16.0 `reason`) — "Fully booked for these
+   dates". Body text, not metadata: --nc-text, where the location is subtle. */
+#nest-chatbot .nc-card-reason {
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--nc-text);
+    overflow-wrap: break-word;
+}
+
+/* The auto margin belongs to whichever comes first of the price line, the stay
+   total and the book link: the price line normally, the book link when the item
+   ships neither. That is what keeps every card's CTA on one baseline even though
+   `location`, `price_from` and (1.16.0) `stay_total` are all optional-omitted on
+   the wire and the cards stretch to a shared height. Each one after the first is
+   pinned by the adjacency rules below, or two auto margins would split the
+   space between them. */
 #nest-chatbot .nc-card-price-line,
+#nest-chatbot .nc-card-stay,
 #nest-chatbot .nc-card-book {
     margin-top: auto;
+}
+
+/* What this stay costs (1.16.0 `stay_total`), right under the static from-price
+   and never instead of it: the figure the guest asked for, so the price's weight
+   and colour rather than the line's subtle one. */
+#nest-chatbot .nc-card-stay {
+    padding-top: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--nc-text);
+    overflow-wrap: break-word;
+}
+
+#nest-chatbot .nc-card-price-line + .nc-card-stay {
+    margin-top: 0;
+    padding-top: 2px;
+}
+
+#nest-chatbot .nc-card-stay + .nc-card-book {
+    margin-top: 8px;
 }
 
 #nest-chatbot .nc-card-price-line {
@@ -1575,6 +1653,329 @@
 #nest-chatbot .nc-car-count {
     font-size: 12px;
     color: var(--nc-text-subtle);
+}
+
+/* What the rail's order means (1.16.0 `ordering`), above it: the availability
+   card's heading voice. The negative margin pulls the body's 15px gap down to
+   6px, so it reads as the rail's caption and not as a line of its own. */
+#nest-chatbot .nc-card-order {
+    margin-bottom: -9px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--nc-text);
+}
+
+/* ------------------------------------------------------------------ form */
+
+/* A 1.16.0 `form` (the Book panel). Every control in it is exactly what a host's
+   form reset aims at — @tailwindcss/forms, a theme's bare `input`, `select`,
+   `label` or `fieldset`, an id-prefixed `#top input` — so the .nc-prefill recipe
+   applies: every property a host rule could reach is stated HERE, without
+   !important. The reset block above declares the tags too, but at 1,0,1 it only
+   TIES `#top input`, and a tie goes to the later sheet.
+
+   The controls carry ONE class more than .nc-prefill does — they are matched
+   through their form, `.nc-fill .nc-fill-control` at 1,2,0 — and that is the
+   attacker's shape, not an escalation: a theme writes its input rules
+   type-qualified, `#top input[type="text"]` (Enfold's `<body id="top">`), which
+   is 1,1,1 and beats 1,1,0, and its `:focus` twin is 1,2,1. No <input> existed
+   in this widget before 2.13.4 — the composer and the preview are textareas,
+   which themes do not qualify by type — so this is the first place it bites.
+   demo/index.html carries that trap too.
+
+   At the transcript's edge like the availability card and the rail — a data
+   block, not a chip row — and the transcript's full width. */
+#nest-chatbot .nc-fill {
+    display: block;
+    align-self: stretch;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+/* The landing spot retireForms() hands focus to (tabindex=-1): a ring for a
+   keyboard guest, none for a tap. */
+#nest-chatbot .nc-fill:focus {
+    outline: none;
+}
+
+#nest-chatbot .nc-fill:focus-visible {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: 2px;
+    border-radius: 12px;
+}
+
+/* min-inline-size: 0 is load-bearing: a fieldset's UA default is min-content,
+   which lets one long label size the form past the panel, and .nc-body is
+   overflow-x: hidden — the overflow would be CLIPPED, not scrollable. */
+#nest-chatbot .nc-fill-set {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    min-inline-size: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 12px 14px 14px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--nc-surface);
+    color: var(--nc-ink);
+    font-size: 13px;
+}
+
+/* Retired — sent, or overtaken by any later send — and kept on screen as the
+   record of what was sent. */
+#nest-chatbot .nc-fill-set:disabled {
+    opacity: 0.6;
+}
+
+#nest-chatbot .nc-fill-title {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--nc-text);
+    overflow-wrap: anywhere;
+}
+
+#nest-chatbot .nc-fill-intro {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--nc-ink);
+    overflow-wrap: anywhere;
+}
+
+#nest-chatbot .nc-fill-field,
+#nest-chatbot .nc-fill-end {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+/* Check-in and check-out side by side, and stacked when the panel is too
+   narrow for two dates. */
+#nest-chatbot .nc-fill-range {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#nest-chatbot .nc-fill-end {
+    flex: 1 1 128px;
+}
+
+/* The family is declared on these two alone — the seam's thirteenth site,
+   `inherit` so data-fonts still covers it. A label is not a control and a theme
+   `label` rule is common (display: block, bold, uppercase); anywhere, because a
+   label is server text and the panel clips rather than scrolls. */
+#nest-chatbot .nc-fill .nc-fill-control,
+#nest-chatbot .nc-fill-label {
+    font-family: inherit;
+}
+
+#nest-chatbot .nc-fill-label {
+    display: block;
+    margin: 0;
+    padding: 0;
+    font-size: 12px;
+    font-weight: 600;
+    font-style: normal;
+    line-height: 1.35;
+    letter-spacing: normal;
+    text-transform: none;
+    text-align: start;
+    color: var(--nc-text);
+    background: none;
+    cursor: default;
+    overflow-wrap: anywhere;
+}
+
+#nest-chatbot .nc-fill-label::before,
+#nest-chatbot .nc-fill-label::after {
+    content: none;
+}
+
+#nest-chatbot .nc-fill-sub {
+    font-weight: 400;
+}
+
+/* 16px, and px: under 16px iOS zooms the page when a typed field takes focus,
+   and rem would follow the HOST's root size. A fixed 40px height so an empty
+   iOS date field cannot collapse; color-scheme light so a dark-mode browser
+   does not paint a dark picker into a light panel. The border is the subtle
+   text tone, not the composer's --nc-line: a field inside the grey set needs
+   its edge at 3:1 to read as a field at all. */
+#nest-chatbot .nc-fill .nc-fill-control {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 40px;
+    min-height: 0;
+    max-height: none;
+    margin: 0;
+    padding: 8px 12px;
+    border: 1px solid var(--nc-text-subtle);
+    border-radius: 10px;
+    background: var(--nc-surface-alt);
+    background-image: none;
+    color: var(--nc-text);
+    font-size: 16px;
+    font-weight: 400;
+    font-style: normal;
+    line-height: 1.4;
+    letter-spacing: normal;
+    word-spacing: normal;
+    text-align: start;
+    text-indent: 0;
+    text-transform: none;
+    text-shadow: none;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+    box-shadow: none;
+    opacity: 1;
+    transition: none;
+    color-scheme: light;
+}
+
+#nest-chatbot .nc-fill .nc-fill-area {
+    height: auto;
+    min-height: 72px;
+    field-sizing: fixed;
+    resize: none;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+}
+
+#nest-chatbot .nc-fill .nc-fill-control::placeholder {
+    color: var(--nc-text-subtle);
+    opacity: 1;
+}
+
+/* :focus, restating the field's colours: a host's `input:focus`, or
+   `#top input[type="text"]:focus` at 1,2,1, outranks the base rule for anything
+   this one leaves unsaid — demo/index.html's ring-through-box-shadow trap is
+   that case. 1,3,0 here. */
+#nest-chatbot .nc-fill .nc-fill-control:focus {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: 1px;
+    border-color: var(--nc-secondary);
+    background: var(--nc-surface-alt);
+    color: var(--nc-text);
+    box-shadow: none;
+}
+
+/* iOS centres a date's value inside the field otherwise. */
+#nest-chatbot .nc-fill .nc-fill-control::-webkit-date-and-time-value {
+    text-align: start;
+}
+
+/* The select's chevron, drawn in CSS — no data: url, which a host's CSP may
+   refuse — because appearance: none above removes the native one. */
+#nest-chatbot .nc-fill-pick {
+    position: relative;
+    min-width: 0;
+}
+
+#nest-chatbot .nc-fill-pick::after {
+    content: "";
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    margin-top: -6px;
+    border-right: 2px solid var(--nc-secondary);
+    border-bottom: 2px solid var(--nc-secondary);
+    transform: rotate(45deg);
+    pointer-events: none;
+}
+
+#nest-chatbot .nc-fill-pick .nc-fill-control {
+    padding-right: 36px;
+    cursor: pointer;
+    text-overflow: ellipsis;
+}
+
+#nest-chatbot .nc-fill-check {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    column-gap: 8px;
+    row-gap: 2px;
+}
+
+/* The native box, restored: appearance auto at 1,2,0 beats a forms plugin's
+   [type='checkbox']:checked (0,2,0) painting its own, and a theme's
+   `#top input[type="checkbox"]` (1,1,1). Light, like the fields. */
+#nest-chatbot .nc-fill .nc-fill-box {
+    -webkit-appearance: checkbox;
+    appearance: auto;
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    opacity: 1;
+    accent-color: var(--nc-secondary);
+    color-scheme: light;
+    cursor: pointer;
+}
+
+#nest-chatbot .nc-fill .nc-fill-box:focus-visible {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: 2px;
+}
+
+#nest-chatbot .nc-fill-check .nc-fill-label {
+    flex: 1 1 0;
+    min-width: 0;
+    font-weight: 400;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+#nest-chatbot .nc-fill-link {
+    flex: 0 0 100%;
+    padding-left: 26px;
+    font-size: 12px;
+    color: var(--nc-secondary);
+    text-decoration: underline;
+    overflow-wrap: anywhere;
+}
+
+#nest-chatbot .nc-fill-link:focus-visible {
+    outline: 2px solid var(--nc-secondary);
+    outline-offset: 2px;
+}
+
+/* .nc-action supplies the pill and .nc-restart's rule above the UA chrome a
+   <button> brings; this only keeps it from stretching across the column. */
+#nest-chatbot .nc-fill-submit {
+    align-self: flex-start;
+}
+
+#nest-chatbot .nc-fill-set:disabled .nc-fill-control,
+#nest-chatbot .nc-fill-set:disabled .nc-fill-box,
+#nest-chatbot .nc-fill-set:disabled .nc-fill-label {
+    cursor: default;
+}
+
+/* A retired form's button is disabled through its fieldset but would still
+   answer .nc-action--primary:hover — a hover on a dead control. */
+#nest-chatbot .nc-fill-set:disabled .nc-fill-submit {
+    pointer-events: none;
 }
 
 /* -------------------------------------------------------------------- promo card */

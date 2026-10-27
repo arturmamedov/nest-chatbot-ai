@@ -88,6 +88,50 @@
         textarea:focus { box-shadow: 0 0 0 1px #2563eb; outline: 2px solid transparent; }
         a { text-decoration: underline; color: #b1560f; }
 
+        /* --- the form traps (2.13.4) -----------------------------------------
+           The 1.16.0 form is made of exactly what a theme's form reset aims at.
+           A caricature of @tailwindcss/forms plus a theme's label and fieldset
+           rules, loud on purpose: if a Book-panel field ever turns italic,
+           uppercase, orange-bordered or Georgia, grows a gradient chevron or a
+           blue box-shadow ring, if a label goes bold uppercase, or the form
+           gains a double border, the widget has stopped declaring that
+           property. This page has no form of its own, so nothing here is
+           visible until the widget draws one.
+
+           `fieldset textarea`, not `textarea`: it reaches the form's own
+           textarea and never the composer's, which predates these traps and
+           declares no text-transform of its own. */
+        input, select { -webkit-appearance: none; appearance: none;
+            background: #fff7ed linear-gradient(45deg, transparent 50%, #b1560f 50%) no-repeat right 8px center / 12px 12px;
+            border: 3px solid #b1560f; border-radius: 0; padding: 18px 24px;
+            font: italic 13px/3 Georgia, serif; letter-spacing: 0.2em; text-transform: uppercase;
+            color: #b1560f; box-shadow: inset 0 0 0 4px #fde68a; width: auto; height: auto; }
+        input:focus, select:focus { outline: 2px solid transparent; outline-offset: 2px;
+            box-shadow: 0 0 0 3px #2563eb; border-color: #2563eb; }
+        [type="checkbox"] { width: 2rem; height: 2rem; border-radius: 0; background-color: #b1560f; }
+        [type="checkbox"]:checked { background-color: #2563eb; }
+        label { display: block; margin: 0 0 1rem; font: 700 1.1rem/2 Georgia, serif;
+            text-transform: uppercase; letter-spacing: 0.15em; color: #b1560f; }
+        fieldset { border: 3px double #b1560f; margin: 12px 4px; padding: 18px 24px;
+            min-inline-size: min-content; background: #fff7ed; }
+        fieldset textarea { font: italic 13px/3 Georgia, serif; text-transform: uppercase;
+            letter-spacing: 0.2em; color: #b1560f; }
+
+        /* The id-prefixed, type-qualified shape a WordPress theme really writes
+           (Enfold's <body id="top">): 1,1,1, which outranks a widget rule at
+           1,1,0 — hence `#top` on this page's <body>. Its :focus twin is
+           1,2,1. If a Book-panel field ever shows HelveticaNeue at 13px with a
+           grey square box and a 20px gap under it, the extra class the form's
+           controls carry has been lost. */
+        #top input[type="text"], #top input[type="email"], #top input[type="tel"],
+        #top input[type="number"], #top input[type="date"], #top input[type="checkbox"] {
+            font: 13px "HelveticaNeue", Helvetica, Arial, sans-serif; padding: 8px 6px;
+            border: 1px solid #e1e1e1; margin-bottom: 20px; color: #777; background: #fff;
+            border-radius: 0; width: 60%; height: 22px; }
+        #top input[type="text"]:focus, #top input[type="email"]:focus, #top input[type="tel"]:focus,
+        #top input[type="number"]:focus, #top input[type="date"]:focus {
+            box-shadow: 0 0 2px 1px #f80; color: #f80; background: #fffbe6; }
+
         /* --- the furniture trap ----------------------------------------------
            A stand-in for the cookie banner nestshostels.com pins bottom-left.
            The widget's launcher and teaser are bottom-right (or bottom-left with
@@ -108,7 +152,7 @@
     </style>
 </head>
 
-<body>
+<body id="top">
     <div class="page">
         <h1>Las Eras Nest Hostel</h1>
         <p class="chat-header">A demo host page — this text must stay orange and bold.</p>
@@ -174,6 +218,21 @@
             <code>!429</code> and <code>!500</code> drive the defensive paths — and
             <code>!429 60</code> / <code>!429 80000</code> send a <code>Retry-After</code>, so a
             minute's wait and a daily cap read differently.
+        </p>
+
+        <p>
+            The 1.16.0 Book panel starts from the welcome row: <em>Book a bed</em> is a keyed
+            chip, so its tap carries an action and is answered with a form — a hostel or an
+            island, the dates, an optional party size. Submit it for <em>Every hostel in
+            Tenerife</em> and the answer is cheapest-first cards priced for the stay, one of them
+            fully booked; pick <em>Duque Nest</em> and it is that hostel's options.
+            <code>!kinds</code> draws every kind of field the contract has, <code>!badform</code>
+            a hostile form that must render inertly beside one that must not render at all,
+            <code>!pictures</code> a row of picture chips (one image unsafe, one chip unkeyed),
+            and <code>!ukchips</code> a tenant chip row in Ukrainian under a reply. To watch a
+            form come back after a failed send, add <code>?nc-action-fail=500</code> to the URL
+            and use <code>!kinds</code>: the knob refuses every turn that carries an action, the
+            keyed <em>Book a bed</em> tap included, so that form never arrives.
         </p>
 
         <p>

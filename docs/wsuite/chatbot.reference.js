@@ -59,7 +59,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.15.1';
+    var BUILT_AGAINST = '1.16.1';
 
     // Upper bound on each `assistant` string this widget will paint (1.15.0). The
     // server already guarantees a short name; this only stops a malformed or
@@ -87,6 +87,15 @@
     // may be null, or null against a server that sends neither. Persisted with
     // the record for the idle window's reason — see cleanAssistant().
     var assistant = null;
+    // Whether this site counts button clicks (1.16.0 — D-113): the init's
+    // `analytics`, absent meaning no. Persisted with the record like the idle
+    // window, because the resume path never asks init again.
+    var analyticsOn = false;
+    // The turn whose elements are being drawn, for a click's `turn` — null for
+    // the welcome. Read synchronously when an anchor is built.
+    var currentTurn = null;
+    var liveForms = [];    // form elements still submittable — retired on any send (1.16.0)
+    var fieldSeq = 0;      // unique ids for form inputs and their labels
     var els = {};
 
     // ---- localStorage helpers -----------------------------------------------
@@ -126,7 +135,10 @@
                 idleHours: (typeof parsed.idleHours === 'number' && parsed.idleHours > 0) ? parsed.idleHours : null,
                 // Re-validated on the way out, like everything else in the record:
                 // localStorage is as untrusted as the wire.
-                assistant: cleanAssistant(parsed.assistant)
+                assistant: cleanAssistant(parsed.assistant),
+                // 1.16.0: only a literal true counts, so a malformed record reports
+                // nothing — fail-closed, like an absent init flag.
+                analytics: parsed.analytics === true
             };
         } catch (e) { return null; }
     }
@@ -184,7 +196,7 @@
         try {
             window.localStorage.setItem(STORE_KEY, JSON.stringify({
                 uuid: uuid, ts: Date.now(), greeting: introGreeting, actions: introActions,
-                idleHours: serverIdleHours, assistant: assistant
+                idleHours: serverIdleHours, assistant: assistant, analytics: analyticsOn
             }));
         } catch (e) {}
     }
@@ -323,6 +335,26 @@
             '.wsc-chips-head{flex:0 0 100%;margin:0;font-size:13px;font-weight:600;color:#1f2430}',
             '.wsc-chip{padding:7px 12px;border-radius:999px;border:1px solid ' + color + ';background:none;',
             'color:' + color + ';font-size:13px;cursor:pointer;font-family:inherit}',
+            // 1.16.0 chip picture: a chip that has one becomes a small tile.
+            '.wsc-chip-img{display:block;width:96px;height:60px;object-fit:cover;border-radius:8px;margin:0 auto 4px}',
+            '.wsc-chip:has(.wsc-chip-img){border-radius:12px;padding:6px}',
+            '.wsc-card-stay{font-size:13px;font-weight:700;color:#1f2430;margin-top:2px}',
+            '.wsc-card-reason{font-size:12px;color:#6b7280;margin-top:2px}',
+            '.wsc-card-order{font-size:12px;font-weight:600;color:#6b7280;margin:6px 0 0}',
+            // 1.16.0 form. Long labels wrap rather than widen the panel.
+            '.wsc-form{background:#fff;border:1px solid #e6e8ec;border-radius:12px;padding:10px 12px;margin:6px 0;max-width:92%}',
+            '.wsc-form-set{border:none;margin:0;padding:0;min-width:0}',
+            '.wsc-form-set:disabled{opacity:.6}',
+            '.wsc-form-title{font-size:14px;font-weight:700;color:#1f2430;overflow-wrap:anywhere}',
+            '.wsc-form-intro{font-size:13px;color:#3b4252;margin-top:2px;overflow-wrap:anywhere}',
+            '.wsc-form-label{display:block;font-size:12px;color:#6b7280;margin:8px 0 3px;overflow-wrap:anywhere}',
+            '.wsc-form-input{display:block;width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #d6d9de;',
+            'border-radius:8px;font-size:14px;font-family:inherit;background:#fff;color:#1f2430}',
+            '.wsc-form-range{display:flex;gap:6px}.wsc-form-range>div{flex:1 1 0;min-width:0}',
+            '.wsc-form-check{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;margin-top:8px}',
+            '.wsc-form-check .wsc-form-label{margin:0}',
+            '.wsc-form-link{font-size:12px;color:' + color + '}',
+            '.wsc-form-submit{border:none;cursor:pointer;font-family:inherit;margin-top:10px}',
             '.wsc-promo{background:#fff;border:1px solid #e6e8ec;border-radius:12px;overflow:hidden;margin:6px 0;max-width:88%}',
             '.wsc-promo img{display:block;width:100%;height:100px;object-fit:cover}',
             '.wsc-promo-title{font-size:14px;font-weight:700;color:#1f2430;padding:10px 12px 0}',
@@ -477,13 +509,15 @@
 
         if (action.type === 'link_button') {
             if (cardUrls && cardUrls[action.url]) { return; } // a card in this list carries the same CTA (D-043(c))
-            linkButton(action.label, action.url, rendered);
+            // `id` (1.16.0) says which button it is; one this widget does not know
+            // is drawn and simply not reported.
+            linkButton(action.label, action.url, rendered, 'link_button', LINK_IDS[action.id] === true ? action.id : null);
             return;
         }
 
         if (action.type === 'booking_link') {
             if (cardUrls && cardUrls[action.url]) { return; } // same dedupe rule
-            linkButton('Book now →', action.url, rendered);
+            linkButton('Book now →', action.url, rendered, 'booking_link', 'book');
             return;
         }
 
@@ -499,7 +533,7 @@
             if (!action.url) { return; }
             if (cardUrls && cardUrls[action.url]) { return; }
             if (rendered && rendered[action.url]) { return; }
-            linkButton('Book now →', action.url, rendered);
+            linkButton('Book now →', action.url, rendered, 'availability', 'book');
             return;
         }
 
@@ -515,6 +549,11 @@
 
         if (action.type === 'quick_replies') {
             quickReplies(action);
+            return;
+        }
+
+        if (action.type === 'form') {
+            form(action);
             return;
         }
 
@@ -558,15 +597,15 @@
             els.body.appendChild(preview);
         }
 
-        if (action.phone) { channelLink('Call ' + action.phone, 'tel:' + telNumber(action.phone)); }
+        if (action.phone) { channelLink('Call ' + action.phone, 'tel:' + telNumber(action.phone), 'phone'); }
         if (action.whatsapp) {
             var wa = 'https://wa.me/' + digits(telNumber(action.whatsapp));
-            var waLink = channelLink('WhatsApp', wa);
+            var waLink = channelLink('WhatsApp', wa, 'whatsapp');
             if (preview) { composeOnTap(waLink, function () { return wa + '?text=' + encodeURIComponent(preview.value); }); }
         }
         if (action.email) {
             var mail = 'mailto:' + action.email;
-            var mailLink = channelLink('Email ' + action.email, mail);
+            var mailLink = channelLink('Email ' + action.email, mail, 'email');
             if (preview) {
                 composeOnTap(mailLink, function () {
                     var subject = typeof prefill.subject === 'string' && prefill.subject ? 'subject=' + encodeURIComponent(prefill.subject) + '&' : '';
@@ -650,12 +689,22 @@
             if (item.price_from && item.price_from.amount) {
                 body.appendChild(el('div', 'wsc-card-price', priceLine(item.price_from)));
             }
+            // 1.16.0: on a stay result, what the stay costs — the cheapest option,
+            // from live prices — beside the static from-price, and why a card sits
+            // where it does (a sold-out hostel says so).
+            if (item.stay_total && typeof item.stay_total.amount === 'string' && item.stay_total.amount) {
+                body.appendChild(el('div', 'wsc-card-stay', item.stay_total.amount
+                    + (typeof item.stay_total.currency === 'string' ? ' ' + item.stay_total.currency : '') + ' total'
+                    + (item.stay_total.basis === 'per_person' ? ' · beds' : item.stay_total.basis === 'per_unit' ? ' · room' : '')));
+            }
+            if (typeof item.reason === 'string' && item.reason) { body.appendChild(el('div', 'wsc-card-reason', item.reason)); }
             // cta_label is server-localized (1.6.0) — prefer it over our English default.
             var cta = el('a', 'wsc-act wsc-card-cta',
                 (typeof item.cta_label === 'string' && item.cta_label) ? item.cta_label : 'Book now →');
             cta.setAttribute('href', href);
             cta.setAttribute('target', '_blank');
             cta.setAttribute('rel', 'noopener noreferrer');
+            reportClicks(cta, 'property_cards', 'book');
             body.appendChild(cta);
             card.appendChild(body);
             rail.appendChild(card);
@@ -663,16 +712,21 @@
             shown++;
         }
         if (!rail.firstChild) { return; }
+        // 1.16.0: say how the cards are ordered only when the server says so.
+        if (ORDERING_LABELS[action.ordering]) { els.body.appendChild(el('div', 'wsc-card-order', ORDERING_LABELS[action.ordering])); }
         els.body.appendChild(rail);
 
         var moreUrl = action.more ? safeHttpUrl(action.more.url) : null;
         if (moreUrl && typeof action.more.label === 'string' && action.more.label) {
-            linkButton(action.more.label, moreUrl, rendered);   // label is server-localized
+            linkButton(action.more.label, moreUrl, rendered, 'property_cards', 'more');   // label is server-localized
         } else if (typeof action.total === 'number' && action.total > shown) {
             els.body.appendChild(el('div', 'wsc-card-loc', 'Showing ' + shown + ' of ' + action.total + '.'));
         }
         scrollDown();
     }
+
+    // `property_cards.ordering` (1.16.0) — a label only for the orders that are one.
+    var ORDERING_LABELS = { cheapest: 'Cheapest first', ranked: 'Best match first' };
 
     // The `style` values this renderer knows how to present. `highlight` is the
     // only one the platform documents; an unrecognised value must fall back to
@@ -728,6 +782,7 @@
         cta.setAttribute('href', href);
         cta.setAttribute('target', '_blank');
         cta.setAttribute('rel', 'noopener noreferrer');
+        reportClicks(cta, 'promo_card', 'promo');
         box.appendChild(cta);
         els.body.appendChild(box);
         scrollDown();
@@ -786,13 +841,32 @@
             (function (item) {
                 if (!item || typeof item.label !== 'string' || !item.label
                     || typeof item.message !== 'string' || !item.message) { return; }
-                var chip = el('button', 'wsc-chip', item.label);
+                var chip = el('button', 'wsc-chip');
                 chip.setAttribute('type', 'button');
+                // 1.16.0: an optional picture above the label — an image source
+                // under the http(s) rule, decorative unless `image_alt` says more.
+                var img = safeHttpUrl(item.image);
+                if (img) {
+                    var picture = el('img', 'wsc-chip-img');
+                    picture.setAttribute('src', img);
+                    picture.setAttribute('alt', typeof item.image_alt === 'string' ? item.image_alt : '');
+                    picture.setAttribute('loading', 'lazy');
+                    picture.setAttribute('referrerpolicy', 'no-referrer');
+                    chip.appendChild(picture);
+                }
+                chip.appendChild(el('span', null, item.label));
+                // A keyed chip sends its key beside its message (1.16.0): that is
+                // how this widget says it can draw what the chip answers with — a
+                // form — while an older server still sees the message it always did.
+                var key = (typeof item.key === 'string' && item.key && item.key.length <= 64) ? item.key : null;
                 chip.addEventListener('click', function () {
                     if (busy || removed || ended) { return; }
                     retireChipRows();
+                    retireForms();
                     addBubble('guest', item.message);
-                    ensureConversation(function () { sendMessage(item.message, false); });
+                    ensureConversation(function () {
+                        sendMessage(item.message, false, key ? { type: 'reply', payload: { key: key } } : null);
+                    });
                 });
                 row.appendChild(chip);
                 chips++;
@@ -804,13 +878,14 @@
         if (chips) { els.body.appendChild(row); chipRows.push(row); scrollDown(); }
     }
 
-    function linkButton(label, url, rendered) {
+    function linkButton(label, url, rendered, element, cta) {
         var href = safeHttpUrl(url);
         if (!href) { return; }
         var link = el('a', 'wsc-act', label || 'Open'); // label via textContent — never markup
         link.setAttribute('href', href); // set as attribute — never interpolated into markup
         link.setAttribute('target', '_blank');
         link.setAttribute('rel', 'noopener noreferrer');
+        reportClicks(link, element, cta);
         els.body.appendChild(link);
         if (rendered) { rendered[href] = true; }
         scrollDown();
@@ -838,14 +913,253 @@
 
     // wa.me opens in a new tab: navigating the HOST page away would drop the
     // guest's chat mid-handoff. tel:/mailto: hand off to an app and stay put.
-    function channelLink(label, href) {
+    function channelLink(label, href, cta) {
         var a = el('a', 'wsc-chan', label);
         a.setAttribute('href', href);
         a.setAttribute('rel', 'noopener noreferrer');
         if (/^https:/.test(href)) { a.setAttribute('target', '_blank'); }
+        reportClicks(a, 'contact_channels', cta);
         els.body.appendChild(a);
         scrollDown();
         return a;
+    }
+
+    // ---- CTA-click events (1.16.0 — D-113) ------------------------------------
+    // The `link_button` ids this widget reports; another one is drawn, not counted.
+    var LINK_IDS = { book: true, website: true, directions: true };
+
+    // Report a click on this anchor when the site counts clicks: two enums and
+    // the turn, never the url, a label or a prefill (the contract's security
+    // rule). Through post(), not a beacon — sendBeacon cannot carry the key —
+    // and not keepalive: every CTA here opens a new tab, and tel:/mailto: keep
+    // the page. Fire and forget: a 404/410 here is not the conversation's death,
+    // so nothing is read back and nothing re-inits.
+    function reportClicks(anchor, element, cta) {
+        if (!element || !cta) { return; }
+        // The conversation that drew the button, not whichever is current when
+        // it is clicked: after a re-init the old turn means nothing to the new one.
+        var turn = currentTurn;
+        var uuid = conversationUuid;
+        anchor.addEventListener('click', function () {
+            var target = uuid || conversationUuid;
+            if (!analyticsOn || !target) { return; }
+            var body = { type: 'cta_click', element: element, cta: cta };
+            if (typeof turn === 'number') { body.turn = turn; }
+            post('/api/v1/chatbot/conversations/' + encodeURIComponent(target) + '/events', body, function () {});
+        });
+    }
+
+    // ---- form (1.16.0 — D-111(b)) -------------------------------------------
+    // A form belongs to its turn like a chip row: any send retires every live one.
+    // Retired forms stay on screen, disabled, as the record of what was sent.
+    function retireForms() {
+        for (var i = 0; i < liveForms.length; i++) { liveForms[i].disabled = true; }
+        liveForms = [];
+    }
+
+    var FORM_KINDS = { text: 'text', textarea: true, email: 'email', phone: 'tel', select: true, date_range: true, guests: true, consent: true };
+
+    function isDate(value) { return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value); }
+
+    // `Y-m-d` one day on, read and written in UTC so no timezone shifts it.
+    function nextDay(value) {
+        var day = new Date(value + 'T00:00:00Z');
+        day.setUTCDate(day.getUTCDate() + 1);
+        return day.toISOString().slice(0, 10);
+    }
+
+    function fieldLabel(text, id) {
+        var label = el('label', 'wsc-form-label', text);
+        label.setAttribute('for', id);
+        return label;
+    }
+
+    // One field: draws its control into `set` and returns its reader, which
+    // answers `{name, value, display}`, null for a blank optional field, or
+    // false when what is there cannot be sent. Null here drops the whole form
+    // (the contract's fail-closed rule): a field this widget cannot draw is one
+    // the guest cannot fill.
+    function formField(set, field) {
+        if (!field || typeof field.name !== 'string' || !field.name || typeof field.label !== 'string' || !field.label
+            || !FORM_KINDS[field.kind]) { return null; }
+        var id = 'wsc-f-' + (++fieldSeq);
+        var required = field.required === true;
+        var name = field.name;
+
+        if (field.kind === 'select') {
+            if (!Array.isArray(field.options) || !field.options.length) { return null; }
+            set.appendChild(fieldLabel(field.label, id));
+            var select = el('select', 'wsc-form-input');
+            select.id = id;
+            select.required = required;
+            var blank = el('option', null, typeof field.placeholder === 'string' ? field.placeholder : '');
+            blank.value = '';
+            select.appendChild(blank);
+            var labels = {};
+            for (var i = 0; i < field.options.length; i++) {
+                var o = field.options[i];
+                if (!o || typeof o.key !== 'string' || !o.key || typeof o.label !== 'string' || !o.label) { continue; }
+                var option = el('option', null, o.label);
+                option.value = o.key;
+                if (field.value === o.key) { option.selected = true; }
+                labels[o.key] = o.label;
+                select.appendChild(option);
+            }
+            set.appendChild(select);
+            return function () {
+                return select.value ? { name: name, value: select.value, display: labels[select.value] || '' } : null;
+            };
+        }
+
+        if (field.kind === 'date_range') {
+            var group = el('div', 'wsc-form-group');
+            group.setAttribute('role', 'group');
+            group.setAttribute('aria-label', field.label);
+            group.appendChild(el('div', 'wsc-form-label', field.label));
+            var range = el('div', 'wsc-form-range');
+            var ends = field.labels || {};
+            var value = field.value || {};
+            var inputs = [];
+            ['from', 'to'].forEach(function (end) {
+                var cell = el('div');
+                var endId = id + '-' + end;
+                var input = el('input', 'wsc-form-input');
+                input.id = endId;
+                input.type = 'date';
+                input.required = required;
+                if (isDate(field.min)) { input.min = field.min; }
+                if (isDate(field.max)) { input.max = field.max; }
+                if (isDate(value[end])) { input.value = value[end]; }
+                // The ends' names are the server's; without them the field's own
+                // label names both, rather than words this widget would invent.
+                if (typeof ends[end] === 'string' && ends[end]) { cell.appendChild(fieldLabel(ends[end], endId)); }
+                else { input.setAttribute('aria-label', field.label); }
+                cell.appendChild(input);
+                range.appendChild(cell);
+                inputs.push(input);
+            });
+            // The check-out comes at least a night after the check-in.
+            inputs[0].addEventListener('change', function () { if (inputs[0].value) { inputs[1].min = nextDay(inputs[0].value); } });
+            group.appendChild(range);
+            set.appendChild(group);
+            return function () {
+                var from = inputs[0].value;
+                var to = inputs[1].value;
+                if (!from && !to) { return required ? false : null; }
+                if (!isDate(from) || !isDate(to) || to <= from) { return false; }
+                return { name: name, value: { from: from, to: to }, display: from + ' → ' + to };
+            };
+        }
+
+        if (field.kind === 'consent') {
+            var line = el('div', 'wsc-form-check');
+            var box = el('input');
+            box.id = id;
+            box.type = 'checkbox';
+            box.required = required;
+            line.appendChild(box);
+            line.appendChild(fieldLabel(field.label, id));
+            var href = field.link ? safeHttpUrl(field.link.url) : null;
+            if (href && typeof field.link.label === 'string' && field.link.label) {
+                var notice = el('a', 'wsc-form-link', field.link.label);
+                notice.setAttribute('href', href);
+                notice.setAttribute('target', '_blank');
+                notice.setAttribute('rel', 'noopener noreferrer');
+                line.appendChild(notice);
+            }
+            set.appendChild(line);
+            return function () { return box.checked ? { name: name, value: true, display: '' } : null; };
+        }
+
+        set.appendChild(fieldLabel(field.label, id));
+        var input = el(field.kind === 'textarea' ? 'textarea' : 'input', 'wsc-form-input');
+        input.id = id;
+        input.required = required;
+        input.setAttribute('dir', 'auto'); // the guest may write right-to-left
+        if (typeof field.placeholder === 'string') { input.placeholder = field.placeholder; }
+        if (field.kind === 'guests') {
+            input.type = 'number';
+            input.step = '1';
+            input.setAttribute('inputmode', 'numeric');
+            if (typeof field.min === 'number') { input.min = String(field.min); }
+            if (typeof field.max === 'number') { input.max = String(field.max); }
+            if (typeof field.value === 'number') { input.value = String(field.value); }
+        } else {
+            if (field.kind !== 'textarea') { input.type = FORM_KINDS[field.kind]; }
+            else { input.rows = 3; }
+            input.maxLength = 500;
+            if (typeof field.value === 'string') { input.value = field.value; }
+        }
+        set.appendChild(input);
+        return function () {
+            var raw = String(input.value || '').trim();
+            if (!raw) { return null; }
+            if (field.kind !== 'guests') { return { name: name, value: raw, display: raw }; }
+            var count = parseInt(raw, 10);
+            return isFinite(count) ? { name: name, value: count, display: String(count) } : false;
+        };
+    }
+
+    // form (1.16.0): native inputs per field kind; every label, option and
+    // value lands via textContent or a property, never markup. Submitting sends
+    // the values as an action AND the server's `submit_message` filled with what
+    // was chosen — a select's label, a range as `from → to`, anything else raw —
+    // as the guest bubble, so the transcript reads as the guest's own words and
+    // this widget invents none. The values stay in the form until the server
+    // answers; a failed send gives the form back.
+    function form(action) {
+        if (typeof action.id !== 'string' || !action.id || !Array.isArray(action.fields) || !action.fields.length
+            || typeof action.submit_label !== 'string' || !action.submit_label
+            || typeof action.submit_message !== 'string' || !action.submit_message) { return; }
+
+        var box = el('form', 'wsc-form');
+        box.setAttribute('aria-label', typeof action.title === 'string' && action.title ? action.title : action.submit_label);
+        box.setAttribute('aria-live', 'off'); // announced by the reply, not by itself
+        var set = el('fieldset', 'wsc-form-set');
+        if (typeof action.title === 'string' && action.title) { set.appendChild(el('div', 'wsc-form-title', action.title)); }
+        if (typeof action.intro === 'string' && action.intro) { set.appendChild(el('div', 'wsc-form-intro', action.intro)); }
+
+        var readers = [];
+        for (var i = 0; i < action.fields.length; i++) {
+            var reader = formField(set, action.fields[i]);
+            if (!reader) { return; }
+            readers.push(reader);
+        }
+
+        var send = el('button', 'wsc-act wsc-form-submit', action.submit_label);
+        send.setAttribute('type', 'submit');
+        set.appendChild(send);
+        box.appendChild(set);
+
+        box.addEventListener('submit', function (event) {
+            event.preventDefault();
+            if (busy || removed || ended || set.disabled) { return; }
+            if (box.reportValidity && !box.reportValidity()) { return; }
+            var values = {};
+            var shown = {};
+            for (var r = 0; r < readers.length; r++) {
+                var answer = readers[r]();
+                if (answer === false) { return; }
+                if (answer) { values[answer.name] = answer.value; shown[answer.name] = answer.display; }
+            }
+            var message = action.submit_message.replace(/\{([A-Za-z0-9_]+)\}/g, function (match, key) {
+                return Object.prototype.hasOwnProperty.call(shown, key) ? shown[key] : '';
+            }).trim();
+            if (!message) { return; }
+            retireChipRows();
+            retireForms();
+            addBubble('guest', message);
+            ensureConversation(function () {
+                sendMessage(message, false, { type: 'form', id: action.id, payload: { values: values } }, function () {
+                    set.disabled = false;
+                    liveForms.push(set);
+                });
+            });
+        });
+
+        els.body.appendChild(box);
+        liveForms.push(set);
+        scrollDown();
     }
 
     // Paints the header from `assistant` (contract 1.15.0). Called wherever a
@@ -892,12 +1206,14 @@
             // Likewise (1.15.0): the header was painted at boot with no name.
             assistant = stored.assistant;
             applyAssistant();
+            analyticsOn = stored.analytics; // 1.16.0, for the same reason
             // Paint the welcome only onto an empty transcript. This branch is
             // reached from panel-open, but submit() draws the guest bubble BEFORE
             // it calls us, and a welcome block under a message the guest has
             // already sent is not a first-contact affordance any more.
             if (!els.body.firstChild) {
                 if (introGreeting) { addBubble('bot', introGreeting); }
+                currentTurn = null;
                 renderActions(introActions);
             }
             cb();
@@ -911,14 +1227,16 @@
     // (plus a promo and a chip row the guest has already moved past) after the
     // message they just sent is not the "transparent re-init" the guide promises.
     // The new conversation is still fully established — uuid, store, version check.
-    function startConversation(cb, silent) {
+    // `onFail` (1.16.0) runs when no conversation could be opened, so a form
+    // whose send waited on this re-init is given back.
+    function startConversation(cb, silent, onFail) {
         if (busy) { return; }
         busy = true;
         post('/api/v1/chatbot/conversations', { locale: locale, property: property }, function (status, data) {
             busy = false;
             if (status === 403) { teardown(); return; }
-            if (status === 429) { addBubble('bot', retryText()); return; }
-            if (status !== 201 || !data || !data.conversation) { addBubble('bot', errorText()); return; }
+            if (status === 429) { addBubble('bot', retryText()); if (onFail) { onFail(); } return; }
+            if (status !== 201 || !data || !data.conversation) { addBubble('bot', errorText()); if (onFail) { onFail(); } return; }
 
             conversationUuid = data.conversation.uuid;
             started = true;
@@ -939,10 +1257,14 @@
             // the conversation the guest is now in, it is not part of the welcome.
             assistant = cleanAssistant(data.assistant);
             applyAssistant();
+            // 1.16.0 (D-113): report clicks only when the site says so. Absent —
+            // an older server, a site that never opted in — means never.
+            analyticsOn = data.analytics === true;
             writeStore(conversationUuid);
             checkContractVersion(data.contract_version);
             if (!silent) {
                 if (introGreeting) { addBubble('bot', introGreeting); }
+                currentTurn = null;
                 renderActions(introActions); // init actions since 1.5.0 (quick prompts / promo); absent on older servers
             }
             cb();
@@ -958,6 +1280,7 @@
         if (ended || removed) { return; }
         ended = true;
         retireChipRows();
+        retireForms();
         els.input.disabled = true;
         els.send.disabled = true;
 
@@ -984,18 +1307,23 @@
         if (!text) { return; }
         els.input.value = '';
         retireChipRows();   // typing instead of tapping retires the chips too (1.6.0)
+        retireForms();      // and any form still open (1.16.0)
         addBubble('guest', text);
         ensureConversation(function () { sendMessage(text, false); });
     }
 
-    function sendMessage(text, isRetry) {
+    // `action` (1.16.0) rides beside the message — a keyed chip's or a form's —
+    // and `onFail` gives a form back when the send does not land.
+    function sendMessage(text, isRetry, action, onFail) {
         if (!conversationUuid) { return; }
         busy = true;
         els.send.disabled = true;
         var typing = showTyping();
+        var body = { message: text };
+        if (action) { body.action = action; }
 
         post('/api/v1/chatbot/conversations/' + encodeURIComponent(conversationUuid) + '/messages',
-            { message: text },
+            body,
             function (status, data) {
                 busy = false;
                 els.send.disabled = false;
@@ -1004,6 +1332,7 @@
                 if (status === 200 && data) {
                     writeStore(conversationUuid);   // re-stamp ts — see writeStore()
                     var botBubble = data.reply ? addBubble('bot', data.reply) : null;
+                    currentTurn = typeof data.turn === 'number' ? data.turn : null;
                     // Per-turn url set: an async turn's poll actions[] is additive to
                     // what we draw now, so it needs to know what is already on screen.
                     renderActions(data.actions, botBubble, Object.create(null));
@@ -1019,10 +1348,11 @@
                     clearStore();
                     conversationUuid = null;
                     started = false;
-                    startConversation(function () { sendMessage(text, true); }, true);
+                    startConversation(function () { sendMessage(text, true, action, onFail); }, true, onFail);
                     return;
                 }
                 if (status === 403) { teardown(); return; }
+                if (onFail) { onFail(); }
                 if (status === 429) { addBubble('bot', retryText()); return; }
                 addBubble('bot', errorText());
             });
@@ -1076,6 +1406,7 @@
                     // ADDITIVE to the interim's, so `rendered` suppresses a repeat.
                     if (botBubble) { botBubble.textContent = data.reply || ''; }
                     else { addBubble('bot', data.reply || ''); }
+                    currentTurn = typeof data.turn === 'number' ? data.turn : null;
                     renderActions(data.actions, null, rendered);
                     scrollDown();
                     return;

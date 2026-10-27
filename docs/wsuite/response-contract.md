@@ -2,12 +2,12 @@
 
 | | |
 |---|---|
-| **Version** | 1.15.1 (see [Versioning](#versioning) · [Changelog](#changelog)) |
-| **Date** | 2026-10-23 |
+| **Version** | 1.16.1 (see [Versioning](#versioning) · [Changelog](#changelog)) |
+| **Date** | 2026-10-27 |
 | **Status** | Frozen envelope — the shared artifact the in-repo preview widget and the external `nest-chatbot-ai` widget build against. Governed by `docs/decisions.md` (D-020, D-029, D-036). |
 | **Endpoint** | `POST /api/v1/chatbot/conversations/{uuid}/messages` (route `chatbot.v1.conversations.messages.store`) |
 
-This is the response shape of a single guest turn. Element **content is deterministic — code-emitted from the DB catalog or tenant-authored site settings, never chosen by the LLM** — so link/contact correctness is independent of the LLM provider (Mistral-switchable by construction). **One bounded exception since 1.14.0:** [`contact_channels.prefill.text`](#the-pre-written-message-prefill--since-1140) quotes the guest's own message verbatim inside a code-emitted template — guest-authored words, still never model-written. The conversation-start endpoint (`POST /api/v1/chatbot/conversations` → `{conversation:{uuid}, greeting, assistant?, actions?, idle_hours?, server_time?, contract_version}`) is unaffected by this envelope; it additionally echoes the current `contract_version` (below) so a consumer can detect it is behind. **Since 1.15.0** it also carries **`assistant {name?, disclosure}`** — the display name the site owner set for the assistant, when they set one, and a code-emitted statement that the guest is talking to an AI, which is always sent and which no site setting can remove. It is documented in [`integration-guide.md`](integration-guide.md) §3.1, and the whole object is absent on an older server. **Since 1.7.0** it also reports **`idle_hours`** (the conversation idle window as a duration — stop mirroring it as a client-side constant) and **`server_time`** (ISO-8601, for a one-off client-clock offset); both are documented in [`integration-guide.md`](integration-guide.md) §3.1, and both may be absent. **Since 1.5.0** the init response also carries an optional **`actions`** array of the same element vocabulary (greeting-time quick prompts and, when configured, the promo card) — the server always emits it (`[]` when unconfigured), older servers omit it, and a consumer that never reads it loses nothing. **What can appear there:** content elements only — `promo_card` and `quick_replies` today. `async_result` and `availability` are turn-scoped by construction (both are tied to a turn number), so an init response will not carry them; keep ignoring unknown types rather than hard-coding that list.
+This is the response shape of a single guest turn. Element **content is deterministic — code-emitted from the DB catalog or tenant-authored site settings, never chosen by the LLM** — so link/contact correctness is independent of the LLM provider (Mistral-switchable by construction). **One bounded exception since 1.14.0:** [`contact_channels.prefill.text`](#the-pre-written-message-prefill--since-1140) quotes the guest's own message verbatim inside a code-emitted template — guest-authored words, still never model-written. The conversation-start endpoint (`POST /api/v1/chatbot/conversations` → `{conversation:{uuid}, greeting, assistant?, actions?, idle_hours?, server_time?, contract_version}`) is unaffected by this envelope; it additionally echoes the current `contract_version` (below) so a consumer can detect it is behind. **Since 1.15.0** it also carries **`assistant {name?, disclosure}`** — the display name the site owner set for the assistant, when they set one, and a code-emitted statement that the guest is talking to an AI, which is always sent and which no site setting can remove. It is documented in [`integration-guide.md`](integration-guide.md) §3.1, and the whole object is absent on an older server. **Since 1.7.0** it also reports **`idle_hours`** (the conversation idle window as a duration — stop mirroring it as a client-side constant) and **`server_time`** (ISO-8601, for a one-off client-clock offset); both are documented in [`integration-guide.md`](integration-guide.md) §3.1, and both may be absent. **Since 1.5.0** the init response also carries an optional **`actions`** array of the same element vocabulary (greeting-time quick prompts and, when configured, the promo card) — the server always emits it (`[]` when unconfigured), older servers omit it, and a consumer that never reads it loses nothing. **Since 1.16.0** it also carries **`analytics: true`** when the site counts button clicks, and nothing when it does not — absent means do not report; see [`integration-guide.md`](integration-guide.md) §3.1 and §3.4. **What can appear there:** content elements only — `promo_card` and `quick_replies` today. `async_result` and `availability` are turn-scoped by construction (both are tied to a turn number), so an init response will not carry them; keep ignoring unknown types rather than hard-coding that list.
 
 ## Versioning
 
@@ -55,8 +55,10 @@ conversations**, so a consumer can recognise that the block it is about to rende
 rendered before — which is what any client-side frequency capping needs. It is **not** a nonce and
 **not** unique per occurrence. Today the server emits `id` on [`promo_card`](#promo_card--a-tenant-authored-promotional-block)
 (content-derived, so it changes when the tenant rewrites the offer — that is what makes capping on
-it safe) and on [`quick_replies`](#quick_replies--tap-to-send-question-chips) (naming the row's
-provenance). Absence is normal; never key required behaviour on it.
+it safe), on [`quick_replies`](#quick_replies--tap-to-send-question-chips) (naming the row's
+provenance), on [`link_button`](#link_button--a-generic-call-to-action-link) (**since 1.16.0**,
+naming which button it is) and on [`form`](#form--a-form-the-guest-fills-in-the-chat) (naming
+the form). Absence is normal; never key required behaviour on it.
 
 **Missing required fields — fail closed.** `Required: yes` is a **server guarantee**, not a hint:
 every element is assembled from validated inputs and is **dropped whole** when a required part is
@@ -84,11 +86,12 @@ contract fixes the order and the grouping, not your layout.
 Emitted deterministically by the information path for a resolved property (a Book button for the property's booking URL — since 1.9.0 with the stay the server knows composed onto it, D-071 — a hostel-page button for `website`, and a Get-directions button for `map_url` — D-042(c)), deduped by catalog URL.
 
 ```json
-{ "type": "link_button", "label": "Book now", "url": "https://…", "style": "primary" }
+{ "type": "link_button", "id": "book", "label": "Book now", "url": "https://…", "style": "primary" }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
+| `id` | `string` | no | **Since 1.16.0** (D-111(e)). Which button it is: `book` · `website` · `directions`. Never displayed; use it to say which button was clicked (`integration-guide.md` §3.4). Absent on a button the server does not name. |
 | `label` | `string` | yes | Display text. Localized server-side to the guest language. |
 | `url` | `string` | yes | Authoritative catalog URL (`website` / `map_url`), or — for the Book button — the property's booking URL with the collected stay composed onto it (**since 1.9.0**, D-071: the guest's language segment, `checkin`/`checkout` when known, `adults` when the guest stated it; a non-CloudBeds catalog URL is unchanged). Consumers **must** render it as a safe anchor, **must** accept only `http`/`https` schemes, and **must not** parse, normalise or strip it. |
 | `style` | `string` | no | Presentation hint (`primary`). The renderer may honour or ignore it. |
@@ -269,6 +272,7 @@ A renderer needs no change for any of this — it is strictly *when* the element
 | `items` | `array` | yes | The cards, in order (below). Never empty — the element is not emitted with no items. |
 | `total` | `int` | no | **Since 1.6.0.** Matching active properties **before** the server's cap, so a renderer bounding its own carousel can say "showing 8 of 14" instead of silently losing the rest. Equals `items.length` when nothing was cut. |
 | `more` | `object` | no | **Since 1.6.0.** `{label, url}` — an optional "see all" affordance for the tenant's full property listing. `label` is **localized server-side**; `url` is under the same `http`/`https`-only rule as every element URL. Present only when the tenant has configured a listing URL; a renderer that ignores it is unchanged. |
+| `ordering` | `string` | no | **Since 1.16.0** (D-111(d)). How the items are ordered: `catalog` (the default when absent — the catalog's order) · `cheapest` (a stay result, by `stay_total`, sold-out hostels last) · `ranked` (a match result, best first — from the finder). See [how many, and in what order](#how-many-and-in-what-order). |
 | `id` | `string` | no | Per the [element conventions](#element-conventions-all-types). Not emitted for this type — items already carry `key`. |
 
 | Item field | Type | Required | Localized | Notes |
@@ -282,6 +286,8 @@ A renderer needs no change for any of this — it is strictly *when* the element
 | `badge` | `string` | no | **no** | Short pill label (e.g. tenant #2's "Nest Pass"), the raw catalog value in the tenant's authoring language. Single-line; keep authoring to ~20 characters, and clamp rather than wrap (see [text lengths](#text-lengths)). |
 | `cta_label` | `string` | no | **yes** | **Since 1.6.0.** Display text for the card's Book CTA, localized server-side to the guest language — the same string the deterministic Book `link_button` carries. A consumer that does not find it keeps its own default, so this is purely an upgrade from hardcoding one. |
 | `url` | `string` | yes | n/a | The card's Book CTA target — the property's booking URL with the stay this turn knows composed onto it, the same string as the Book `link_button` beside it (**since 1.9.0**, D-071). Same anchor rule as `link_button`. |
+| `stay_total` | `object` | no | n/a | **Since 1.16.0** (D-111(d)). On a stay result only: what the guest's stay costs at this hostel — `{amount, currency, basis?}`, the cheapest option's party total from live availability, the `availability` option's `total` and `basis`. See [reading `stay_total`](#reading-stay_total). |
+| `reason` | `string` | no | **yes** | **Since 1.16.0** (D-111(d)). One short sentence saying why this card sits where it does — "Fully booked for these dates" on a stay result, why it fits on a finder result. Plain text; show it under the card's text. |
 
 **`price_from`:**
 
@@ -319,6 +325,18 @@ A renderer needs no change for any of this — it is strictly *when* the element
   its tax and fee treatment follows the tenant's own booking engine. Present it as an **indicative
   from-price** and never as a quote, a total, or a stay price.
 
+#### Reading `stay_total`
+
+**Since 1.16.0.** It sits **beside** `price_from`, never in its place: `price_from` stays the static
+admin from-price (D-043(d)), `stay_total` is what this stay costs, from live availability.
+
+- `amount` is a decimal string with the same rules as `price_from.amount`; `currency` is ISO 4217.
+- `basis` is the cheapest option's (`per_person` — a bed, `per_unit` — a room): label it as you label
+  an `availability` option's total.
+- It is present only on a turn that answers a submitted stay, and absent for a hostel whose price the
+  server could not read — render the card without it, never compute one from `price_from`.
+- Show it as the stay's total ("60.00 EUR total"), not as a per-night figure.
+
 #### Card images
 
 - **No aspect ratio, dimensions, or cropping are guaranteed.** The URL is the tenant's own absolute
@@ -345,9 +363,12 @@ booking URL; `url` is the only authoritative target.
   single-property card is always exactly one. That cap is a **deployment setting**, so do not
   hardcode a maximum — render what you receive, apply your own cap if your layout needs one, and use
   `total` to tell the guest something was cut.
-- **Order is meaningful — render as given and never re-sort.** It is the server's catalog order
-  (currently ascending by property name), **not** a ranking: it does not express relevance, price, or
-  quality, so never label it "best match" or "recommended".
+- **Order is meaningful — render as given and never re-sort.** What it means is `ordering`'s
+  (since 1.16.0). Absent or `catalog`, it is the server's catalog order (currently ascending by
+  property name) and **not** a ranking — it expresses no relevance, price or quality, so never label
+  it "best match" or "recommended". `cheapest` is a stay result sorted by `stay_total`, sold-out
+  hostels last; `ranked` is a match result, best first. Label the order ("cheapest first", "best
+  match") only when `ordering` says so.
 
 #### Compatibility and the Book-button dedupe (D-043(c))
 
@@ -450,7 +471,7 @@ for in a ~420px panel, not guarantees you may rely on:
   itself, keyed on `id`; nothing about that is visible to the server.
 
 ### `quick_replies` — tap-to-send question chips
-Emitted on the init response from the site's `chatbot.quick_prompts` setting (the "try asking" chips) and by deterministic clarification turns (island choice — D-043(f); **since 1.12.0** property choice on a human-handoff turn that has not yet identified the property — D-079). Tapping a chip sends its `message` as an **ordinary guest turn** through the normal message endpoint — nothing new to implement. **Items never carry URLs** (contract rule): chips are buttons that send text, never anchors, so the URL security surface is unchanged.
+Emitted on the init response from the site's `chatbot.quick_prompts` setting (the "try asking" chips), by deterministic clarification turns (island choice — D-043(f); **since 1.12.0** property choice on a human-handoff turn that has not yet identified the property — D-079), and **since 1.15.2** under a reply the server gave without the model (below). Tapping a chip sends its `message` as a guest turn through the normal message endpoint — nothing new to implement — and **since 1.16.0**, when the item carries a `key`, you **should** send `action: {type: "reply", payload: {key}}` beside that `message` (see [keyed chips](#keyed-chips-and-images--since-1160)). **Since 1.15.2 the server may answer that turn without the model** (D-109): when the `message` — tapped, or the same text typed — is a chip the tenant published with an action, the reply is the tenant's authored answer, or a fixed line with the area's `property_cards`, followed by a tenant `quick_replies` row. Nothing changes on the wire: the same request, the same envelope, existing elements only, and a chip of a server row (`island_choice`, `property_choice`) is still answered as typed text. Send the `message` exactly as given: the server recognises it by its text. **Items never carry a navigation URL** (contract rule): chips are buttons that send text, never anchors. **Since 1.16.0** an item may carry an `image` — an image source, under the same `http`/`https` rule as card images (D-111(c), amending D-043(a)).
 
 ```json
 { "type": "quick_replies", "id": "quick_prompts", "heading": "Which island are you going to?", "items": [ { "label": "Nest Pass", "message": "What is the Nest Pass?" } ], "locale": "en" }
@@ -459,7 +480,7 @@ Emitted on the init response from the site's `chatbot.quick_prompts` setting (th
 | Element field | Type | Required | Notes |
 |---|---|---|---|
 | `items` | `array` | yes | The chips, in order (below). Never empty — the element is not emitted with no chips. |
-| `id` | `string` | no | **Since 1.6.0.** The row's provenance, and the whole vocabulary is `quick_prompts` (the tenant-authored init row) \| `island_choice` (the deterministic island clarification row) \| `property_choice` (**since 1.12.0** — the deterministic "which property is this about?" row of a handoff turn). This is how you tell tenant text from server text — see [language](#language-1) below. |
+| `id` | `string` | no | **Since 1.6.0.** The row's provenance, and the whole vocabulary is `quick_prompts` (tenant-authored chips: the init row and, **since 1.15.2**, the row under an answer the server gave without the model) \| `island_choice` (the deterministic island clarification row) \| `property_choice` (**since 1.12.0** — the deterministic "which property is this about?" row of a handoff turn) \| `finder` (**since 1.16.0** — a question of the hostel finder, tenant-authored like `quick_prompts`; emitted once the finder ships). This is how you tell tenant text from server text — see [language](#language-1) below. |
 | `heading` | `string` | no | **Since 1.7.0.** A short line saying **what the row is asking**, rendered above the chips. Tenant-authored and server-localized like every other payload string — put it in the DOM via `textContent`. Absent is normal and means render no heading; it is **never** a cue to substitute your own label (see below). |
 | `locale` | `string` | no | **Since 1.6.0.** The language of the chip **labels**, as a 2-letter primary subtag. Absent means unknown or language-neutral; see [language](#language-1). |
 
@@ -489,6 +510,28 @@ announced twice.
 |---|---|---|---|---|
 | `label` | `string` | yes | see below | The chip's display text. Treat as single-line; aim for ≤ 28 characters (advisory — see [text lengths](#text-lengths)). |
 | `message` | `string` | yes | see below | The guest message to send when tapped. Render the sent text as a normal guest bubble (honest transcript). **Hard limit: it goes through the message endpoint, so a `message` longer than `wsuite.chatbot.message.max_length` (default 2000) is rejected `422` when the chip is tapped.** |
+| `key` | `string` | no | n/a | **Since 1.16.0.** The chip's stable key (≤ 64 characters), on tenant chips. Send it back on a tap — see [keyed chips](#keyed-chips-and-images--since-1160). Never displayed. |
+| `image` | `string` | no | n/a | **Since 1.16.0.** A picture for the chip, `http`/`https` only — drop anything else and keep the chip. Same rules as [card images](#card-images): no size or ratio guaranteed, so crop to cover. |
+| `image_alt` | `string` | no | yes | **Since 1.16.0.** What the picture shows, when it says more than the `label`. Absent, the picture is decorative (`alt=""`). |
+
+#### Keyed chips and images — since 1.16.0
+
+A chip that carries a `key` is one the tenant published with a stable identity. Send it back:
+
+```json
+{ "message": "I would like to book a bed", "action": { "type": "reply", "payload": { "key": "book-a-bed" } } }
+```
+
+- **The `message` is still the chip's `message`**, never its `label`, so the transcript stays
+  readable and a server older than 1.16.0 sees exactly the tap it always did.
+- **Sending `action` is how a renderer declares it can draw what the chip answers with.** Some chips
+  answer with an element a renderer older than its release cannot draw — a [`form`](#form--a-form-the-guest-fills-in-the-chat)
+  since 1.16.0. The server sends that element **only** to a turn that carried the `action`; the same
+  chip's `message` sent alone is answered as an ordinary turn (D-109(j)). So send `action` only once
+  you render every element type up to your `BUILT_AGAINST`.
+- A key the server no longer publishes is not an error: the turn falls back to the chip's text.
+- An `image` turns a chip into a small picture tile. It is decorative unless `image_alt` is present,
+  and a chip whose image fails your `http(s)` check still renders, without it.
 
 #### Language
 
@@ -496,7 +539,11 @@ Chip rows come from two sources and `id` tells them apart:
 
 - **`quick_prompts`** — tenant-authored, so its language is the tenant's. Since 1.6.0 a tenant may
   supply per-locale chips, resolved against the turn's `locale` exactly as for `promo_card`; `locale`
-  then reports the language actually served, or nothing when the tenant declared none.
+  then reports the language actually served, or nothing when the tenant declared none. A row under
+  an answer the server gave without the model *(since 1.15.2)* is in the answer's own language:
+  the tenant's own translation, else one the server made once from the tenant's English and
+  stored *(since 1.16.1, D-114)*, else English. Its `locale` may therefore be a language the
+  server's own strings do not have (`uk`); take it as given.
 - **`island_choice`** — server-generated. Its `message` **is** localized to the guest, but its
   `label` is a catalog island name — a proper noun — so the row **omits `locale`** rather than
   claiming a language for text that has none.
@@ -537,6 +584,84 @@ retyped. This is **RECOMMENDED, not required**: a consumer that never retires a 
 the contract, which is why the [breaking-change guarantee](#versioning) holds for consumers built
 against 1.5.0.
 
+### `form` — a form the guest fills in the chat
+**Since 1.16.0** (D-111(b)). A short form whose fields and pre-filled values the server builds from the
+conversation and the catalog — the Book panel first (D-112): a hostel or an island, the dates, and an
+optional party size. It is sent **only** to a turn that carried an `action` (D-109(j)): a renderer that
+never sends one never receives a `form`.
+
+```json
+{ "type": "form", "id": "book", "title": "Book a bed",
+  "fields": [
+    { "name": "place", "kind": "select", "label": "Hostel or island", "required": true, "value": "area:Tenerife",
+      "options": [ { "key": "area:Tenerife", "label": "Every hostel in Tenerife" }, { "key": "duque-nest", "label": "Duque Nest" } ] },
+    { "name": "dates", "kind": "date_range", "label": "Dates", "required": true, "min": "2026-10-26", "max": "2027-10-27",
+      "labels": { "from": "Check-in", "to": "Check-out" } },
+    { "name": "guests", "kind": "guests", "label": "Guests", "min": 1, "max": 12 }
+  ],
+  "submit_label": "See prices", "submit_message": "Prices for {place}, {dates}" }
+```
+
+| Field | Type | Required | Localized | Notes |
+|---|---|---|---|---|
+| `id` | `string` | yes | n/a | The form's identity — send it back on submit. Stable across turns. |
+| `title` | `string` | no | yes | A heading for the form. |
+| `intro` | `string` | no | yes | A line under the heading. |
+| `fields` | `array` | yes | — | The fields, in order (below). Never empty. |
+| `submit_label` | `string` | yes | yes | The submit button's text. |
+| `submit_message` | `string` | yes | yes | The template of the guest's message — see [submitting](#submitting-a-form). |
+
+`fields[]` items:
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | `string` | yes | The value's key in the submit's `values`, and its `{name}` placeholder in `submit_message`. |
+| `kind` | `string` | yes | `text` · `textarea` · `email` · `phone` · `select` · `date_range` · `guests` · `consent`. Draw the native input: `<input type="text">`, `<textarea>`, `type="email"`, `type="tel"`, a `<select>`, two `type="date"` inputs, `type="number"`, a checkbox. |
+| `label` | `string` | yes | The field's visible label and accessible name. |
+| `required` | `bool` | no | `true` when the field must be filled; absent means optional. |
+| `options` | `array` | no | `select` only: `[{key, label}]`. Send the chosen `key`; show the `label`. On the Book form a hostel's `key` is its catalog slug and an island's starts with `area:`. |
+| `value` | `string` \| `int` \| `object` | no | The pre-filled value: a `select`'s option `key`, a `guests` integer, a `date_range`'s `{from?, to?}`, a text field's string. |
+| `min`, `max` | `string` \| `int` | no | Bounds: `Y-m-d` dates for `date_range`, integers for `guests`. Honour them in the input. |
+| `placeholder` | `string` | no | A hint inside an empty input. |
+| `labels` | `object` | no | `date_range` only: `{from, to}`, the names of its two inputs ("Check-in", "Check-out"). |
+| `link` | `object` | no | `consent` only: `{label, url}`, the privacy notice beside the checkbox, under the `http`/`https` rule. |
+
+**A form you cannot draw is a form you drop.** A `kind` you do not know, or a field missing `name`,
+`kind` or `label`, drops the whole element (the [fail-closed rule](#element-conventions-all-types)) —
+a guest cannot submit a form with a field missing.
+
+#### Submitting a form
+
+Send one turn: the `message` built from `submit_message`, and the values as an `action`:
+
+```json
+{ "message": "Prices for Every hostel in Tenerife, 2026-11-03 → 2026-11-06",
+  "action": { "type": "form", "id": "book", "payload": { "values": { "place": "area:Tenerife", "dates": { "from": "2026-11-03", "to": "2026-11-06" } } } } }
+```
+
+- **`values`** holds one entry per filled field: a `select`'s option `key`, a `date_range` as
+  `{from, to}` (`Y-m-d`), a `guests` integer, a `consent` as `true`, any other kind its trimmed text.
+  **Leave a blank optional field out** — do not send `null` or `""`.
+- **`message`** is `submit_message` with each `{name}` replaced: a `select` by the chosen option's
+  `label`, a `date_range` by `from → to`, anything else by its value. Every placeholder names a
+  required field, so there is never a blank to fill. Show it as the guest's bubble. This is what keeps
+  the transcript readable without a renderer inventing guest-facing words.
+- **Validate before sending**: `required`, `min`/`max`, a check-out not before the check-in. A
+  malformed submit is a `422`; a value the server no longer offers (a hostel closed since the form was
+  sent) is not an error — the reply asks again.
+- **One-shot, like a chip row**: a form SHOULD stop being submittable once it is sent, and once the
+  guest sends anything else. Keep the submitted values visible (disabled, not removed) until the reply
+  arrives; you MAY re-enable the form after a failed send.
+- **The answer** is an ordinary turn: on the Book form, the stay's `availability` (with the card when
+  the site shows one), or `property_cards` priced with `stay_total` and `ordering: "cheapest"` for an
+  island, or a `booking_link` when live prices are not available. The reply may come back with the form
+  again, pre-filled with what it learned, asking for what is missing — and the guest may answer it by
+  typing instead.
+
+**Per-night prices in a date picker** are not in the form. A renderer that wants them reads the price
+API itself with its own key — see `integration-guide.md` §3.2. The answer to a submit never depends on
+that read.
+
 ### `conversation_ended` — this conversation accepts no further turns
 Emitted on the **turn-cap** reply (D-044): a conversation that reaches `wsuite.chatbot.conversation.max_turns` has its next message refused with a canned localized reply and **no LLM call**, bounding one session's AI spend. The guest must start a new conversation to continue, and this element is how a consumer knows to offer that at the right moment instead of guessing.
 
@@ -560,7 +685,10 @@ Emitted on the **turn-cap** reply (D-044): a conversation that reaches `wsuite.c
   consumer that closes its composer on this element does so having spent one message finding out.
 
 ## Security rule (both widgets)
-Guest/LLM strings and element fields are rendered via `textContent` / `setAttribute` / created DOM nodes — **never `innerHTML`** — so a hostile reply cannot inject markup (XSS); this includes the tenant-authored `promo_card`/`quick_replies` strings. Element-supplied `url` **and `image`** fields (`link_button`, `booking_link`, `availability`, `property_cards` items **and its element-level `more.url`**, `promo_card`/its `cta`) are honoured **only for `http`/`https`** schemes; everything else is dropped. `quick_replies` items carry no URLs at all — chips send text, never navigate. `tel:`/`mailto:`/`wa.me` hrefs are constructed by the widget from the channel values, not taken verbatim.
+Guest/LLM strings and element fields are rendered via `textContent` / `setAttribute` / created DOM nodes — **never `innerHTML`** — so a hostile reply cannot inject markup (XSS); this includes the tenant-authored `promo_card`/`quick_replies` strings and every `form` string (labels, options, values). Element-supplied `url` **and `image`** fields (`link_button`, `booking_link`, `availability`, `property_cards` items **and its element-level `more.url`**, `promo_card`/its `cta`, **since 1.16.0** `quick_replies` items' `image` and a `form` `consent` field's `link.url`) are honoured **only for `http`/`https`** schemes; everything else is dropped. `quick_replies` items carry no navigation URL — chips send text, never navigate; an item's `image` is only ever an image source.
+
+**Click events (since 1.16.0)** carry enums and the turn only — never a `url`, a label, a `prefill` or
+anything the guest typed (`integration-guide.md` §3.4). `tel:`/`mailto:`/`wa.me` hrefs are constructed by the widget from the channel values, not taken verbatim.
 
 `contact_channels.prefill` (since 1.14.0) quotes the guest's own words: show it as a form value or via
 `textContent`, put it into a link **only** percent-encoded (`encodeURIComponent`) as the `wa.me` `text`
@@ -601,6 +729,9 @@ consumer is encouraged to match.
 - **The assistant's name** (init `assistant`, since 1.15.0) — put the name **and** the disclosure in
   the chat dialog's accessible name ("Nesti — AI assistant"), so a screen-reader user hears who they
   are talking to, and that it is an AI, before the transcript.
+- **`form`** (since 1.16.0) — a real `<form>` with a `<label for>` per input, the two `date_range` inputs
+  named by `labels` (else by the field's `label`), native validation, and a submit button. Mark free-text
+  inputs `dir="auto"`. Do not move focus into a form the guest did not open.
 - **`quick_replies`** — real `<button type="button">` elements (never anchors — chips carry no URLs) in
   a group with an accessible name so their purpose is clear before they are read out one by one. When a
   row retires, do not steal or drop focus; move it somewhere sensible if it was inside the row.
@@ -626,6 +757,9 @@ Each version is tagged in the platform repo as **`chatbot-contract-v<X.Y.Z>`**, 
 
 | Version | Date | Breaking | Change | Element / field | Consumer action |
 |---|---|---|---|---|---|
+| `1.16.1` | 2026-10-27 | No | **Wording only, no new field or element** (PATCH, D-114, the D-047(g) and 1.15.2 precedent: a normative sentence an emission change made false). The chip row under an answer the server gave without the model was English whenever the tenant had not written that answer in the guest's language. Now the server translates the tenant's English answer and its chips once, the first time a guest of that language taps it, stores the translation and serves it to every later guest of that language. So a `quick_prompts` row on a turn can carry a `locale` beyond the five server languages (`uk`, `pl`…), always the language of the answer above it, and its chips are tapped like any other. If the translation fails the answer and its row stay English, never the busy reply. Same request, same envelope, same elements and fields. | `quick_replies` ([language](#language-1)) | None. A renderer that takes a row's `locale` as given, rather than checking it against a list of five, draws these rows unchanged. |
+| `1.16.0` | 2026-10-27 | No | **The Book panel, keyed chips and click counting, one packet** (D-111, D-112, D-113; amends D-043(a) and D-089(p4); builds D-109(j)). **(a) A request field: `action`** on the turn endpoint, beside the `message`: a keyed chip's `{type: "reply", payload: {key}}` or a form's `{type: "form", id, payload: {values}}`. A malformed one is a `422`; one the server cannot bind falls back to the `message`'s text. **(b) A new element, [`form`](#form--a-form-the-guest-fills-in-the-chat)**: native fields of eight kinds, a `submit_message` template naming required fields only, sent **only** to a turn that carried an `action` — so a renderer that never sends one never receives it. The first is the Book panel: a hostel or an island, dates and an optional party, answered from live availability with nothing booked. **(c) `quick_replies` items gain `key`, `image` and `image_alt`**, and the `id` vocabulary gains `finder`; "no URLs in chips" becomes "no navigation URL" — an `image` is an image source under the `http(s)` rule. **(d) `property_cards` items gain `stay_total` and `reason`, the element `ordering`** (`catalog` · `cheapest` · `ranked`); "not a ranking" now holds for `catalog` only, and `price_from` stays the static from-price beside a stay's total. **(e) `link_button` gains `id`** (`book` · `website` · `directions`). **(f) The init `201` gains `analytics: true`** when the site counts button clicks, and **(g) a fourth endpoint, `POST …/{uuid}/events`** (`integration-guide.md` §3.4): two enums and the turn per click, never a url or a prefill, `204`, its own rate limit, stored only for a site that switched it on. | *(request)* `action` · `form` · `quick_replies` (`key` · `image` · `image_alt` · `id: finder`) · `property_cards` (`stay_total` · `reason` · `ordering`) · `link_button` (`id`) · *(init)* `analytics` · `POST …/events` | **Optional, and adoptable in parts.** To offer the Book panel: render `form` (native inputs, `required`/`min`/`max`, the filled `submit_message` as the guest bubble, `action` with the values), and send `action: {type: "reply", payload: {key}}` with the chip's `message` on a keyed tap — but only once you draw `form`, since sending the action is how you declare you can. Show `stay_total`, `reason` and an `ordering` label on cards and a chip's `image` when present. Click counting: persist `analytics` with your conversation record and report clicks only while it is true (absent means never). A consumer that changes nothing keeps working: its taps are answered as before and it is never sent a `form`. |
+| `1.15.2` | 2026-10-26 | No | **Wording only, no wire effect** (PATCH, D-109). A tapped chip is still an ordinary guest turn on the wire, but the server may now answer it without the model: when its `message` — or the same text typed — is a chip the tenant published with an action, the reply is the tenant's authored answer, or a fixed line with the area's `property_cards`, followed by a tenant-authored `quick_replies` row. So `id: "quick_prompts"` now also arrives on a turn, not only at init, in the language of the answer above it. Same request, same envelope, same elements and fields; such a reply simply comes faster. The chips of the server rows (`island_choice`, `property_choice`) are still answered as typed text. | `quick_replies` (§quick_replies: the tap sentence, `id`, [language](#language-1)) | None. A renderer that sends a chip's `message` verbatim, as the contract already requires, gets these answers unchanged. One that shows `quick_prompts` rows only at init should show them on a turn as well. |
 | `1.15.1` | 2026-10-23 | No | **Wording only, no wire effect** (PATCH, D-106). The init `promo_card` may now come from a dated *welcome offer* the site runs for a campaign: while it runs it takes the greeting's card slot, and when its last day passes the site promo returns there by itself. Booking-turn cards are unchanged (`chatbot.promo`, `min_nights`). Still at most one `promo_card` per init, same element, same fields; the only observable difference is that the init card and a booking-turn card can now be **different promos with different `id`s**. | `promo_card` (§promo_card, [when it repeats](#when-it-repeats)) | None. A renderer that caps promo cards by `id` already handles two different cards; one that suppresses every `promo_card` after the first would hide the booking-turn card while a welcome offer runs — cap on `id`. |
 | `1.15.0` | 2026-10-07 | No | **The assistant has a name the site owner sets, and a disclosure the owner cannot remove** (D-090, amends D-046(i)). Until now the name was nobody's setting: a consumer hardcoded it in its own strings while a tenant typed it by hand into every translation of the greeting, and nothing on the server told a guest they were talking to an AI except that tenant-written sentence. **(a) New optional object on the *init* `201`: `assistant {name?, disclosure}`.** `name` is the display name the owner set for this site's assistant — tenant-authored, not localized, plain text (a letter first, then letters of any script, digits, spaces, hyphens or apostrophes; at most 24 characters, a server guarantee) and **omitted when the site has set none**. `disclosure` is a short code-emitted statement that the guest is talking to an AI (`AI assistant`), server-localized like every server string and **always sent**: it is not a site setting, so an owner can rename the assistant but cannot switch this off. A renderer that shows `name` **must** show an AI disclosure beside it — this string or its own translation — whether or not a name arrives, and must never let the name stand in for it. **(b) Behaviour a consumer can see, no shape change:** a tenant greeting may say the name through a server-resolved placeholder, so `greeting` still arrives finished and never contains one; and asked who it is, the assistant always says it is an AI, giving its name unless the owner switched that off. **Documentation carried from 1.14.0, wording only:** the `prefill` preview is described above the buttons, where the reference renders it; `phone` says to strip separators before reading `+`/`00`; the Security rule covers a host page's own tracking of `wa.me` links. Reference widget: the header shows `name` in place of `data-title` with `disclosure` beside it, stores the object with the conversation record and repaints it on resume. | *(init)* `assistant` (`name` · `disclosure`) | **Optional.** To adopt: replace any hardcoded assistant name with `assistant.name`, keep a name-free fallback for when it is absent, and **persist it with your conversation record** — your resume path never calls init. Do not cache it beyond the conversation: after a rename that shows the old name. Keep your AI disclosure visible whether or not a name arrives; you may show `disclosure` or your own translation of it. Never write the name into `greeting` yourself — the server already has. A consumer that changes nothing keeps working. |
 | `1.14.0` | 2026-09-23 | No | **A handoff hands the guest the fastest way to a person, with the message already written** (D-084, amends D-023/D-079(b); KI-010, KI-012, O-19, O-67). Measured 2026-09-18: since handoff mail began on 2026-08-19, 38 live handoffs were emailed and none was ever marked handled, and 50 of 52 held no guest contact — while the reply said "a team member has been notified". **(a) New optional field `contact_channels.prefill {text, subject?, hint?}`** — a message in the guest's voice, addressed to the property's team, in the reply language: the property, the guest's name only if they typed it, `ref H-<id>` (the staff email and panel show the same reference), and the guest's issue quoted verbatim. Only a handoff turn's element carries it, and only with `whatsapp` or `email`. The renderer builds `wa.me/<digits>?text=` and `mailto:?subject=&body=` itself; it **must show the text before the guest leaves the page** and must not append it otherwise; it **may** let the guest edit it. Every link built from it is at most 1,800 bytes (a server guarantee). **(b) Behaviour a consumer can see, no shape change:** the handoff `reply` points at the buttons and never says staff were notified; it may end with a fixed code-appended line offering to take the guest's email or phone, whose answer the server recognises on the next message and echoes back; the unbound "which property?" lines no longer announce the request; and a **busy reply** keeps `contact_channels` when the failure came after the handoff request was raised. Documentation: the [missing-required-field policy](#element-conventions-all-types) scopes a required field inside an optional object to that object; the determinism statement admits verbatim guest words in `prefill.text`; `tel:` keeps its `+`. Reference widget: a read-only preview under the buttons whose current value builds the link at tap time (editing later = removing one attribute), `tel:+digits`, and `wa.me` in a new tab. | `contact_channels` (`prefill` · emission on a busy reply) | **Optional.** To adopt `prefill`: show `text` (a read-only field is fine) before the guest can tap, caption it with your own label or `hint`, and compose `wa.me?text=` / `mailto:?subject=&body=` from the shown value with `encodeURIComponent` at tap time. Keep it out of analytics and logs. If you cannot show it, ignore it — the plain channels keep working. Two checks: render `actions[]` on a busy reply too, and keep a leading `+` in `tel:` links. |
