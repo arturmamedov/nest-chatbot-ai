@@ -156,7 +156,8 @@ packet's identity, because the reference renderer legitimately moves between con
 (here the two halves differ, as they did at 1.12.0 — `43101a6` against `cb8005b` — where 1.15.1,
 1.15.0, 1.14.0 and 1.10.0 shared one sha because the bump commit moved the reference's
 `BUILT_AGAINST` too). `BUILT_AGAINST` is `'1.16.1'`, in lockstep since release 2.13.4 adopted
-D-109, D-111, D-112 and D-114 (D-113's click counting deliberately not).
+D-109, D-111, D-112 and D-114 (D-113's click counting deliberately not — since accepted with
+conditions, and building in 2.13.5; see "The widget never phones home").
 
 **The widget is one step AHEAD of the deployment, and that is the quiet direction.** Measured
 2026-10-27 15:32 UTC off a real init `201` against `nest-mind.laravel.cloud`: `contract_version:
@@ -196,8 +197,9 @@ here is built" while their authoritative `decisions.md` kept the incomplete one.
 origin before anyone noticed.
 
 Three of the four endpoints: init a conversation, post a turn, poll an async turn. The fourth,
-`POST …/{uuid}/events` (1.16.0, D-113, click counting), is **not** called, and the init's
-`analytics` flag is not read — see "The widget never phones home".
+`POST …/{uuid}/events` (1.16.0, D-113, click counting), is **not called yet**: it was accepted on
+2026-10-27 as the one bounded exception to "The widget never phones home" and lands in 2.13.5 —
+read that section's bounds before building it. Until then the init's `analytics` flag is not read.
 
 ```
 POST {apiBase}/api/v1/chatbot/conversations               → 201 {conversation:{uuid}, greeting,
@@ -477,18 +479,53 @@ never `requestLocale`. Removing `setLocale`, `locale` or `wchat:locale` would be
 ### The widget never phones home — measurement leaves as host-page events
 
 Since 2.8.2 the widget reports itself through DOM `CustomEvent`s dispatched on `els.root`
-(the `events` section), and that is the **only** channel it will ever have. No analytics
-request of its own, no beacon, no pixel, no third-party script — same reasoning that keeps
-icons inline and fonts self-hosted: a host trusts exactly one extra origin, ours, and only for
-our own assets. The host page decides where the events land. A host that listens to nothing
-pays nothing, which is why there is deliberately **no** `data-*` attribute to disable it.
+(the `events` section), and that is the **only** channel a host's measurement will ever get.
+Beside it the widget makes exactly one request of its own for measurement, the bounded click
+count below, and nothing else: no other analytics request, no beacon, no pixel, no third-party
+script. The reasoning is the one that keeps icons inline and fonts self-hosted: a host trusts
+exactly one extra origin, ours, and only for our own assets. The host page decides where the
+events land. A host that listens to nothing pays nothing, which is why there is deliberately
+**no** `data-*` attribute to disable **the events**; the click count's attribute gates that one
+request and nothing else.
 
-**Contract 1.16.0's click counting is not adopted** (D-113): a fourth endpoint,
-`POST …/{uuid}/events`, gated on an init flag `analytics: true`, that would count CTA clicks in
-the wSuite panel. It is a request of the widget's own — to the same origin it already posts turns
-to, but its own nonetheless — so 2.13.4 neither reads `analytics` nor calls the endpoint. Whether
-that route sits inside or outside this section's intent was asked as a separate decision (the
-1.16.1 packet's APPENDIX-A); until it is answered, this section stands as written.
+**Contract 1.16.0's click counting is the one exception — accepted with conditions on 2026-10-27,
+not yet built** (D-113, the 1.16.1 packet's APPENDIX-A; it lands in 2.13.5). `POST …/{uuid}/events`,
+body `{type: 'cta_click', element, cta, turn?}`, counts CTA clicks in the wSuite panel. It keeps
+the rule's substance — the same origin every turn already goes to, so a host trusts nothing new —
+and buys what the events cannot: a click joined, on the server, to the conversation and turn that
+produced it. On nestshostels.com, which this widget serves and whose analytics listened to no
+`wchat:*` event when this was decided, it is the only click measure there is. The reasoning and
+the facts it was measured against are `docs/proposals/visitor-measurement-and-events.md`
+§ The one exception. The bounds — break one and the exception is void:
+
+- **Same origin, same transport.** `apiBase` plus the guide §3.4 path, through `request()`.
+  Never `sendBeacon`, never a pixel, and no `keepalive` while every CTA opens a new tab or is a
+  `tel:`/`mailto:`.
+- **Two keys, both required.** The **site's**: report only while the init carried
+  `analytics === true` — persisted in the record and restored on resume exactly as `idle_hours`
+  is, and replaced (absent included) by every new init. The **page's**: `data-count-clicks`.
+  `consent`, the **default**, reports only after the host passes the visitor's cookie consent on
+  with `NestChatbot.setClickCounting(true)`; `true` reports whenever the site has it on, for a host
+  whose privacy policy covers the count on its own basis; `false` never, and no runtime call
+  overrides it. `setClickCounting(false)` withdraws from the next click. The grant is **never
+  stored** — the host's CMP re-asserts it on every load — a click before it is dropped, never
+  queued, and the widget never reads a CMP, `gtag` or `dataLayer` itself. Both names are
+  provisional until 2.13.5 ships them.
+- **Four fields, from fixed values only.** `element` and `cta` mapped from the render-time
+  `data-wchat-el` / `data-wchat-cta` (`property_card` → `property_cards`); `turn` the server's own
+  number, or omitted. A `cta: null`, or a pair the endpoint would refuse, sends nothing. Never a
+  url, a label, a chip key, a prefill, a form value or any text.
+- **Fire and forget.** No response read, no retry, no queue, no re-init on any status (guide
+  §3.4), no `wchat:error`, nothing the guest sees. `busy`, `sendQueue`, `sendSeq` and the
+  record's `ts` stay untouched: a click is not activity.
+- **One source of truth.** Sent from the delegated listener that emits `wchat:action`, which stays
+  exactly as it is.
+- **Closed.** `cta_click` on this endpoint as 1.16.x specifies it. Another `type`, another origin,
+  a field beyond enums and the turn, or linking conversations to a person (route B's visitor
+  token) is a new decision, recorded here first.
+
+The count is **pseudonymous personal data, not anonymous**: it sits on a conversation that holds
+the guest's messages, and is deleted with it after D-087's 12 months.
 
 Four rules the section states and the code has to keep true:
 

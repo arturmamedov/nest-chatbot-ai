@@ -41,6 +41,12 @@ payload string. And a 1.16.0 `form` submit is a guest message like any other, so
 with `source: 'form'` and its `length`; what the guest filled in — dates and a party today, an
 email or a phone on a later form — never enters a payload.
 
+**Click counting (D-113) was decided on 2026-10-27: accepted with conditions, as the one bounded
+exception to [the hard constraint](#the-hard-constraint), to be built in 2.13.5.** Nothing in the
+table below moves for it — `wchat:action` stays exactly as it is, and the count's own attribute
+gates that one request, never the events. The reasoning is
+[§ The one exception](#the-one-exception-d-113-click-counting-decided-2026-10-27).
+
 **The upstream ask at the foot of this document was sent, and granted.** `idle_hours` landed in
 contract 1.7.0 and the widget adopted it in 2.10.0, which changes one thing described here for
 the better: see [What route A cannot answer](#what-route-a-cannot-answer-at-any-idle-window-length).
@@ -67,7 +73,7 @@ The finding that decided the design: **the server cannot tell, and the guide say
 So the platform sees **conversations, not people**. Anything that counts people has to start
 where the person is: the browser — which already knew the answer and had no way to say it.
 
-## The three routes
+## The routes
 
 ### A — emit events to the host page. **Chosen.**
 
@@ -78,7 +84,8 @@ the destination already exists.
 ### B — an opaque visitor token at init. **Deferred, and replaced by a smaller ask.**
 
 The only route that answers "came back next week", "same person, different device", or that
-puts the answer in wSuite's own panel rather than in each host's GA4.
+puts a *visitor* answer in wSuite's own panel rather than in each host's GA4. (Clicks reach the
+panel by route D since 2026-10-27; visitors still do not.)
 
 It is deferred because **the returning-guest ceiling is the idle window, and the window has now
 moved**. That was written when `IDLE_MS` was a hardcoded 24h and the widening was a plan; since
@@ -105,26 +112,141 @@ and short-lived, which is much of why it has been uncontroversial.
 it merges strangers and splits one guest across their phone and the lobby machine. Recorded
 here so it is not re-proposed.
 
+### D — count CTA clicks on the platform's own endpoint. **Accepted with conditions (2026-10-27), not yet built — it lands in 2.13.5.**
+
+Contract 1.16.0's `POST …/{uuid}/events` (D-113). Not a visitor route — it counts clicks per
+conversation and says nothing about who came back — but the one way a click reaches wSuite's
+panel. It is a request of the widget's own, so it was decided under
+[the hard constraint](#the-hard-constraint), as its one exception, and the reasoning lives there.
+
 ## The hard constraint
 
-**The widget never phones home.** No analytics request of its own — not to Nest, not to a third
-party, not a beacon, not an image pixel. A host trusts exactly one extra origin, ours, and only
-for our own assets: the same reasoning that keeps icons inline and fonts self-hosted. Events go
-to the host page; the host decides where they land. **A route that needs its own network call
-is out of scope for this repo by construction.**
+**The widget never phones home** — with one bounded exception, below. No analytics request of
+its own — not to Nest, not to a third party, not a beacon, not an image pixel. A host trusts
+exactly one extra origin, ours, and only for our own assets: the same reasoning that keeps icons
+inline and fonts self-hosted. Events go to the host page; the host decides where they land. **A
+route that needs its own network call is out of scope for this repo by construction** — the one
+exception was decided against this sentence, not around it, and any other has to be decided
+here the same way.
 
 A host that listens to nothing pays nothing, which is why there is deliberately no `data-*`
-attribute to disable it.
+attribute to disable **the events**. (The click count's `data-count-clicks` gates that one
+request and nothing else.)
 
-**Contract 1.16.0 offers the other route, and 2.13.4 does not take it.** D-113 added a fourth
-endpoint, `POST …/{uuid}/events`, and an init flag `analytics: true`, so the wSuite panel can count
-CTA clicks itself: two enums and the turn per click, to the same origin the widget already posts
-turns to. That is still a request of the widget's own, which is what this section rules out, so
-the 2.13.4 sync neither reads `analytics` nor calls the endpoint. Whether a same-origin, opt-in,
-enum-only POST sits inside or outside this constraint's intent was asked as a separate decision
-(the 1.16.1 packet's APPENDIX-A), and this section stands as written until it is answered. The
-`cta` field above uses the same vocabulary on purpose: a host already has, in its own analytics,
-what that endpoint would count.
+### The one exception: D-113 click counting, decided 2026-10-27
+
+**Asked by** the wSuite platform, as the 1.16.1 packet's APPENDIX-A (nest-mind
+`modules/chatbot/docs/consumer-sync.md` §5), sent beside the 2.13.4 sync and deliberately not
+inside it. **Decided by** the owner, 2026-10-27. **Outcome: accepted with conditions. Not built**
+— it lands in 2.13.5, and until then nothing reads `analytics` or calls the endpoint.
+
+**What was asked.** `POST /api/v1/chatbot/conversations/{uuid}/events`, body
+`{type: "cta_click", element, cta, turn?}`, when a guest clicks a call to action — Book, a card,
+the promo, a contact channel. Two enums and the turn; never guest text, a url or a prefill. Its
+own rate-limit bucket (`chatbot-event`), so a click never spends the guest's turns or daily caps.
+Off unless the site switched `chatbot.analytics` on in wSuite (default off), which the init
+reports as `analytics: true` (absent otherwise). Always `204`. Integration guide §3.4.
+
+**The facts it was decided against** — measured or read that day, not assumed:
+
+- **nestshostels.com is wSuite site 2, and this widget serves it**, from the WordPress theme.
+  Site 2 switches the count on at the deploy (D-113(f)), and D-113(f) itself says only the
+  reference widget reports until this repo answers — so a decline would have left the platform's
+  click stat empty on the one site that turns it on.
+- **nestshostels.com's analytics listened to no `wchat:*` event** (owner). Route A answers "which
+  buttons get clicked" by design and, on Nest's own site, by nothing yet.
+- **Every CTA opens a new tab or is a `tel:`/`mailto:`.** Every CTA anchor carries
+  `target="_blank"` except `channelLink`'s phone and email links, which do not leave the page —
+  so no click unloads the page under the request.
+- **The vocabulary is already in the DOM, from fixed values**: `data-wchat-el` / `data-wchat-cta`,
+  read by the delegated `wchat:action` listener. One difference: the DOM's `property_card` is the
+  endpoint's `property_cards`.
+- **Retention is D-087's 12 months** (owner). A click is deleted with its conversation. The
+  scheduled deletion is upstream's to build, and was not built that day.
+
+**The reasoning.** The constraint rests on three supports, and the route was tested against each.
+
+1. **No new origin — holds.** The request goes where every turn already goes, and the host's
+   `connect-src` already allows it. That is the substance of "a host trusts exactly one extra
+   origin".
+2. **The host decides — holds, with a condition added for it.** Route A leaves every measurement
+   decision with the host page, and so with its cookie banner: a CMP that blocks GA4 blocks the
+   count. As designed upstream, the POST would move that decision to a wSuite setting and step
+   past the banner. C6 below gives it back: nothing is reported unless the host page's tag
+   allows it — by default only once the page passes the visitor's cookie consent on, or always
+   when the site's privacy policy covers the count on its own basis. The widget never reads a CMP
+   to do so, so it still touches nothing outside `#nest-chatbot`. In `consent` mode the wSuite
+   count and the host's GA4 count share one denominator, consented visitors, and can be read
+   side by side.
+3. **Nothing new sent — does not hold, and the margin is small.** A click on a conversation uuid
+   is personal data: pseudonymous, never anonymous, because the conversation holds the guest's own
+   messages. But it rides a row that already holds every message the guest typed, and is deleted
+   with it. Two enums and a turn number add nothing of a new kind to that row.
+
+**What it buys that route A cannot** — more than "the panel instead of GA4", which is how the ask
+put it. It buys the **join**: a click counted on the server sits on its conversation, on the turn
+and the reply that produced it, beside whether the guest had submitted the Book panel. D-113's own
+measure is Book clicks per engaged conversation, and its denominator is a conversation, which
+GA4 never sees.
+
+**This repo's own test** — does it make the widget harder to drop onto a site we do not control?
+No new origin, no CSP entry, and nothing reported unless the site's owner switched it on in wSuite
+**and** the host page allowed it.
+
+**The conditions.** Each bounds the exception; break one and the exception is void.
+
+- **C1. Same origin, same transport.** `apiBase` plus the guide §3.4 path, through the existing
+  `request()`. Never `sendBeacon` (it cannot carry `Authorization` anyway), never a pixel, and no
+  `keepalive` while every CTA opens a new tab or is a `tel:`/`mailto:`.
+- **C2. The site's key, persisted.** Report only while the init carried `analytics === true`. The
+  flag rides the stored record and is restored on resume — the `idle_hours` lesson, because a
+  resume never calls init and `persist()` writes current state. Every new init replaces it,
+  absent included (a restart, a `410`/`404` re-init).
+- **C3. Four fields, from fixed values only.** `element` and `cta` mapped from the render-time
+  attributes (`property_card` → `property_cards`); `turn` the server's own number, or omitted. A
+  `cta: null` — a `link_button` whose id this widget does not know — or a pair the endpoint would
+  refuse, sends nothing. Never a url, a label, a chip key, a prefill, a form value, or any guest
+  or reply text.
+- **C4. Fire and forget.** No response read, no retry, no queue, never a re-init on any status
+  (guide §3.4), no `wchat:error`, nothing the guest can see. `busy`, `sendQueue`, `sendSeq` and
+  the record's `ts` stay untouched: a click is not activity, just as the server never lets an
+  event extend the idle window. Under `data-debug` the enum body may be logged, and nothing else.
+- **C5. One source of truth.** Sent from the delegated listener that emits `wchat:action`, so the
+  host's count and wSuite's cannot disagree on what a click is. `wchat:action` stays exactly as
+  it is: route A is not replaced.
+- **C6. Two keys, both required** — the wSuite setting (C2) **and** the host page's attribute
+  (owner-confirmed). Names provisional until 2.13.5 ships them:
+
+  | `data-count-clicks` | Reports, while the site's `analytics` is on |
+  |---|---|
+  | `consent` — **the default** | only after the page calls `NestChatbot.setClickCounting(true)`, from its cookie banner's "analytics accepted" callback or a GTM tag behind Consent Mode's `analytics_storage` — the condition the page's GA4 events already wait for |
+  | `true` — forced | always: for a site whose privacy policy covers the count on its own legal basis |
+  | `false` — off | never; no runtime call overrides it |
+
+  `setClickCounting(false)` withdraws from the next click. The grant is **never stored** — the
+  CMP re-asserts it on every page load, and a stored copy could outlive a withdrawal. A click
+  before the grant is dropped, never queued. A host whose call runs before `window.NestChatbot`
+  exists grants on `wchat:ready`. This gates the **request only**: the `wchat:*` events stay
+  ungated and switch-free, as README § Measuring it promises.
+- **C7. Closed.** It covers `cta_click` on this endpoint as 1.16.x specifies it. Another event
+  `type`, another origin, a field beyond enums and the turn, or linking conversations to a person
+  (route B's visitor token) is a new decision, recorded here first.
+
+**Considered and not made a condition:** waiting for D-087's scheduled deletion to ship. The click
+adds nothing to the conversation it rides on (support 3), and the deletion is upstream's to build
+either way, so it went into the hand-over instead.
+
+**For site 2, stated so nobody is surprised.** In the default `consent` mode nestshostels.com
+counts nothing until its GTM passes the visitor's consent on; with `data-count-clicks="true"`,
+backed by its privacy policy, it counts every visitor. The choice is the owner's at the 2.13.5
+rollout. Either way the policy should describe the count as it is: which chat buttons are
+clicked, and in which reply; no text, no link, no contact detail; stored by wSuite as processor
+and deleted with the conversation after 12 months — pseudonymous, never "anonymous". Whether
+`true`'s legal basis holds without cookie consent is the controller's call; the widget supports
+both answers.
+
+**Numbering.** The build adds one `data-*` attribute and one `window.NestChatbot` method, both
+additive, so 2.13.5 is a patch. This decision moved no version.
 
 ---
 
@@ -245,7 +367,11 @@ Recorded so it is not rediscovered as a surprise:
 - **Anything inside wSuite's own panel.** Route A's data lands in each host's GA4. Nest reads
   it there, not in the chatbot admin. **If having the answer inside wSuite is the actual
   requirement, no amount of route A gets there** and route B becomes the only option — this is
-  the question to settle before the ask below is sent.
+  the question to settle before the ask below is sent. **For CTA clicks that requirement was met
+  on 2026-10-27, by route D** ([§ The one exception](#the-one-exception-d-113-click-counting-decided-2026-10-27));
+  for *visitors* — returning, cross-device — it still holds. Nor is route A automatic: on
+  nestshostels.com no `wchat:*` event was wired into analytics when click counting was decided
+  (owner, 2026-10-27), so its answers exist only where a host listens.
 - **Consent-gated guests.** The events fire regardless, but a host CMP that blocks GA4 before
   consent records nothing. The numbers are "consented guests", not all guests.
 - **Anything after the window expires** — but the window is no longer this widget's guess.
