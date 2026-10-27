@@ -121,7 +121,7 @@ in production.
 | **`events`** | **the host-page seam** — `emit()`, `snapshot()`, the `wchat:` vocabulary |
 | **`api`** | **the seam** — `init` / `send` / `poll` plus the mock fixtures |
 | `dom` | `el()`, `attrs()`, `svgNode()`, the icon constants, `build()`, and `paintAssistant()` — the one writer of the header title, the dialog label, the placeholder and the launcher label |
-| `render` | bubbles, thinking dots, `renderAction()`, `safeHttpUrl()`; since 2.13.4 the 1.16.0 `form` (`renderForm()`, one `*Field()` helper per kind, `retireForms()`) beside the chip rows it shares the one-shot rule with |
+| `render` | bubbles, thinking dots, `renderAction()`, `safeHttpUrl()`; since 2.13.4 the 1.16.0 `form` (`renderForm()`, one `*Field()` helper per kind, `retireForms()`) beside the chip rows it shares the one-shot rule with; since 2.13.5 the stay pair (`isStayPair()` / `renderStayPair()`, a one-card `property_cards` and its `availability` in one `.nc-stay` wrapper) and the 1.17.0 `heading` (`optionsTitle()`) |
 | `typing` | the character-by-character reveal |
 | `intro` | the circular-progress loader sequence |
 | `flow` | open/close, submit, status handling, teardown, the async poll, the header ⋯ menu, the Back-button history entry |
@@ -139,7 +139,7 @@ is what lets the widget be served from a CDN while the host page lives anywhere.
 
 `docs/wsuite/` is the authority — do not re-derive or duplicate its rules here:
 
-- **`response-contract.md`** — the versioned reply envelope (currently 1.16.1 — see its
+- **`response-contract.md`** — the versioned reply envelope (currently 1.17.0 — see its
   Changelog and Versioning policy) and every element type.
 - **`integration-guide.md`** — transport, auth, endpoints, errors, rate limits, CORS.
 - **`chatbot.reference.js`** — the platform's own security-reviewed widget. When a transport or
@@ -151,25 +151,28 @@ wholesale from the upstream tag (`chatbot-contract-v<X.Y.Z>`), never hand-edited
 code implements, not a mirror of the docs. `VERSION` is the widget's own independent release
 line; it and `window.NestChatbot.version` are the only version sites (no package.json —
 rule 1). Releases are recorded in `CHANGELOG.md`. Current packet: synced 2026-10-27 as
-`docs @ chatbot-contract-v1.16.1 (bfdecf5) · widget @ 7cbfdd0` — the widget SHA is part of the
+`docs @ chatbot-contract-v1.17.0 (9aa1909) · widget @ 9aa1909` — the widget SHA is part of the
 packet's identity, because the reference renderer legitimately moves between contract tags
-(here the two halves differ, as they did at 1.12.0 — `43101a6` against `cb8005b` — where 1.15.1,
-1.15.0, 1.14.0 and 1.10.0 shared one sha because the bump commit moved the reference's
-`BUILT_AGAINST` too). `BUILT_AGAINST` is `'1.16.1'`, in lockstep since release 2.13.4 adopted
-D-109, D-111, D-112 and D-114 (D-113's click counting deliberately not — since accepted with
-conditions, and building in 2.13.5; see "The widget never phones home").
+(here the two halves share one sha, as at 1.15.1, 1.15.0, 1.14.0 and 1.10.0, because the bump
+commit moved the reference's `BUILT_AGAINST` too; they differed at 1.16.1 — `bfdecf5` against
+`7cbfdd0` — and at 1.12.0, `43101a6` against `cb8005b`). `BUILT_AGAINST` is `'1.17.0'`, in lockstep
+since release 2.13.5 adopted D-115. D-113's click counting is the one 1.16.x row still unbuilt —
+accepted with conditions, and building in 2.13.6; see "The widget never phones home".
 
 **The widget is one step AHEAD of the deployment, and that is the quiet direction.** Measured
 2026-10-27 15:32 UTC off a real init `201` against `nest-mind.laravel.cloud`: `contract_version:
 1.15.1` (and `X-Chatbot-Contract: 1.15.1`), `idle_hours: 168`, `Access-Control-Expose-Headers:
 X-Chatbot-Contract, Retry-After`, and an `assistant` object naming "Nesti". So 1.15.x is deployed,
 and the name path built in 2.13.2 now has a name to paint: the header, the dialog label, the
-placeholder and the launcher say the owner's name rather than the name-free wording. 1.16.1 is
-tagged in `nest-mind` and runs only on the owner's local checkout (`https://nest-mind.test`, Herd,
-which reads and writes the production database) — against the deployment 2.13.4 is never sent a
-`form`, because the server sends one only to a turn carrying an `action` and a 1.15.1 server
-ignores the field. Not a defect in either direction: the drift warn fires only when the **server**
-is ahead. The rollout is both halves together, with `?v=2.13.4` on the embed tag — nestshostels.com
+placeholder and the launcher say the owner's name rather than the name-free wording. (Not
+re-measured at the 1.17.0 sync: that check needs Nest's live key, and the sync's live run used a
+dev key against the local checkout only.) 1.16.1 and 1.17.0 are tagged in `nest-mind` and run only
+on the owner's local checkout (`https://nest-mind.test`, Herd, which reads and writes the
+production database), which reported `contract_version: 1.17.0` on 2026-10-27 — against the
+deployment 2.13.5 is never sent a `form`, because the server sends one only to a turn carrying an
+`action` and a 1.15.1 server ignores the field, and never a `heading`, which simply stays absent.
+Not a defect in either direction: the drift warn fires only when the **server** is ahead. The
+rollout is both halves together, with `?v=2.13.5` on the embed tag — nestshostels.com
 serves the theme copy with `cache-control: max-age=86400`, so without the query a browser can hold
 the previous release for a day after the upload. Since 2.13.4 the query reaches the stylesheet
 too: `injectStyles()` appends `?v=<VERSION>` itself, because `assetBase` drops the script's query
@@ -198,7 +201,7 @@ origin before anyone noticed.
 
 Three of the four endpoints: init a conversation, post a turn, poll an async turn. The fourth,
 `POST …/{uuid}/events` (1.16.0, D-113, click counting), is **not called yet**: it was accepted on
-2026-10-27 as the one bounded exception to "The widget never phones home" and lands in 2.13.5 —
+2026-10-27 as the one bounded exception to "The widget never phones home" and lands in 2.13.6 —
 read that section's bounds before building it. Until then the init's `analytics` flag is not read.
 
 ```
@@ -340,7 +343,26 @@ and "in the guest's language" are different questions (a card's `name` is raw ca
   guard has always been on the button alone — keep it there. The same-list case needs no
   `cardUrls` pass in `renderAvailability()` because the card renders first and enters `rendered`
   before the branch runs; the pre-scan exists for a button that **precedes** its card, which the
-  server does not emit. `cardstay` and `cardbook` in the mock are the two arms.
+  server does not emit. `cardstay` and `cardbook` in the mock are the two arms. Since 2.13.5 the
+  `[property_cards, availability]` arm shares one `.nc-stay` wrapper (`renderStayPair()`, reached
+  from `renderActions()` when exactly one card will render — counted through `renderableCardUrl()`
+  — and the availability will draw its card): a column everywhere, a row on the expanded sheet,
+  decided in CSS alone. Two things keep it from undoing the above: the wrapper is appended
+  **before** either half renders (`wireCarousel()` measures on its first sync), and the card still
+  renders **first** into its column, so `rendered` holds its url when the availability decides on
+  its button. A rail of two or more never pairs; `renderAction()`'s switch still has one branch
+  per type.
+- **`availability.heading` is the server's line — never compose one.** Since contract 1.17.0
+  (D-115) a synchronous `availability` with options carries `heading`, "Prices for 3 nights for 2
+  guests" ("Prices for 3 nights" for an unstated party), written and translated upstream so a
+  reworded line or a language beyond the five packs reaches the guest with no release here (O-74).
+  `optionsTitle()` draws it once, first in the card, through `textContent`, `dir="auto"`, under its
+  own class `.nc-options-title` — **not** `.nc-options-heading`, which `setLocale()` repaints from
+  the pack. Absent (the async tool path, an older server, `cardstay` in the mock) means no line,
+  and the tempting fallbacks are all wrong: `summary` (which this file does not read, though the
+  contract now names its keys), `units` (a `per_unit` option's units are rooms, not guests), and
+  the booking url's `adults`. The Book panel's reply line names the stay too since 1.17.0 — reply
+  text, the server's, like any other.
 - **The init response reports `contract_version`.** Compare it to `BUILT_AGAINST` (api
   section) and `console.warn` once when the server is ahead — never gate, never hard-fail
   (guide §3.1); the ignore-unknown rule keeps the widget functional. That warn is the sole
@@ -489,7 +511,8 @@ events land. A host that listens to nothing pays nothing, which is why there is 
 request and nothing else.
 
 **Contract 1.16.0's click counting is the one exception — accepted with conditions on 2026-10-27,
-not yet built** (D-113, the 1.16.1 packet's APPENDIX-A; it lands in 2.13.5). `POST …/{uuid}/events`,
+not yet built** (D-113, the 1.16.1 packet's APPENDIX-A; it lands in 2.13.6 — 2.13.5 went to the
+1.17.0 sync, which shipped first). `POST …/{uuid}/events`,
 body `{type: 'cta_click', element, cta, turn?}`, counts CTA clicks in the wSuite panel. It keeps
 the rule's substance — the same origin every turn already goes to, so a host trusts nothing new —
 and buys what the events cannot: a click joined, on the server, to the conversation and turn that
@@ -510,7 +533,7 @@ the facts it was measured against are `docs/proposals/visitor-measurement-and-ev
   overrides it. `setClickCounting(false)` withdraws from the next click. The grant is **never
   stored** — the host's CMP re-asserts it on every load — a click before it is dropped, never
   queued, and the widget never reads a CMP, `gtag` or `dataLayer` itself. Both names are
-  provisional until 2.13.5 ships them.
+  provisional until 2.13.6 ships them.
 - **Four fields, from fixed values only.** `element` and `cta` mapped from the render-time
   `data-wchat-el` / `data-wchat-cta` (`property_card` → `property_cards`); `turn` the server's own
   number, or omitted. A `cta: null`, or a pair the endpoint would refuse, sends nothing. Never a
@@ -723,9 +746,9 @@ are shaped exactly like the real envelope. Drive them from the composer:
 |---|---|
 | `book` | `booking_link` with a stay summary |
 | `contact` | `contact_channels` (phone + whatsapp + email) with a 1.14.0 `prefill` (text + subject + hint — the contract's own example): the caption and a read-only preview **above** the links, inside `.nc-channels`. The WhatsApp and email hrefs compose from the preview's current value at render, on `input` and on click; remove `readonly` in devtools, edit, and the tap sends the edited text |
-| `rooms` | `availability` — the 1.8.0 showcase: a per-bed and a per-room option carrying `basis`/`units`/`total`, rendered verbatim as "2 beds · 200.00 EUR total", plus one option without the trio that must render exactly as before |
+| `rooms` | `availability` — the 1.8.0 showcase: a per-bed and a per-room option carrying `basis`/`units`/`total`, rendered verbatim as "2 beds · 200.00 EUR total", plus one option without the trio that must render exactly as before. Since 2.13.5 it also carries the 1.17.0 `heading`, "Prices for 3 nights for 2 guests", drawn once at the top of the white card above both groups; not a pair (no card), so it stacks at every width |
 | `link` | three `link_button`s (book / website / directions), one with `style: primary`, each carrying its 1.16.0 `id` — a click reports `cta` `book` / `website` / `directions` on `wchat:action` |
-| `cardstay` | the 1.10.0 pair (D-073): `[property_cards (one item), availability]` on one turn, card **first**, CTA url == `availability.url`. Exactly **one** Book affordance may render — the card's — and all three option rows must survive it (a party row, a single-unit row, one option with no `basis`/`units`/`total`; three groups of one, so no fold button). Suppression path: the per-turn `rendered` set |
+| `cardstay` | the 1.10.0 pair (D-073): `[property_cards (one item), availability]` on one turn, card **first**, CTA url == `availability.url`. Exactly **one** Book affordance may render — the card's — and all three option rows must survive it (a party row, a single-unit row, one option with no `basis`/`units`/`total`; three groups of one, so no fold button). Suppression path: the per-turn `rendered` set. Since 2.13.5 the two share one `.nc-stay`: side by side on the expanded sheet (≥1024px with `.nc-expanded`), stacked as before everywhere else. **No `heading`** — the pre-1.17.0 server — so no line above the groups, although `summary` names the nights and the party: the widget composes nothing from it |
 | `cardbook` | the other arm: `[property_cards, booking_link]`, equal urls, and **no** `cta_label` so both would have said "Book now". Suppression path: the `cardUrls` pre-scan — the branch that was dormant from 2.5.0 until 1.10.0. Tested **above** `book`: these are `indexOf` matches and `cardbook` contains `book` |
 | `available` | `async_result` — interim reply, then the poll replaces it in place; the final is an `availability` sharing the interim's **server-composed** url byte-for-byte (1.9.0, no `adults` — unstated party), so the per-turn dedupe must leave exactly **one** Book button; the final's option is the singular "1 bed" total path |
 | `hostel` | `quick_replies` — the three island chips, carrying the 1.7.0 `heading` (also matches suggested prompt 1); any send retires every row **and its heading** (one-shot) |
@@ -740,11 +763,12 @@ are shaped exactly like the real envelope. Drive them from the composer:
 | `!busy` | the server's busy reply keeping a raised handoff's `contact_channels`, `prefill` included (1.14.0, D-084(h)) — `actions[]` renders on a busy `200` like on any other |
 | `!410` `!403` `!429` `!500` | forces that status |
 | `!429 60` `!429 80000` | a `429` carrying that `Retry-After` (1.11.0): 60 keeps "try again in a moment", 80000 shows "come back later". Bare `!429` is the header-less control and must read as `60` does, with `retryAfter: null` |
-| *tap* **Book a bed** | the 1.16.0 Book panel (D-111, D-112), from the welcome row's keyed chip: the tap carries `action {type:'reply', payload:{key:'book-a-bed'}}` beside its message, and the mock — like the server — answers that with the contract's own `form` (a hostel or an island, the dates with computed bounds, an optional party). Submit *Every hostel in Tenerife*: the guest bubble reads "Prices for Every hostel in Tenerife, *from* → *to*", the form stays on screen disabled, and the answer is `property_cards` with `ordering: 'cheapest'` — two cards with a `stay_total` (one per bed, one per room) under their `price_from`, a third with `reason: 'Fully booked for these dates'` and no total, a "Cheapest first" caption, never re-sorted. Submit *Duque Nest*: that hostel's `availability`, its party totals computed from the same party as the island cards' — beds at 78 a head, doubles at 165 for every two guests, so the bed card is cheaper for any party and the fixed order really is cheapest first. The action is answered **first**, above every keyword (`actionReply()`, the "it's about" precedent: "I would like to **book** a bed" and "Prices for Every **hostel** in **Tenerife**" both hold keywords); typing the chip's text without the action reaches `book` instead, exactly as the server answers a message sent alone |
+| *tap* **Book a bed** | the 1.16.0 Book panel (D-111, D-112), from the welcome row's keyed chip: the tap carries `action {type:'reply', payload:{key:'book-a-bed'}}` beside its message, and the mock — like the server — answers that with the contract's own `form` (a hostel or an island, the dates with computed bounds, an optional party). Submit *Every hostel in Tenerife*: the guest bubble reads "Prices for Every hostel in Tenerife, *from* → *to*", the form stays on screen disabled, and the answer is `property_cards` with `ordering: 'cheapest'` — two cards with a `stay_total` (one per bed, one per room) under their `price_from`, a third with `reason: 'Fully booked for these dates'` and no total, a "Cheapest first" caption, never re-sorted. Submit *Duque Nest*: since 2.13.5 the Ready path's pair, as a 1.17.0 server sends it — Duque's catalog card, then its `availability` (card CTA == `availability.url`), side by side on the expanded sheet — with the 1.17.0 `heading` and reply: with Guests filled, "Prices for 3 nights for 2 guests" and "Showing prices for 3 nights for 2 guests at Duque Nest (17 Nov → 20 Nov)."; with Guests blank, "Prices for 3 nights", `summary.adults: null`, and the reply adds "These prices are for 1 guest. Tell me if there are more of you." (nest-mind's own strings). Its party totals are computed from the same party as the island cards' — beds at 78 a head, doubles at 165 for every two guests, so the bed card is cheaper for any party and the fixed order really is cheapest first. The action is answered **first**, above every keyword (`actionReply()`, the "it's about" precedent: "I would like to **book** a bed" and "Prices for Every **hostel** in **Tenerife**" both hold keywords); typing the chip's text without the action reaches `book` instead, exactly as the server answers a message sent alone |
 | `!kinds` | a `form` with every kind — `text`, `textarea`, `email`, `phone`, `select`, two `date_range`s, `guests`, `consent` — required and optional, pre-filled and not: an optional range pre-filled at one end (both ends turn required), a range with no `labels` (named by the field's label), two malformed options (skipped), a consent with a privacy link. Its submit is answered with the **keys** received, so a blank optional field visibly stays out and the answer itself carries no value (the guest bubble above it is the filled `submit_message`, values and all, by design). `room` is required: the contract promises every `{name}` in a template names a required field |
 | `!badform` | two forms. The first is hostile in every string — markup setting the `window.__ncXss` sentinel, a 120-character unbroken label, Arabic (`dir="auto"`), a `javascript:` consent link, bounds and values that are not dates or numbers, `null` where objects belong, `{constructor}` / `{__proto__}` tokens — and must render inertly: no script runs, the label wraps inside the panel, the link is gone. The second has a `kind` this build does not know and must not render at all |
 | `!pictures` | a `quick_replies` row of picture chips (1.16.0 `image`): one with `image_alt`, one without (`alt=""`), one `javascript:` image (dropped, chip kept), the keyed **Book a bed** as a tile (answers with the form), and one chip with no key (sends no `action`) |
 | `!ukchips` | a tenant `quick_prompts` row under a **turn's** reply (1.15.2) with `locale: 'uk'` (1.16.1, D-114): drawn like any row, `lang="uk"` — nothing checks a row's `locale` against the five packs |
+| `!heading` | the card + availability pair with a hostile 1.17.0 `heading` — markup setting the `window.__ncXss` sentinel, a 200-character unbroken token, Arabic (the RTL branch of `dir="auto"`). Shown as text with no child nodes, wrapped inside the prices card at every width, `window.__ncXss` stays `undefined`, and `setLocale()` leaves it exactly as it arrived |
 
 `Mock.init` returns **two** `quick_replies` rows — the tenant's "try asking" prompts and the
 island chips — mirroring a real welcome payload; both prompt messages chain into the table above
@@ -1062,4 +1086,11 @@ cache entries, and no `localStorage` either, which is usually what you wanted an
   no `window.NestChatbot` member. A patch: the upstream prompt asked for a minor, 2.14.0, "since a
   guest-visible feature lands", and was overruled by this rule — new UI behaviour is patch-shaped
   here, and a host is asked only to move the embed tag's query to `?v=2.13.4`, which is about their
-  cache. The next release is **2.13.5** unless a host has to act.
+  cache.
+  2.13.5 is the 1.17.0 sync (D-115): a fresh packet and a `BUILT_AGAINST` move, the server's
+  `heading` drawn over an availability card, the card and its prices side by side on the expanded
+  sheet, and the availability card in the property card's white — no pack key, no `data-*`
+  attribute, no `window.NestChatbot` member, no `wchat:*` payload and no `state` field touched. A
+  patch, and the upstream prompt asked for one ("by your own rule"). It took the number the
+  click-counting build had been promised; that build is now 2.13.6 (owner decision, 2026-10-27).
+  The next release is **2.13.6** unless a host has to act.

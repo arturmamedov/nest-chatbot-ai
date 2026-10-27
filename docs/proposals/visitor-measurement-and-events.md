@@ -42,7 +42,7 @@ with `source: 'form'` and its `length`; what the guest filled in — dates and a
 email or a phone on a later form — never enters a payload.
 
 **Click counting (D-113) was decided on 2026-10-27: accepted with conditions, as the one bounded
-exception to [the hard constraint](#the-hard-constraint), to be built in 2.13.5.** Nothing in the
+exception to [the hard constraint](#the-hard-constraint), to be built in 2.13.6.** Nothing in the
 table below moves for it — `wchat:action` stays exactly as it is, and the count's own attribute
 gates that one request, never the events. The reasoning is
 [§ The one exception](#the-one-exception-d-113-click-counting-decided-2026-10-27).
@@ -112,7 +112,7 @@ and short-lived, which is much of why it has been uncontroversial.
 it merges strangers and splits one guest across their phone and the lobby machine. Recorded
 here so it is not re-proposed.
 
-### D — count CTA clicks on the platform's own endpoint. **Accepted with conditions (2026-10-27), not yet built — it lands in 2.13.5.**
+### D — count CTA clicks on the platform's own endpoint. **Accepted with conditions (2026-10-27), not yet built — it lands in 2.13.6.**
 
 Contract 1.16.0's `POST …/{uuid}/events` (D-113). Not a visitor route — it counts clicks per
 conversation and says nothing about who came back — but the one way a click reaches wSuite's
@@ -138,7 +138,7 @@ request and nothing else.)
 **Asked by** the wSuite platform, as the 1.16.1 packet's APPENDIX-A (nest-mind
 `modules/chatbot/docs/consumer-sync.md` §5), sent beside the 2.13.4 sync and deliberately not
 inside it. **Decided by** the owner, 2026-10-27. **Outcome: accepted with conditions. Not built**
-— it lands in 2.13.5, and until then nothing reads `analytics` or calls the endpoint.
+— it lands in 2.13.6, and until then nothing reads `analytics` or calls the endpoint.
 
 **What was asked.** `POST /api/v1/chatbot/conversations/{uuid}/events`, body
 `{type: "cta_click", element, cta, turn?}`, when a guest clicks a call to action — Book, a card,
@@ -215,7 +215,7 @@ No new origin, no CSP entry, and nothing reported unless the site's owner switch
   host's count and wSuite's cannot disagree on what a click is. `wchat:action` stays exactly as
   it is: route A is not replaced.
 - **C6. Two keys, both required** — the wSuite setting (C2) **and** the host page's attribute
-  (owner-confirmed). Names provisional until 2.13.5 ships them:
+  (owner-confirmed). Names provisional until 2.13.6 ships them:
 
   | `data-count-clicks` | Reports, while the site's `analytics` is on |
   |---|---|
@@ -238,7 +238,7 @@ either way, so it went into the hand-over instead.
 
 **For site 2, stated so nobody is surprised.** In the default `consent` mode nestshostels.com
 counts nothing until its GTM passes the visitor's consent on; with `data-count-clicks="true"`,
-backed by its privacy policy, it counts every visitor. The choice is the owner's at the 2.13.5
+backed by its privacy policy, it counts every visitor. The choice is the owner's at the 2.13.6
 rollout. Either way the policy should describe the count as it is: which chat buttons are
 clicked, and in which reply; no text, no link, no contact detail; stored by wSuite as processor
 and deleted with the conversation after 12 months — pseudonymous, never "anonymous". Whether
@@ -246,7 +246,8 @@ and deleted with the conversation after 12 months — pseudonymous, never "anony
 both answers.
 
 **Numbering.** The build adds one `data-*` attribute and one `window.NestChatbot` method, both
-additive, so 2.13.5 is a patch. This decision moved no version.
+additive, so 2.13.6 is a patch. This decision moved no version. (It was 2.13.5 when decided; the
+contract 1.17.0 sync shipped first and took that number, owner decision 2026-10-27.)
 
 ---
 

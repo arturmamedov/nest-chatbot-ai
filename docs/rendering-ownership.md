@@ -1,6 +1,6 @@
 # Rendering ownership — what the server supplies, what the widget composes
 
-**About:** the Nest Chatbot drop-in widget (`nest-chatbot.js`), current as of release 2.13.4.
+**About:** the Nest Chatbot drop-in widget (`nest-chatbot.js`), current as of release 2.13.5.
 **For:** anyone asking "who writes this string?" — before changing a renderer, adding an element
 type, or deciding whether something belongs in a pack or on the wire.
 
@@ -35,10 +35,15 @@ guest sees comes down the wire, and which does the widget make up?**
 > intro, labels, options, placeholders, the submit label and the `submit_message` template — is
 > the server's. The widget composes structure, ids, native controls and the filled message, and
 > adds **no** pack string; the validation bubbles are the browser's own, in the browser's language.
+>
+> Since 1.17.0 the **server** also says **what a stay's prices are for**: `availability.heading`,
+> "Prices for 3 nights for 2 guests", written and translated upstream so that a reworded line or a
+> language beyond our five packs reaches the guest with no widget release (O-74). The widget draws
+> it and composes nothing in its place — not from `summary`, which stays data.
 
 Everything in the table below follows from that, including the case that looks inconsistent at first
-glance — `availability` sends no display text at all, while `property_cards` sends almost nothing
-but.
+glance — `availability` sends almost no display text (one line since 1.17.0, the `heading`), while
+`property_cards` sends almost nothing but.
 
 The reason is not an oversight upstream, it is stated policy. `response-contract.md` § Reading
 `price_from`:
@@ -65,7 +70,7 @@ on an English figure.
 | **`link_button`** | `label`, localized server-side. Plus `url`, the `style` hint and, since 1.16.0, `id` (`book` \| `website` \| `directions`). | Nothing. The `style` hint is honoured, not composed, and `id` is never displayed: it is read only into `wchat:action`'s `cta` (`linkCta()`), `null` for an id this build does not know. |
 | **`booking_link`** | `url` only — **no label on the wire at all**. Plus the optional `summary` object. | `t('book')`. |
 | **`contact_channels`** | The raw `phone` / `whatsapp` / `email` **values** and, since 1.14.0, an optional `prefill`: `text` (a server-localized message in the guest's voice around their own words, verbatim), `subject`, and `hint` (a server-localized caption). No labels, no hrefs. | The labels (`tf('call', …)`, `t('whatsapp')`, `tf('email', …)`), the preview's caption and accessible name (`t('prefillCaption')` — `hint` is ignored; the pack carries the server's own translations), **and** every href: `tel:` (separators stripped, then `+` kept, a leading `00` turned into `+`, bare digits otherwise), `https://wa.me/<digits>` (neither `+` nor `00`), `mailto:` — constructed here from the values, never taken verbatim, and since 1.14.0 with `?text=` / `?subject=&body=` appended percent-encoded from what the preview shows at tap time. `prefill.text` itself is payload: the read-only textarea's value, above the links, never repainted, never in an event or a log. |
-| **`availability`** | **No display text.** `room` (the PMS's raw vendor name), `price` / `total` / `currency` as decimal strings and an ISO 4217 code, `basis` as a bare enum (`per_person` \| `per_unit`), `units` as an int, `url`, and the `available` boolean. | **Every word.** The group headings ("Beds in shared rooms" / "Private rooms"), the count nouns ("2 beds"), the unit labels ("per bed"), the fold button ("Show 3 more" / "Show less"), `t('noAvailability')`, and `t('book')` on the trailing CTA. |
+| **`availability`** | **One display line, since 1.17.0:** `heading` — what the options are priced for ("Prices for 3 nights for 2 guests", or "Prices for 3 nights" when the guest stated no party), **localized server-side**, sent on a synchronous answer with options and never on the async tool path. Otherwise data: `room` (the PMS's raw vendor name), `price` / `total` / `currency` as decimal strings and an ISO 4217 code, `basis` as a bare enum (`per_person` \| `per_unit`), `units` as an int, `url`, the `available` boolean, and `summary` (`property`, `check_in`, `check_out`, `adults` — `null` for an unstated party), which this widget does not read. | **Every other word.** The group headings ("Beds in shared rooms" / "Private rooms"), the count nouns ("2 beds"), the unit labels ("per bed"), the fold button ("Show 3 more" / "Show less"), `t('noAvailability')`, and `t('book')` on the trailing CTA. `heading` is drawn verbatim at the top of the card (`optionsTitle()`, `dir="auto"`), and when it is absent **nothing** stands in for it: never a stay label composed from `summary`, from `units` (a room count, not a party) or from the booking url's `adults`. Layout is the widget's too: since 2.13.5 a one-card `property_cards` followed by its `availability` share one `.nc-stay` wrapper, side by side on the expanded sheet (`renderStayPair()`). |
 | **`form`** *(since 1.16.0)* | **Every displayed string**: `title`, `intro`, each field's `label`, a `date_range`'s `labels.from` / `labels.to`, a select's option `label`s, `placeholder`s, a `consent` field's `link.label`, the `submit_label` — all localized server-side — and the `submit_message` template. Plus as data: `id`, each field's `name`, `kind`, `required`, `min` / `max`, pre-filled `value`, a select's option `key`s and the consent `link.url`. | **No pack string.** Structure and native controls — a `<form>` named by its `title` (else `submit_label`), a `<label for>` per input with `nc-f-*` ids, two date inputs whose ends are named by `labels` or else by the field's own `label` (never by words this widget would invent), a select's blank first option, `dir="auto"` on free text — and the guest's message: `submit_message` with each `{name}` filled by the chosen option's **label**, a range's `from → to`, or the value typed, shown as their bubble. The validation messages are the browser's, in the browser's language. A form this build cannot draw is dropped whole rather than patched. |
 | **`conversation_ended`** | Nothing displayed — it is a state signal. | `t('newChat')` and the restart affordance around it. |
 | **`async_result`** | Nothing displayed — `url` only. | Nothing; the interim reply is ordinary `reply` text. |
@@ -118,7 +123,9 @@ host's call since 2.13.1; there is no on-screen switcher:
 - **Payload text is frozen** once rendered. Repainting a server string from a pack would be
   inventing a translation the tenant did not write. So `promo_card` copy, `quick_replies` labels and
   headings, `link_button` labels, card names, badges and (1.16.0) reasons, every string in a `form`,
-  and the `prefill` preview's text all stay as they arrived. So does the assistant's **name** (1.15.0): `setLocale('es')` turns "Ask Nesti
+  the `prefill` preview's text and (1.17.0) an availability card's `heading` all stay as they
+  arrived — the heading carries its own class, `.nc-options-title`, so the card's repaint, which
+  matches `.nc-options-heading`, cannot reach it. So does the assistant's **name** (1.15.0): `setLocale('es')` turns "Ask Nesti
   anything…" into "Pregunta lo que quieras a Nesti…", and the only thing that did not move is the
   name. `paintAssistant()` is that repaint — one function for the header title, the dialog label,
   the placeholder and the launcher label, reading the name it was given and the pack it is in.
@@ -134,7 +141,8 @@ host's call since 2.13.1; there is no on-screen switcher:
   gap, not a rule.)
 
 The 2.11.1 availability card is the worked example — its headings, count nouns, unit labels and
-fold label all repaint, while `room` and the figures do not — and the day-separator pills are the
+fold label all repaint, while `room`, the figures and (since 2.13.5) the server's `heading` above
+them do not — and the day-separator pills are the
 older one. Both carry what they re-derive *from* as a `data-nc-*` stamp on the node itself: the
 card's `basis` / `units` / joined price, the pill's stored epoch. A repaint with nothing to read
 back would have to keep a registry there is nothing to keep in step with.
@@ -179,6 +187,8 @@ two ever disagree:
   `telNumber()`, `prefillOf()` and `composeOnTap()` since 2.13.1), `renderAvailability()` and its
   helpers, and `linkButton()`. Since 2.13.4: `cardStay()` / `stayText()` / `orderText()`,
   `chipKey()` / `makeChipHandler()`, `linkCta()`, and the form — `renderForm()`, `formField()` with
-  `textField()` / `selectField()` / `rangeField()` / `consentField()`, and `retireForms()`.
+  `textField()` / `selectField()` / `rangeField()` / `consentField()`, and `retireForms()`. Since
+  2.13.5: `optionsTitle()` (the 1.17.0 `heading`) and `isStayPair()` / `renderStayPair()` (layout
+  only — no string).
 - **The repaint rule** — `setLocale()` in § `flow`, and `CHANGELOG.md` 2.11.1 § "The card follows
   the language switcher".

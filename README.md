@@ -61,7 +61,7 @@ says it is an AI: the label beside the name and the line under the composer are 
 no setting removes them.
 
 One thing on your side: if your server lets browsers cache the script for a long time, add a
-version query to the tag when you update it (`…/nest-chatbot.js?v=2.13.4`). Releases up to 2.13.1
+version query to the tag when you update it (`…/nest-chatbot.js?v=2.13.5`). Releases up to 2.13.1
 carried a built-in name, and a browser still holding one of those shows it until its copy expires.
 
 ### `data-back-button`, and when to turn it off
@@ -154,7 +154,7 @@ NestChatbot.toggle();
 NestChatbot.setLocale('es');  // the widget's labels, and the visitor's preferred reply language from the next message
 NestChatbot.destroy();
 NestChatbot.locale;    // 'es' — the widget's display language
-NestChatbot.version;   // '2.13.4'
+NestChatbot.version;   // '2.13.5'
 NestChatbot.state;     // a snapshot — see Measuring it, below
 ```
 
@@ -306,9 +306,11 @@ NestChatbot.state;
   assistant" label.
 - Replies typed out character by character, with a thinking indicator while the API works.
 - Booking buttons, contact links (phone, WhatsApp, email) and live availability — beds and
-  private rooms grouped, three of each with the rest one tap away, and what the whole party pays
-  when the server knows it — rendered from the API's structured response, never parsed out of the
-  reply text.
+  private rooms grouped, three of each with the rest one tap away, what the whole party pays
+  when the server knows it, and a line at the top saying what the prices are for ("Prices for 3
+  nights for 2 guests"), written by the server in the visitor's language — rendered from the API's
+  structured response, never parsed out of the reply text. On the wide expanded panel a hostel's
+  card and its prices sit side by side.
 - A Book panel: tapping "Book a bed" opens a short form in the chat — a hostel or a whole island,
   the dates, the party size — already filled in with what the conversation knows. Its answer is
   live prices for that stay: one hostel's rooms and beds, or the island's hostels as cards,

@@ -59,7 +59,7 @@
     // server ships an element/field we don't render yet — we warn ONCE and carry on
     // (the ignore-unknown rule keeps us fully functional; NEVER hard-fail). This is
     // the exact pattern the external nest-chatbot-ai widget copies.
-    var BUILT_AGAINST = '1.16.1';
+    var BUILT_AGAINST = '1.17.0';
 
     // Upper bound on each `assistant` string this widget will paint (1.15.0). The
     // server already guarantees a short name; this only stops a malformed or
@@ -327,6 +327,7 @@
             '.wsc-card-loc{font-size:12px;color:#6b7280;margin-top:2px}',
             '.wsc-card-price{font-size:13px;font-weight:600;color:#1f2430;margin-top:4px}',
             '.wsc-avail{font-size:13px;color:#1f2430;margin:4px 0}',
+            '.wsc-avail-heading{font-size:12px;font-weight:600;color:#6b7280;margin:8px 0 2px}',
             '.wsc-card-cta{display:block;text-align:center;margin-top:8px}',
             '.wsc-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}',
             // 1.7.0 quick_replies heading. `flex:0 0 100%` is what lets it live
@@ -529,7 +530,7 @@
         // booking_link (1.6.0). Before 1.10.0 the whole branch returned early on
         // the second case and lost the rows with it.
         if (action.type === 'availability') {
-            availabilityTotals(action.options); // 1.8.0 -- renders nothing for a pre-1.8.0 option
+            availabilityTotals(action.options, action.heading); // 1.8.0 -- renders nothing for a pre-1.8.0 option
             if (!action.url) { return; }
             if (cardUrls && cardUrls[action.url]) { return; }
             if (rendered && rendered[action.url]) { return; }
@@ -898,11 +899,23 @@
     // as before 1.8.0 -- and since 1.9.1 the reply text lists the options ONLY
     // when one of them lacks a total, which is exactly that case (D-072); on a
     // list where every option carries one, these lines are the guest's list.
-    function availabilityTotals(options) {
+    // 1.17.0 (D-115): `heading` is the server's own line saying what the options
+    // are priced for ("Prices for 3 nights for 2 guests"), already in the guest's
+    // language. It goes above the first line drawn, via textContent, and only
+    // when a line is drawn; absent means none -- never a label composed here
+    // from `summary`.
+    function availabilityTotals(options, heading) {
         if (!options || !options.length) { return; }
+        var headed = false;
         for (var i = 0; i < options.length; i++) {
             var o = options[i];
             if (!o || o.total == null || o.units == null) { continue; }
+            if (!headed) {
+                headed = true;
+                if (typeof heading === 'string' && heading !== '') {
+                    els.body.appendChild(el('div', 'wsc-avail-heading', heading));
+                }
+            }
             var unit = o.basis === 'per_person' ? 'bed' : 'room';
             var text = o.units + ' ' + (o.units === 1 ? unit : unit + 's') + ' · ' + (o.room || '')
                 + ' — ' + o.total + (o.currency ? ' ' + o.currency : '') + ' total';

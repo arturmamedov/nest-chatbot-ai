@@ -29,11 +29,12 @@
  *   submit_message, their own bubble and the stored transcript; it never enters
  *   a wchat:* payload or a log() line either.
  *
- * Built against response contract 1.16.1 (BUILT_AGAINST, api section), in
- * lockstep with the packet vendored in docs/wsuite/ — release 2.13.4 is the sync
- * that adopted it (D-109, D-111, D-112, D-114: the Book panel, keyed and picture
- * chips, stay totals on cards; D-113's click counting is NOT adopted — this
- * widget sends no request of its own). BUILT_AGAINST records what this code implements, not
+ * Built against response contract 1.17.0 (BUILT_AGAINST, api section), in
+ * lockstep with the packet vendored in docs/wsuite/ — release 2.13.5 is the sync
+ * that adopted it (D-115: the server's own `heading` over an availability card).
+ * 2.13.4 adopted the Book panel (D-109, D-111, D-112, D-114); D-113's click
+ * counting is accepted but not built yet — until it is, this widget sends no
+ * request of its own. BUILT_AGAINST records what this code implements, not
  * what the docs say. The server reports its live contract_version at init; the
  * widget warns once — never fails — when the server is ahead. The reference
  * implementation is docs/wsuite/chatbot.reference.js — consult it when a detail of
@@ -42,7 +43,7 @@
 (function () {
     'use strict';
 
-    var VERSION = '2.13.4';
+    var VERSION = '2.13.5';
 
     /* =========================================================== config ===== */
 
@@ -1106,7 +1107,7 @@
     // server ships an element or field we do not render yet — warn ONCE and carry
     // on (the ignore-unknown rule keeps the widget fully functional; NEVER
     // hard-fail).
-    var BUILT_AGAINST = '1.16.1';
+    var BUILT_AGAINST = '1.17.0';
     var contractWarned = false;
 
     // Compare dotted numeric versions a vs b: >0 if a is newer, <0 if older, 0 equal.
@@ -1241,7 +1242,10 @@
      *                 CTA and availability.url the SAME composed string. Exactly
      *                 one Book affordance may render — the card's — and every
      *                 option row must survive it (three groups, one row each, no
-     *                 fold). Suppression path: the per-turn `rendered` set
+     *                 fold). Suppression path: the per-turn `rendered` set.
+     *                 Side by side on the expanded sheet (renderStayPair()), and
+     *                 NO `heading` — the pre-1.17.0 server — so no line above the
+     *                 groups although `summary` carries the stay
      *   "cardbook"  → the other arm of the same pair: [property_cards,
      *                 booking_link], equal urls, no cta_label so both would have
      *                 said "Book now". Suppression path: the `cardUrls` pre-scan.
@@ -1252,7 +1256,8 @@
      *                 group with the rest behind one "Show 3 more", four privates
      *                 proving the OPTIONS_MAX + 1 slack path, the party's `total`
      *                 as the figure with the per-bed price under the name, and one
-     *                 option WITHOUT the trio that must render as before 1.8.0
+     *                 option WITHOUT the trio that must render as before 1.8.0.
+     *                 Carries the 1.17.0 `heading`, drawn once above the groups
      *   "tenerife" / "canaria" / "ibiza" → property_cards + promo_card + the CTA
      *                 trio. The rail is also the 1.6.x showcase: per-card
      *                 period/basis (two DIFFERENT suffixes on one rail), a
@@ -1308,12 +1313,17 @@
      *                 tile, and one chip with no key (no action)
      *   "!ukchips"  → a tenant quick_prompts row on a TURN, locale "uk" (1.15.2,
      *                 1.16.1): drawn like any row, lang="uk"
+     *   "!heading"  → the card + availability pair with a hostile 1.17.0
+     *                 `heading` (markup, a 200-character token, Arabic): shown as
+     *                 text, wrapped inside its card, nothing runs
      *   anything else → a plain reply
      *
      * An ACTION turn (1.16.0) is answered by its action before any keyword is
      * read — see actionReply(). The welcome row's keyed "Book a bed" chip
      * answers with the contract's Book form; its submit with cheapest-first
-     * island cards (stay totals, a sold-out reason) or one hostel's availability.
+     * island cards (stay totals, a sold-out reason) or one hostel's card and
+     * availability, side by side on the expanded sheet, under the server's
+     * 1.17.0 `heading` — the nights, and the party only when Guests was filled.
      * The same chip's text typed without the action reaches "book" instead,
      * exactly as the server answers a message sent alone.
      *
@@ -1599,13 +1609,39 @@
             };
         }
 
+        // The server's stay wording, in English (nest-mind chat.php:
+        // stay_nights, stay_party, stay_with_party, availability_heading,
+        // book_panel_free, book_panel_party_assumed). The mock plays the
+        // server, so these strings are fixtures — the widget composes none of
+        // them, and reads nothing out of `summary` to say the same thing.
+        var MOCK_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        function mockShortDate(ymd) {
+            var p = String(ymd).split('-');
+            return parseInt(p[2], 10) + ' ' + MOCK_MONTHS[parseInt(p[1], 10) - 1];
+        }
+
+        // "3 nights for 2 guests", or "3 nights" for an unstated party — the
+        // server never names the one guest it assumed (D-068(b)); the reply's
+        // second line says that instead.
+        function mockStay(from, to, adults) {
+            var a = String(from).split('-');
+            var b = String(to).split('-');
+            var nights = Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000);
+            var stay = nights + (nights === 1 ? ' night' : ' nights');
+            return adults ? stay + ' for ' + adults + (adults === 1 ? ' guest' : ' guests') : stay;
+        }
+
         // The answer to a Book submit, the way the server shapes it: an island
         // is cheapest-first cards priced for the stay — a sold-out hostel last,
-        // with a reason and no total — and one hostel is its availability. The
-        // party totals are computed from the SAME party in both, so the island
-        // card and that hostel's own option can never quote one stay two ways:
-        // beds at 78 a head, private doubles at 165 for every two guests. A bed
-        // is always the cheaper of the two, for any party, so the fixed order
+        // with a reason and no total — and one hostel is the Ready path's pair
+        // (D-073): its catalog card, then its availability, the card's url the
+        // availability's byte for byte, and since 1.17.0 the server's `heading`
+        // saying what the options are priced for. The party totals are
+        // computed from the SAME party in both answers, so the island card and
+        // that hostel's own option can never quote one stay two ways: beds at
+        // 78 a head, private doubles at 165 for every two guests. A bed is
+        // always the cheaper of the two, for any party, so the fixed order
         // below really is cheapest first.
         function bookAnswer(values) {
             var dates = (values && values.dates && typeof values.dates === 'object') ? values.dates : {};
@@ -1618,17 +1654,30 @@
             var rooms = Math.ceil(party / 2);
             var room = (165 * rooms).toFixed(2);
             if (values && values.place === 'duque-nest') {
+                var duqueUrl = RESERVE + 'R5Sn9T' + stay;
+                var stayLine = mockStay(from, to, adults);
                 return {
-                    reply: 'Duque Nest has space from ' + from + ' to ' + to + ' — the options are just below.',
-                    actions: [{
-                        type: 'availability', available: true,
-                        options: [
-                            { room: 'Mixed dorm', price: '78.00', currency: 'EUR', basis: 'per_person', units: party, total: bed },
-                            { room: 'Private double', price: '165.00', currency: 'EUR', basis: 'per_unit', units: rooms, total: room }
-                        ],
-                        url: RESERVE + 'R5Sn9T' + stay,
-                        summary: { property: 'Duque Nest', check_in: from, check_out: to }
-                    }]
+                    reply: 'Showing prices for ' + stayLine + ' at Duque Nest (' + mockShortDate(from) + ' → ' +
+                        mockShortDate(to) + ').' +
+                        (adults ? '' : '\n\nThese prices are for 1 guest. Tell me if there are more of you.'),
+                    actions: [
+                        {
+                            type: 'property_cards', total: 1,
+                            items: [{ key: 'duque-nest', name: 'Duque Nest', location: 'Costa Adeje, Tenerife',
+                                image: GALLERY + '1.jpg', price_from: { amount: '26.00', currency: 'EUR' },
+                                cta_label: 'Book now', url: duqueUrl }]
+                        },
+                        {
+                            type: 'availability', available: true,
+                            options: [
+                                { room: 'Mixed dorm', price: '78.00', currency: 'EUR', basis: 'per_person', units: party, total: bed },
+                                { room: 'Private double', price: '165.00', currency: 'EUR', basis: 'per_unit', units: rooms, total: room }
+                            ],
+                            url: duqueUrl,
+                            summary: { property: 'Duque Nest', check_in: from, check_out: to, adults: adults },
+                            heading: 'Prices for ' + stayLine
+                        }
+                    ]
                 };
             }
             return {
@@ -1822,7 +1871,7 @@
                     // what a correct client clock should compute.
                     idle_hours: mockIdleHours(),
                     server_time: new Date().toISOString(),
-                    contract_version: '1.16.1'
+                    contract_version: '1.17.0'
                 }), 700);
             },
 
@@ -2003,6 +2052,37 @@
                     });
                 }
 
+                // ---- 1.17.0, harness-only -------------------------------------
+                // '!heading': the booking turn's pair with a hostile `heading` —
+                // markup that sets the !prefill sentinel if it is ever parsed, a
+                // 200-character unbroken token the card must wrap, and Arabic for
+                // the RTL branch of dir="auto". Not a prefix of any '!' name
+                // above, and none of them is a prefix of it.
+                if (q.indexOf('!heading') === 0) {
+                    var hostileUrl = RESERVE + 'R5Sn9T?checkin=2026-11-17&checkout=2026-11-20&adults=2';
+                    return reply(done, 200, {
+                        reply: 'Prices for those nights are just below.',
+                        actions: [
+                            {
+                                type: 'property_cards', total: 1,
+                                items: [{ key: 'duque-nest', name: 'Duque Nest', location: 'Costa Adeje, Tenerife',
+                                    image: GALLERY + '1.jpg', url: hostileUrl }]
+                            },
+                            {
+                                type: 'availability', available: true,
+                                options: [
+                                    { room: 'Mixed dorm', price: '78.00', currency: 'EUR', basis: 'per_person', units: 2, total: '156.00' },
+                                    { room: 'Private double', price: '165.00', currency: 'EUR', basis: 'per_unit', units: 1, total: '165.00' }
+                                ],
+                                url: hostileUrl,
+                                heading: '<img src=x onerror="window.__ncXss=1"><script>window.__ncXss=1<\/script> ' +
+                                    new Array(201).join('P') + ' الأسعار لثلاث ليالٍ'
+                            }
+                        ],
+                        turn: turn
+                    });
+                }
+
                 // ---- the 1.12.0 unbound handoff (D-079) ---------------------
                 // The answer FIRST, and above every content branch below: a
                 // property_choice message carries a hostel's name, and these are
@@ -2138,6 +2218,11 @@
                                 // exact string. Exactly ONE Book affordance may be
                                 // on screen for this turn — the card's.
                                 url: stayUrl,
+                                // No `heading` on purpose: the pre-1.17.0 server's
+                                // shape. `summary` names the nights and the party,
+                                // and the card still says nothing about either —
+                                // a label composed from it would be ours, in five
+                                // languages, and that is the server's job now.
                                 summary: { property: 'Las Palmas Nest', check_in: '2026-09-14', check_out: '2026-09-17', adults: 2 }
                             }
                         ],
@@ -2229,7 +2314,11 @@
                                 { room: 'Male Dorm (Non-refundable)', price: '84.00', currency: 'EUR', basis: 'per_person', units: 2, total: '168.00' },
                                 { room: 'Family room', price: '270.00', currency: 'EUR' }
                             ],
-                            url: 'https://hotels.cloudbeds.com/en/reservation/uudLs6?checkin=2026-10-10&checkout=2026-10-13&adults=2'
+                            url: 'https://hotels.cloudbeds.com/en/reservation/uudLs6?checkin=2026-10-10&checkout=2026-10-13&adults=2',
+                            // 1.17.0 (D-115): what a synchronous answer with
+                            // options carries — the server's line, drawn at the
+                            // top of the card above both groups, never repainted.
+                            heading: 'Prices for 3 nights for 2 guests'
                         }],
                         turn: turn
                     });
@@ -3378,8 +3467,12 @@
      * `directions`, `more`, `promo`, or a contact channel. Written only from the
      * fixed values the callers pass — a link_button's payload `id` goes through
      * linkCta() first — so no payload string ever lands in the attribute.
+     *
+     * `parent` is where a NEW row goes, els.body when absent — set only by the
+     * stay pair (renderStayPair()), so a button a card or an availability opens
+     * stays in that element's column.
      */
-    function linkButton(label, url, style, row, rendered, kind, cta) {
+    function linkButton(label, url, style, row, rendered, kind, cta, parent) {
         var href = safeHttpUrl(url);
         if (!href) { log('dropped a non-http(s) url', url); return row; }
         var link = el('a', 'nc-action' + (style === 'primary' ? ' nc-action--primary' : ''), label || t('open_link'));
@@ -3391,7 +3484,7 @@
         if (style) { attrs(link, { 'data-wchat-style': style }); }
         if (!row) {
             row = el('div', 'nc-action-row');
-            els.body.appendChild(row);
+            (parent || els.body).appendChild(row);
         }
         row.appendChild(link);
         if (rendered) { rendered[href] = true; }
@@ -3445,8 +3538,64 @@
         // else closes the group.
         var row = null;
         for (var k = 0; k < actions.length; k++) {
+            // One card and the prices for it share a wrapper — see
+            // renderStayPair(). Both halves render something of their own, so
+            // the pair closes the group exactly as each of them does alone.
+            if (isStayPair(actions[k], actions[k + 1])) {
+                renderStayPair(actions[k], actions[k + 1], rendered);
+                row = null;
+                k += 1;
+                continue;
+            }
             row = renderAction(actions[k], bubble, row, cardUrls, rendered);
         }
+    }
+
+    /*
+     * The booking turn's pair (D-073): ONE property card immediately followed by
+     * the availability for that property — [property_cards, availability], card
+     * first, the shape a Ready booking turn and a one-hostel Book panel answer
+     * both take. Counted by what WILL render, through the same gate
+     * propertyCard() drops by, so a rail that loses all but one item still pairs
+     * and an item that would be dropped never leaves an empty column. The prices
+     * half must draw its card too: options, or the no-availability line. A
+     * one-card turn with nothing to set beside it renders as it always did.
+     */
+    function isStayPair(cards, next) {
+        if (!cards || cards.type !== 'property_cards' || !cards.items || !cards.items.length) { return false; }
+        if (!next || next.type !== 'availability') { return false; }
+        if (next.available !== false && !(next.options && next.options.length)) { return false; }
+        // Stops at two: a second card that will render makes it a rail.
+        var count = 0;
+        for (var i = 0; i < cards.items.length && count < 2; i++) {
+            if (renderableCardUrl(cards.items[i])) { count += 1; }
+        }
+        return count === 1;
+    }
+
+    /*
+     * Layout, not a new element type: both halves render through their own
+     * renderers, each into its own column, and CSS alone decides whether the
+     * columns stack (everywhere, by default — today's sequence) or sit side by
+     * side (the expanded sheet). One DOM, so there is no matchMedia here: the
+     * argument boot() makes about the expanded sheet — behaviour in a media
+     * query has no stylesheet half to agree with.
+     *
+     * Appended BEFORE either half renders: wireCarousel() measures on its first
+     * sync, and a wrapper still outside the document measures 0 against 0. The
+     * card renders FIRST, so its url is in `rendered` when renderAvailability()
+     * decides on its trailing Book button — exactly one Book affordance, the
+     * card's, as before the wrapper existed (the cardstay fixture).
+     */
+    function renderStayPair(cards, availability, rendered) {
+        var pair = el('div', 'nc-stay');
+        var cardCol = el('div', 'nc-stay-card');
+        var pricesCol = el('div', 'nc-stay-prices');
+        pair.appendChild(cardCol);
+        pair.appendChild(pricesCol);
+        els.body.appendChild(pair);
+        renderPropertyCards(cards, rendered, cardCol);
+        renderAvailability(availability, rendered, pricesCol);
     }
 
     /**
@@ -3575,8 +3724,9 @@
      * All three are pack strings around payload VALUES — for this element the
      * contract sends `basis` as a bare enum and no display text at all, so these
      * words are the widget's own and follow setLocale() like every other
-     * control. What is not ours: `room`, the PMS's vendor name, and the
-     * figures, which are the server's strings.
+     * control. What is not ours: `room`, the PMS's vendor name, the figures,
+     * which are the server's strings, and since 1.17.0 the `heading` line above
+     * the groups (optionsTitle()), which the server writes and translates.
      */
     function optionsHeadingText(basis) {
         return t(basis === 'per_person' ? 'bedsHeading' : 'roomsHeading');
@@ -3694,14 +3844,42 @@
         return more;
     }
 
+    /*
+     * `heading` (contract 1.17.0, D-115): the server's own line saying what the
+     * options are priced for — "Prices for 3 nights for 2 guests", or "Prices for
+     * 3 nights" when the guest stated no party — written and translated
+     * upstream, so a reworded line or a language beyond our five packs reaches
+     * the guest with no release here (O-74). Payload, by the rendering-ownership
+     * rule: textContent, frozen at setLocale() like a chip label or a card name.
+     * Hence its own class — the repaint matches .nc-options-heading, and this
+     * line must never be re-derived from a pack.
+     *
+     * Absent, empty or not a string — the async tool path, an answer with no
+     * options, an older server — means NO line, and never one of our own in its
+     * place: not from `summary` (which this file does not read), not from
+     * `units` (a per_unit option's units are rooms, not guests), not from the
+     * booking url's `adults`. Trimmed, so whitespace reads as absent — the
+     * quick_replies heading rule. dir="auto" because the server writes it in
+     * the guest's language, whatever that is.
+     */
+    function optionsTitle(heading) {
+        var text = (typeof heading === 'string' && heading.trim()) ? heading.trim() : null;
+        return text ? attrs(el('div', 'nc-options-title', text), { dir: 'auto' }) : null;
+    }
+
     // The options card closes any open CTA group; the trailing booking button opens a
-    // fresh row, which is returned for whatever follows.
-    function renderAvailability(action, rendered) {
+    // fresh row, which is returned for whatever follows. `parent` is the stay
+    // pair's column (renderStayPair()), els.body otherwise.
+    function renderAvailability(action, rendered, parent) {
+        var into = parent || els.body;
         if (action.available === false) {
-            els.body.appendChild(el('div', 'nc-options', t('noAvailability')));
+            into.appendChild(el('div', 'nc-options', t('noAvailability')));
         } else if (action.options && action.options.length) {
             var list = el('div', 'nc-options');
             var hidden = [];
+            // Above the groups, once: the line covers every option in the card.
+            var title = optionsTitle(action.heading);
+            if (title) { list.appendChild(title); }
             var groups = groupOptions(action.options);
             for (var g = 0; g < groups.length; g++) {
                 var group = groups[g];
@@ -3730,7 +3908,7 @@
             // card with nothing to reveal must not grow a control that does
             // nothing — the `available` poll fixture's single option.
             if (hidden.length) { list.appendChild(optionsToggle(hidden)); }
-            els.body.appendChild(list);
+            into.appendChild(list);
         }
         // TWO contract-scoped suppressions now ride this one `rendered` test, and
         // the second arrived with 1.10.0:
@@ -3754,7 +3932,7 @@
         // reference widget returned early here until 1.10.0 and did exactly that.
         var row = null;
         if (action.url && !(rendered && rendered[action.url])) {
-            row = linkButton(t('book'), action.url, 'primary', null, rendered, 'availability', 'book');
+            row = linkButton(t('book'), action.url, 'primary', null, rendered, 'availability', 'book', parent);
         }
         afterRender();
         return row;
@@ -4532,9 +4710,13 @@
      * Closes any open CTA group (renderAction returns null for it), so the
      * link_buttons a reply carries after the carousel still group into one
      * wrapping row of their own.
+     *
+     * `parent` is the stay pair's card column (renderStayPair()), els.body
+     * otherwise — everything this appends goes there, the `more` link included.
      */
-    function renderPropertyCards(action, rendered) {
+    function renderPropertyCards(action, rendered, parent) {
         if (!action.items || !action.items.length) { return; }
+        var into = parent || els.body;
 
         var track = el('div', 'nc-car-track');
         var count = 0;
@@ -4579,7 +4761,7 @@
         // from two cards up only: an order of one is the dots' furniture.
         var order = (action.ordering === 'cheapest' || action.ordering === 'ranked') ? action.ordering : null;
         if (order && count > 1) {
-            els.body.appendChild(attrs(el('div', 'nc-card-order', orderText(order)), { 'data-nc-order': order }));
+            into.appendChild(attrs(el('div', 'nc-card-order', orderText(order)), { 'data-nc-order': order }));
         }
 
         var fadeL = attrs(el('div', 'nc-car-fade nc-car-fade--l'), { 'aria-hidden': 'true' });
@@ -4613,8 +4795,9 @@
         // — which reads as "already at the end" and would hide the forward arrow
         // for good. A closed panel is only scaled, faded and visibility: hidden,
         // never display: none — all three leave the box in the layout — so the
-        // measurement is real even for a reply that arrives unopened.
-        els.body.appendChild(wrap);
+        // measurement is real even for a reply that arrives unopened. The stay
+        // pair's column is already in the document for the same reason.
+        into.appendChild(wrap);
         wireCarousel(wrap, track, [prev, fadeL], [next, fadeR], dots);
 
         // The overflow affordance (1.6.0). `more` WINS over `total`: a tappable
@@ -4625,9 +4808,9 @@
         var moreUrl = more ? safeHttpUrl(more.url) : null;
         if (moreUrl && typeof more.label === 'string' && more.label) {
             // Label is server-localized — textContent via linkButton, never t().
-            linkButton(more.label, moreUrl, null, null, rendered, 'property_cards_more', 'more');
+            linkButton(more.label, moreUrl, null, null, rendered, 'property_cards_more', 'more', parent);
         } else if (typeof action.total === 'number' && action.total > count) {
-            els.body.appendChild(el('div', 'nc-car-count', tf('showingOf', count, action.total)));
+            into.appendChild(el('div', 'nc-car-count', tf('showingOf', count, action.total)));
         }
         afterRender();
     }
@@ -6738,11 +6921,13 @@
         /*
          * The availability card is the widget's OWN words around the server's
          * numbers — group headings, count nouns, unit labels and the fold's
-         * label all come from the pack. For this element the contract sends
-         * `basis` as a bare enum and no display text at all, so localizing them
-         * is ours and they follow setLocale() like every other control. What
-         * stays frozen is PAYLOAD: `room` is the PMS's vendor name and the
-         * figures are the server's strings — neither is ours to repaint.
+         * label all come from the pack. For these the contract sends `basis` as
+         * a bare enum and no display text, so localizing them is ours and they
+         * follow setLocale() like every other control. What stays frozen is
+         * PAYLOAD: `room` is the PMS's vendor name, the figures are the server's
+         * strings, and the 1.17.0 `heading` line is the server's own translation
+         * — none of them ours to repaint, which is why that line's class,
+         * .nc-options-title, is not in the selector below.
          *
          * textContent on the SAME nodes, never replacements (armMenuConfirm()'s
          * rule): the guest may be standing on the fold button.

@@ -5,6 +5,133 @@ are the only version sites — there is no package.json (CLAUDE.md rule 1). Cont
 the vendored packet in `docs/wsuite/`; `BUILT_AGAINST` records which contract each release
 implements.
 
+## 2.13.5 — 2026-10-27
+
+**Contract sync: `BUILT_AGAINST` 1.16.1 → 1.17.0 (D-115) — the stay answer.** A **patch** by the
+rule `64ccaa2` set, and the upstream prompt asked for nothing more ("by your own rule"). Packet:
+`docs @ chatbot-contract-v1.17.0 (9aa1909) · widget @ 9aa1909` — the two halves share one sha this
+time; all three vendored files byte-match `nest-packet-1.17.0/`. This release takes the number
+the click-counting build had been promised; that build (D-113) is now **2.13.6**, owner decision.
+
+### 1.17.0 — the server says what a stay's prices are for
+
+- **`availability.heading` is drawn, and only drawn.** `optionsTitle()` puts the server's line —
+  "Prices for 3 nights for 2 guests", or "Prices for 3 nights" for an unstated party — once at the
+  top of the availability card, above the groups, through `textContent` with `dir="auto"`. It is
+  payload: frozen at `setLocale()` like a chip label, under its own class `.nc-options-title`
+  because the card's repaint matches `.nc-options-heading`. No pack key. Absent, empty or not a
+  string (the async tool path, an older server) draws nothing, and nothing stands in for it.
+- **`summary` is not read.** 1.17.0 names its four keys (`property`, `check_in`, `check_out`,
+  `adults`); this file still composes no display text from them, nor from `units` (a `per_unit`
+  option's units are rooms) or the booking url's `adults`. That was the "(3 nights, 2 guests)"
+  qualifier planned for this release; upstream now writes it (O-74), so a reworded line or a guest's
+  language beyond the five packs arrives with no release here.
+- The Book panel's reply line naming the stay ("Showing prices for 3 nights for 2 guests at Adeje
+  Nest (17 Nov → 20 Nov).") is reply text, the server's, and needed nothing.
+
+### The stay pair, side by side on the expanded sheet
+
+- A one-card `property_cards` immediately followed by an `availability` — the Ready booking turn
+  and the one-hostel Book panel answer, D-073's shape — now renders into one `.nc-stay` wrapper with
+  a card column and a prices column (`isStayPair()`, `renderStayPair()`, from `renderActions()`).
+  A column at every width, painting the same sequence as before; a row on the expanded sheet
+  (≥1024px with `.nc-expanded`, inside the existing media query), card left at its 200px, prices
+  filling the rest. One DOM, layout in CSS: no `matchMedia`.
+- "One card" is counted through `renderableCardUrl()`, the gate `propertyCard()` drops by, so the
+  card column is never empty; the prices half must draw its card (options, or
+  `t('noAvailability')`). A rail of two or more never pairs. `renderAction()`'s switch keeps one
+  branch per type: this is layout, not an element.
+- The wrapper is appended **before** either half renders (`wireCarousel()` measures on its first
+  sync), and the card renders **first**, so its url is in `rendered` when the availability decides
+  on its Book button: one Book affordance, the card's, exactly as before.
+- `renderPropertyCards()`, `renderAvailability()` and `linkButton()` take an optional `parent`
+  (the `renderQuickReplies(action, parent)` precedent); every other caller passes none and paints
+  as before. A replay goes through `renderActions()` too, so it paints the same structure.
+
+### CSS
+
+- **`.nc-options` wears the property card's surface at every width:** `--nc-surface-alt`, 14px,
+  `--nc-shadow-card` (whose hairline ring keeps a white card visible on the white body). Rows gain
+  7px of vertical padding and the column gap goes to 0, so the new hairline — `1px solid
+  var(--nc-border)` on `.nc-option + .nc-option` — sits midway between two rows and never under a
+  heading's first row or below a group's last. A no-basis option after another group gets one, which
+  reads as the group break it is. Group headings, the figure column, tabular numerals and the fold
+  keep their voice; two comments that justified `--nc-text` by the old grey now say why it still
+  holds on white.
+- **`.nc-options-title`:** 600 at the body size, `--nc-text`, the server's own casing (two uppercase
+  lines stacked would read as one label), `overflow-wrap: anywhere`. No font-family: the typography
+  seam stays at thirteen.
+- **`.nc-stay`** and its two columns: flex columns with the body's 15px gap. On the expanded sheet:
+  a row, 12px apart, top-aligned; the prices column `flex: 1 1 0; min-width: 0` with a 2px top pad
+  matching the card's track, so both cards' top edges share a line (measured: 327.6 / 327.6), and
+  the options card stretching to fill it.
+
+### Fixtures
+
+- Mock init `contract_version` → `1.17.0`.
+- **The Book panel's Duque answer** is now the Ready path's pair as a 1.17.0 server sends it:
+  Duque's catalog card, then its `availability` (same url), with `heading`, `summary.adults`, and
+  nest-mind's own reply strings — with Guests filled, "Prices for 3 nights for 2 guests" and
+  "Showing prices for 3 nights for 2 guests at Duque Nest (…)."; blank, "Prices for 3 nights",
+  `adults: null`, and the "These prices are for 1 guest. Tell me if there are more of you." line.
+- `rooms` carries a `heading`; `cardstay` deliberately does not (the older server, `summary`
+  present); `available` (the async path) never does.
+- **`!heading`** (new): the pair with a hostile heading — markup setting `window.__ncXss`, a
+  200-character unbroken token, Arabic.
+
+### Verified
+
+**Mock, headless Chrome 143 over the scratchpad CDP driver, each run on a fresh port with the
+cache disabled and the served file asserted first — 76 checks**, at three layouts: the 1280px
+expanded sheet, the 1280px floating panel, and 375px mobile:
+
+- the Book panel's Duque answer: heading "Prices for 3 nights for 2 guests" and the matching reply
+  line; with Guests blank, "Prices for 3 nights" and the 1-guest line;
+- the pair side by side on the sheet (card 610–810, prices 822–1240, tops equal) and stacked on the
+  other two; exactly one Book link per paired turn, the card's; `.nc-body` and the page never wider
+  than their boxes;
+- the card's geometry identical to HEAD at all three layouts (CTA 171.9px down a 215.9px card, 10px
+  from its foot);
+- white card, card shadow, 14px; hairlines exactly between rows (`rooms`: 0,1,1,1 · 0,1,1 · 1);
+- `cardstay`: no heading, all three rows, one Book; `available`: no heading, one Book, no fold;
+  `tenerife`: the rail unpaired with its dots; `cardbook`: unpaired, one Book;
+- `!heading`: `window.__ncXss` undefined, the line text with no child nodes, `dir="auto"`, wrapped
+  inside its card, no overflow;
+- `setLocale('es')`: all four headings byte-identical while the group labels repaint to "Camas en
+  dormitorio compartido" / "Habitaciones privadas";
+- a reload replays the same pairs, flex directions, rows, headings and Book counts;
+- the fold button keeps focus expanding and collapsing; no drift warn; no page exceptions.
+
+One thing measured and left alone, because HEAD does it identically: collapsing "Show less" while
+the transcript sits at its very bottom moves the view up by the rows it hides (HEAD 1246 → 1141,
+this release 1100 → 1028). The browser clamps `scrollTop` as the content shrinks, then
+`afterRender()`'s anchor pad grows it back.
+
+**Live, 2026-10-27, against the owner's local wSuite (`https://nest-mind.test`, the 1.17.0
+checkout, a dev key through the gitignored `demo/demo.html`), taps and submits only — 31 checks.**
+Each init `201` reported `contract_version: 1.17.0` (header too), and there was no drift warn.
+"Nest Pass", then its keyed "Book a bed", then Adeje Nest for 17 → 20 Nov:
+
+- **2 guests:** `[property_cards(1), availability]`, heading "Prices for 3 nights for 2 guests", reply
+  "Showing prices for 3 nights for 2 guests at Adeje Nest (17 Nov → 20 Nov).", drawn verbatim, side
+  by side, one Book affordance;
+- **Guests blank:** "Prices for 3 nights", `summary.adults: null`, the reply's second paragraph
+  "These prices are for 1 guest. Tell me if there are more of you.";
+- **`data-locale="es"`, a fresh conversation:** "Precios para 3 noches y 2 personas" and "Estos son
+  los precios para 3 noches y 2 personas en Adeje Nest (17 nov. → 20 nov.)." beside our own "Camas en
+  dormitorio compartido".
+
+The deployment was not re-measured: that needs Nest's live key. It last reported 1.15.1, and
+against it this release draws what 2.13.4 did, plus the white card and the pair.
+
+### Not changed
+
+No `data-*` attribute, no `window.NestChatbot` member, no `wchat:*` payload or name, no
+`NestChatbot.state` field, no pack key. Still not built: click counting (D-113), now 2.13.6.
+
+- **Deploy:** upload `nest-chatbot.js` and `css/nest-chatbot.css` to the WordPress theme and set the
+  embed tag's query to `?v=2.13.5`.
+
 ## 2.13.4 — 2026-10-27
 
 **Contract sync: `BUILT_AGAINST` 1.15.1 → 1.16.1 (D-109, D-111, D-112, D-114) — the Book panel.**

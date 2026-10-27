@@ -1275,18 +1275,27 @@
    long vendor name ("Bed in Room 4 (Female with 4 beds)") sizes the card past the
    panel and the figure at its right edge is CLIPPED, not scrollable. Stating it
    here also gives the row grid below a definite width to wrap its name column
-   against. */
+   against.
+
+   Since 2.13.5 it wears the property card's surface — white, the card's 14px
+   radius and its lift — at every width, so a booking turn's card and its prices
+   read as two cards of one answer, whether they stack or sit side by side
+   (.nc-stay). The shadow's second layer is the same hairline ring the card uses,
+   which is what keeps a white card on the white body from dissolving into it.
+   No gap: the rows space themselves (.nc-option) so the hairline between two of
+   them sits midway. */
 #nest-chatbot .nc-options {
     align-self: flex-start;
     max-width: 100%;
     font-size: 0.85rem;
     color: var(--nc-ink);
-    background: var(--nc-surface);
-    border-radius: 12px;
-    padding: 10px 14px;
+    background: var(--nc-surface-alt);
+    border-radius: 14px;
+    box-shadow: var(--nc-shadow-card);
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 0;
 }
 
 /* One option is a two-column row — the vendor's name, then the figure the guest
@@ -1307,6 +1316,18 @@
     grid-template-columns: minmax(0, 1fr) auto;
     column-gap: 12px;
     align-items: baseline;
+    padding: 7px 0;
+}
+
+/* The almost invisible line BETWEEN two rows, and only there: on the top edge of
+   a row that follows a row. A group heading or the server's title breaks the
+   adjacency, so a group's first row gets none, and nothing is drawn under a
+   group's last row. One case reads as a group break rather than a row break,
+   and is meant to: a no-basis option has no heading of its own, so the first one
+   after another group gets the line. A folded row is display: none and draws
+   nothing; revealed, it takes its line like any other. */
+#nest-chatbot .nc-option + .nc-option {
+    border-top: 1px solid var(--nc-border);
 }
 
 /* Vendor-authored, so an unbroken token must break rather than be clipped by the
@@ -1334,10 +1355,10 @@
    tracks so it sits under the name AND the figure rather than squeezing in beside
    the figure. Smaller and 400 is what makes it read as the footnote to the 600
    figure above it. --nc-text, NOT --nc-text-subtle, even though "muted" is the
-   brief: this line sits on the card's --nc-surface grey, where subtle measures
-   2.7:1 (the .nc-day rule records the measurement) — under the 4.5:1 a 12px
-   string that is meant to be READ needs. Size and weight carry the hierarchy;
-   colour is not asked to. */
+   brief: subtle measured 2.7:1 on the card's old --nc-surface grey (the .nc-day
+   rule records it), and on the white the card wears since 2.13.5 it is still
+   short of the 4.5:1 a 12px string that is meant to be READ needs. Size and
+   weight carry the hierarchy; colour is not asked to. */
 #nest-chatbot .nc-option-sub {
     grid-column: 1 / -1;
     font-size: 12px;
@@ -1349,11 +1370,12 @@
    this treatment and not .nc-chip-head's sentence case. Uppercased here and not
    in the pack, so a screen reader says the words. It carries the unit a
    single-unit row no longer states, which makes it content rather than
-   decoration: --nc-text for the same contrast reason as the line above, on the
-   same grey. Room above every heading but the card's first — the column's 4px
-   gap is "between rows", and a heading has to read as the start of something. */
+   decoration: --nc-text for the same contrast reason as the line above. Room
+   above every heading but the card's first — a heading has to read as the start
+   of something — and a little under it, before the first row's own padding. */
 #nest-chatbot .nc-options-heading {
-    margin-top: 6px;
+    margin-top: 10px;
+    margin-bottom: 1px;
     font-size: 10.5px;
     font-weight: 600;
     letter-spacing: 0.08em;
@@ -1365,6 +1387,24 @@
     margin-top: 0;
 }
 
+/* The server's line (contract 1.17.0 `heading`): what the options are priced
+   for, "Prices for 3 nights for 2 guests". The card's title, so it leads, in the
+   server's own capitalisation — NO text-transform: two uppercase lines stacked
+   over the first group would read as one label, and the server's casing is part
+   of the string it translated. 600 at the body size, --nc-text. Payload of any
+   length in any script, so it breaks anywhere rather than overflow the card. No
+   font-family: a div inherits, and the typography seam stays at thirteen. */
+#nest-chatbot .nc-options-title {
+    font-weight: 600;
+    color: var(--nc-text);
+    overflow-wrap: anywhere;
+    margin-bottom: 2px;
+}
+
+#nest-chatbot .nc-options-title + .nc-options-heading {
+    margin-top: 8px;
+}
+
 /* The fold's one control. .nc-prompt supplies the outlined pill — the family
    var, 600, border, cursor, hover, focus ring — so this states only what differs
    inside a card: it must not stretch into a full-width bar (a column flex child
@@ -1373,9 +1413,23 @@
    font-family: inherit is already in force under .nc-prompt's var. */
 #nest-chatbot .nc-options-more {
     align-self: flex-start;
-    margin-top: 4px;
+    margin-top: 6px;
     padding: 6px 12px;
     font-size: 12px;
+}
+
+/* The booking turn's pair (renderStayPair()): one property card and the
+   availability for it. A column here, at every width but the expanded sheet,
+   and each half a column too, both with the body's own 15px gap — so stacked,
+   the pair paints exactly the sequence the two elements painted as siblings of
+   .nc-body before the wrapper existed. The row lives in the expanded-sheet block
+   below; nothing in the JS knows which one is showing. */
+#nest-chatbot .nc-stay,
+#nest-chatbot .nc-stay-card,
+#nest-chatbot .nc-stay-prices {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
 }
 
 /* ---------------------------------------------------------- property carousel */
@@ -2580,6 +2634,40 @@
 
     #nest-chatbot.nc-expanded .nc-card {
         width: 200px;
+    }
+
+    /* The pair side by side: the card on the left at its own 200px, the prices
+       filling the rest — 670 less the body's 2 x 15px and up to ~10px of
+       scrollbar leaves about 418px, wide enough for the longest vendor name to
+       wrap rather than push. Top-aligned: the two cards are different heights by
+       nature, and stretching the shorter one would only grow it an empty foot.
+       min-width: 0 is what lets the prices column shrink below its rows'
+       max-content at all, so a long name wraps inside it instead of overflowing
+       the sheet. */
+    #nest-chatbot.nc-expanded .nc-stay {
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    #nest-chatbot.nc-expanded .nc-stay-card {
+        flex: 0 0 auto;
+    }
+
+    /* padding-top: the card sits 2px down its track — the room .nc-car-track
+       keeps for the card's shadow — so the prices start 2px down too, and the
+       two cards' top edges share one line. */
+    #nest-chatbot.nc-expanded .nc-stay-prices {
+        flex: 1 1 0;
+        min-width: 0;
+        padding-top: 2px;
+    }
+
+    /* Beside the card the prices card fills its column rather than hugging its
+       rows, so the two cards read as one composition, not as a card and a
+       stranded box. */
+    #nest-chatbot.nc-expanded .nc-stay-prices .nc-options {
+        align-self: stretch;
     }
 }
 
