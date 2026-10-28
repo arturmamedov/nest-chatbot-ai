@@ -309,8 +309,9 @@ NestChatbot.state;
   private rooms grouped, three of each with the rest one tap away, what the whole party pays
   when the server knows it, and a line at the top saying what the prices are for ("Prices for 3
   nights for 2 guests"), written by the server in the visitor's language — rendered from the API's
-  structured response, never parsed out of the reply text. On the wide expanded panel a hostel's
-  card and its prices sit side by side.
+  structured response, never parsed out of the reply text. Wherever the chat is wide enough — a
+  tablet, a phone on its side, the expanded panel — a hostel's card and its prices sit side by
+  side.
 - A Book panel: tapping "Book a bed" opens a short form in the chat — a hostel or a whole island,
   the dates, the party size — already filled in with what the conversation knows. Its answer is
   live prices for that stay: one hostel's rooms and beds, or the island's hostels as cards,

@@ -29,14 +29,19 @@ the click-counting build had been promised; that build (D-113) is now **2.13.6**
 - The Book panel's reply line naming the stay ("Showing prices for 3 nights for 2 guests at Adeje
   Nest (17 Nov → 20 Nov).") is reply text, the server's, and needed nothing.
 
-### The stay pair, side by side on the expanded sheet
+### The stay pair, side by side wherever it fits
 
 - A one-card `property_cards` immediately followed by an `availability` — the Ready booking turn
   and the one-hostel Book panel answer, D-073's shape — now renders into one `.nc-stay` wrapper with
   a card column and a prices column (`isStayPair()`, `renderStayPair()`, from `renderActions()`).
-  A column at every width, painting the same sequence as before; a row on the expanded sheet
-  (≥1024px with `.nc-expanded`, inside the existing media query), card left at its 200px, prices
-  filling the rest. One DOM, layout in CSS: no `matchMedia`.
+  Side by side wherever the transcript has room for both — 502px of content: a tablet, a phone on
+  its side, the expanded sheet — and stacked on the floating panel and an upright phone, painting
+  exactly the pixels the two elements painted as siblings. `flex-wrap` decides, from the pair's own
+  width, the way the form's two dates already sit side by side (`.nc-fill-range`); no breakpoint
+  and no `matchMedia`. One DOM, layout in CSS.
+- Folded in before release, at the owner's request, from a 768px tablet screenshot: the first cut
+  sat side by side on the expanded sheet only (≥1024px with `.nc-expanded`), which left a fullscreen
+  tablet's pair stacked beside half a transcript of empty space.
 - "One card" is counted through `renderableCardUrl()`, the gate `propertyCard()` drops by, so the
   card column is never empty; the prices half must draw its card (options, or
   `t('noAvailability')`). A rail of two or more never pairs. `renderAction()`'s switch keeps one
@@ -61,10 +66,15 @@ the click-counting build had been promised; that build (D-113) is now **2.13.6**
 - **`.nc-options-title`:** 600 at the body size, `--nc-text`, the server's own casing (two uppercase
   lines stacked would read as one label), `overflow-wrap: anywhere`. No font-family: the typography
   seam stays at thirteen.
-- **`.nc-stay`** and its two columns: flex columns with the body's 15px gap. On the expanded sheet:
-  a row, 12px apart, top-aligned; the prices column `flex: 1 1 0; min-width: 0` with a 2px top pad
-  matching the card's track, so both cards' top edges share a line (measured: 327.6 / 327.6), and
-  the options card stretching to fill it.
+- **`.nc-stay`**: a wrapping flex row, top-aligned, 12px between the columns and 13px between
+  lines. The card column is `flex: 0 1 auto`; the prices column `flex: 1 1 300px` — the floor the
+  prices card may sit beside the card at, so 190 + 12 + 300 = 502px of content flips it (512 beside
+  the sheet's 200px card) — with a 2px top pad matching the card's track. Beside, the two cards'
+  top edges share a line; wrapped, 13 + 2 is the body's 15px gap. Both columns `min-width: 0`, so
+  anything wider than an upright phone wraps rather than being clipped. The prices card hugs its
+  rows in every arrangement — flex-wrap cannot tell beside from wrapped, and a card stretched across
+  a 1000px fullscreen would put half a screen between a room and its price. Nothing about the pair
+  lives in a media query.
 
 ### Fixtures
 
@@ -87,9 +97,8 @@ expanded sheet, the 1280px floating panel, and 375px mobile:
 
 - the Book panel's Duque answer: heading "Prices for 3 nights for 2 guests" and the matching reply
   line; with Guests blank, "Prices for 3 nights" and the 1-guest line;
-- the pair side by side on the sheet (card 610–810, prices 822–1240, tops equal) and stacked on the
-  other two; exactly one Book link per paired turn, the card's; `.nc-body` and the page never wider
-  than their boxes;
+- the pair side by side on the sheet, tops equal, and stacked on the other two; exactly one Book
+  link per paired turn, the card's; `.nc-body` and the page never wider than their boxes;
 - the card's geometry identical to HEAD at all three layouts (CTA 171.9px down a 215.9px card, 10px
   from its foot);
 - white card, card shadow, 14px; hairlines exactly between rows (`rooms`: 0,1,1,1 · 0,1,1 · 1);
@@ -120,6 +129,23 @@ Each init `201` reported `contract_version: 1.17.0` (header too), and there was 
 - **`data-locale="es"`, a fresh conversation:** "Precios para 3 noches y 2 personas" and "Estos son
   los precios para 3 noches y 2 personas en Adeje Nest (17 nov. → 20 nov.)." beside our own "Camas en
   dormitorio compartido".
+
+**The flex-wrap layout, 2026-10-28 — 52 mock checks against HEAD `f5866a3` and 19 live.** In
+five layouts: the 1280px sheet, a 768px tablet and a 667×375 phone on its side sit side by side,
+with the tops equal. The floating panel and a 375px phone stack, and there the cards, the prices
+card, the 15px between them and the transcript height are pixel-identical to `f5866a3`. Also
+checked:
+- **Sweep:** a 470 → 620px fullscreen sweep flips at 503px of content. It never overflows, and no
+  room name goes past two lines. Live, "Privada 3 - Hab doble con terraza privada" takes two lines
+  at the flip and one at 768px.
+- **Resizes and toggles:** live resizes (375 → 768 → 375 → 700) and the sheet toggle at 1280 flip
+  the layout each time. Focus stays on the card's Book link, and the one-card carousel keeps its
+  arrows hidden.
+- **Replay:** a tablet reload replays the same boxes.
+- **Earlier suite:** the 76 checks above pass again.
+
+`nest-mind.test` now reports `1.17.1` (D-116, wording only), so the live init raises the one
+drift warn, as designed.
 
 The deployment was not re-measured: that needs Nest's live key. It last reported 1.15.1, and
 against it this release draws what 2.13.4 did, plus the white card and the pair.

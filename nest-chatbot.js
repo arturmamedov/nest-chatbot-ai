@@ -1322,7 +1322,7 @@
      * read — see actionReply(). The welcome row's keyed "Book a bed" chip
      * answers with the contract's Book form; its submit with cheapest-first
      * island cards (stay totals, a sold-out reason) or one hostel's card and
-     * availability, side by side on the expanded sheet, under the server's
+     * availability, side by side wherever they fit, under the server's
      * 1.17.0 `heading` — the nights, and the party only when Guests was filled.
      * The same chip's text typed without the action reaches "book" instead,
      * exactly as the server answers a message sent alone.
@@ -3576,9 +3576,9 @@
     /*
      * Layout, not a new element type: both halves render through their own
      * renderers, each into its own column, and CSS alone decides whether the
-     * columns stack (everywhere, by default — today's sequence) or sit side by
-     * side (the expanded sheet). One DOM, so there is no matchMedia here: the
-     * argument boot() makes about the expanded sheet — behaviour in a media
+     * columns sit side by side (wherever the transcript is wide enough for
+     * both, by flex-wrap) or stack. One DOM, so there is no matchMedia here:
+     * the argument boot() makes about the expanded sheet — behaviour in a media
      * query has no stylesheet half to agree with.
      *
      * Appended BEFORE either half renders: wireCarousel() measures on its first

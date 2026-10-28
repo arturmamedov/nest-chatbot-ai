@@ -1419,17 +1419,55 @@
 }
 
 /* The booking turn's pair (renderStayPair()): one property card and the
-   availability for it. A column here, at every width but the expanded sheet,
-   and each half a column too, both with the body's own 15px gap — so stacked,
-   the pair paints exactly the sequence the two elements painted as siblings of
-   .nc-body before the wrapper existed. The row lives in the expanded-sheet block
-   below; nothing in the JS knows which one is showing. */
-#nest-chatbot .nc-stay,
+   availability for it, side by side wherever the transcript has room for both
+   and stacked where it has not — decided by flex-wrap from the width the pair
+   actually has, the way .nc-fill-range sets two dates beside each other. No
+   breakpoint: the question is the pair's own width, which a viewport query only
+   guesses at (a 768px tablet holds a fullscreen panel with room to spare; the
+   420px floating card at 1280px has none). Nothing in the JS knows which one is
+   showing.
+
+   The prices column's 300px basis is the floor the prices card is allowed to sit
+   beside the card at — 190 + 12 + 300 = 502px of transcript, 512 on the
+   expanded sheet's 200px card — so the floating panel and a phone held upright
+   always stack, and a phone on its side, a tablet and the sheet sit side by
+   side. Wrapped, it takes the line and the card inside it still hugs its rows
+   (.nc-options' align-self), exactly as it did before the wrapper existed.
+   Beside, it hugs too, rather than stretching across the column: flex-wrap
+   cannot tell beside from wrapped, and a card stretched across a 1000px
+   fullscreen would put half a screen between a room and its price.
+
+   The 2px: the card sits 2px down its track (.nc-car-track's room for the
+   shadow), so the prices column starts 2px down too and the two cards' top edges
+   share a line beside each other. That is also why the row gap is 13, not the
+   body's 15 — wrapped, 13 + the 2px pad is the body's 15, so a stacked pair
+   paints the same pixels the two elements did as siblings of .nc-body.
+
+   Both columns shrink (min-width: 0, the card's flex-shrink 1): alone on a line
+   on a narrow phone, a label wider than the screen — a long `more` link under the
+   card — wraps instead of being clipped by .nc-body's overflow-x: hidden. */
+#nest-chatbot .nc-stay {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 13px 12px;
+}
+
 #nest-chatbot .nc-stay-card,
 #nest-chatbot .nc-stay-prices {
     display: flex;
     flex-direction: column;
     gap: 15px;
+    min-width: 0;
+}
+
+#nest-chatbot .nc-stay-card {
+    flex: 0 1 auto;
+}
+
+#nest-chatbot .nc-stay-prices {
+    flex: 1 1 300px;
+    padding-top: 2px;
 }
 
 /* ---------------------------------------------------------- property carousel */
@@ -2634,40 +2672,6 @@
 
     #nest-chatbot.nc-expanded .nc-card {
         width: 200px;
-    }
-
-    /* The pair side by side: the card on the left at its own 200px, the prices
-       filling the rest — 670 less the body's 2 x 15px and up to ~10px of
-       scrollbar leaves about 418px, wide enough for the longest vendor name to
-       wrap rather than push. Top-aligned: the two cards are different heights by
-       nature, and stretching the shorter one would only grow it an empty foot.
-       min-width: 0 is what lets the prices column shrink below its rows'
-       max-content at all, so a long name wraps inside it instead of overflowing
-       the sheet. */
-    #nest-chatbot.nc-expanded .nc-stay {
-        flex-direction: row;
-        align-items: flex-start;
-        gap: 12px;
-    }
-
-    #nest-chatbot.nc-expanded .nc-stay-card {
-        flex: 0 0 auto;
-    }
-
-    /* padding-top: the card sits 2px down its track — the room .nc-car-track
-       keeps for the card's shadow — so the prices start 2px down too, and the
-       two cards' top edges share one line. */
-    #nest-chatbot.nc-expanded .nc-stay-prices {
-        flex: 1 1 0;
-        min-width: 0;
-        padding-top: 2px;
-    }
-
-    /* Beside the card the prices card fills its column rather than hugging its
-       rows, so the two cards read as one composition, not as a card and a
-       stranded box. */
-    #nest-chatbot.nc-expanded .nc-stay-prices .nc-options {
-        align-self: stretch;
     }
 }
 
