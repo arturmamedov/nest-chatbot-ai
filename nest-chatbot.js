@@ -284,7 +284,7 @@
             openUnread: 'Open the chat — 1 new message',
             openUnreadNamed: 'Open %s, the AI assistant — 1 new message',
             teaser: 'Need a hand picking your Nest?', teaserDismiss: 'Dismiss',
-            subline: 'Nests Hostels · replies in seconds', aiAssistant: 'AI assistant',
+            aiAssistant: 'AI',
             expand: 'Expand the chat', shrink: 'Shrink the chat', menu: 'More options',
             tryAsking: 'Try asking',
             quickReplies: 'Quick replies',
@@ -344,7 +344,7 @@
             openUnread: 'Abrir el chat — 1 mensaje nuevo',
             openUnreadNamed: 'Abrir %s, el asistente IA — 1 mensaje nuevo',
             teaser: '¿Te ayudo a elegir tu Nest?', teaserDismiss: 'Descartar',
-            subline: 'Nests Hostels · responde en segundos', aiAssistant: 'Asistente IA',
+            aiAssistant: 'IA',
             expand: 'Ampliar el chat', shrink: 'Reducir el chat', menu: 'Más opciones',
             tryAsking: 'Prueba a preguntar',
             quickReplies: 'Respuestas rápidas',
@@ -385,7 +385,7 @@
             openUnread: 'Apri la chat — 1 nuovo messaggio',
             openUnreadNamed: 'Apri %s, l\'assistente IA — 1 nuovo messaggio',
             teaser: 'Ti aiuto a scegliere il tuo Nest?', teaserDismiss: 'Chiudi',
-            subline: 'Nests Hostels · risponde in pochi secondi', aiAssistant: 'Assistente IA',
+            aiAssistant: 'IA',
             // Not 'Riduci la chat': that is already `close` above, and the two
             // controls sit side by side in the header — one accessible name each.
             expand: 'Espandi la chat', shrink: 'Rimpicciolisci la chat', menu: 'Altre opzioni',
@@ -428,7 +428,7 @@
             openUnread: 'Chat öffnen — 1 neue Nachricht',
             openUnreadNamed: '%s öffnen, den KI-Assistenten — 1 neue Nachricht',
             teaser: 'Soll ich dir helfen, dein Nest zu finden?', teaserDismiss: 'Schließen',
-            subline: 'Nests Hostels · antwortet in Sekunden', aiAssistant: 'KI-Assistent',
+            aiAssistant: 'KI',
             expand: 'Chat vergrößern', shrink: 'Chat verkleinern', menu: 'Weitere Optionen',
             tryAsking: 'Frag zum Beispiel',
             quickReplies: 'Schnellantworten',
@@ -469,7 +469,7 @@
             openUnread: 'Ouvrir le chat — 1 nouveau message',
             openUnreadNamed: 'Ouvrir %s, l\'assistant IA — 1 nouveau message',
             teaser: 'Besoin d\'aide pour choisir ton Nest ?', teaserDismiss: 'Fermer',
-            subline: 'Nests Hostels · répond en quelques secondes', aiAssistant: 'Assistant IA',
+            aiAssistant: 'IA',
             // Not 'Réduire le chat': that is already `close` above, and the two
             // controls sit side by side in the header — one accessible name each.
             expand: 'Agrandir le chat', shrink: 'Rétrécir le chat', menu: 'Plus d\'options',
@@ -677,9 +677,9 @@
     }
 
     // The init body's `assistant` object, reduced to the one string this widget
-    // shows. `disclosure` is deliberately not read: it is byte-identical to the
-    // aiAssistant pack in all five locales, and a pack string can follow
-    // setLocale() — the prefill.hint precedent.
+    // shows. `disclosure` is deliberately not read: the badge is this widget's
+    // own short aiAssistant pack string ("AI", "IA", "KI"), and a pack string
+    // can follow setLocale() — the prefill.hint precedent.
     function assistantNameOf(raw) {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { return null; }
         return cleanName(raw.name);
@@ -875,8 +875,10 @@
         // line, on the existing data-debug gate: the contract-drift warn stays the
         // file's only ungated console output.
         if (thinnedActions || droppedTurns) {
-            log('store bounded', { thinnedActions: thinnedActions, droppedTurns: droppedTurns,
-                                   keptTurns: turns.length, chars: out.length });
+            log('store bounded', {
+                thinnedActions: thinnedActions, droppedTurns: droppedTurns,
+                keptTurns: turns.length, chars: out.length
+            });
         }
         return out;
     }
@@ -1433,9 +1435,10 @@
             var name = MOCK_NAME;
             if (mode === 'markup') { name = '<img src=x onerror="window.__ncXss=1">'; }
             if (mode === 'long') { name = new Array(501).join('W'); }
-            // `disclosure` as the server sends it: its own label, in the
-            // conversation's language. The widget reads past it.
-            body.assistant = { name: name, disclosure: t('aiAssistant') };
+            // `disclosure` as the server sends it: its own full label (guide
+            // §3.1), not the badge's short pack string. The widget reads past
+            // it, so the fixture does not localize it.
+            body.assistant = { name: name, disclosure: 'AI assistant' };
             if (name === MOCK_NAME) { body.greeting = tf('greetingNamed', MOCK_NAME); }
             return body;
         }
@@ -1596,13 +1599,17 @@
             return {
                 type: 'form', id: 'book', title: 'Book a bed',
                 fields: [
-                    { name: 'place', kind: 'select', label: 'Hostel or island', required: true, value: 'area:Tenerife',
+                    {
+                        name: 'place', kind: 'select', label: 'Hostel or island', required: true, value: 'area:Tenerife',
                         options: [
                             { key: 'area:Tenerife', label: 'Every hostel in Tenerife' },
                             { key: 'duque-nest', label: 'Duque Nest' }
-                        ] },
-                    { name: 'dates', kind: 'date_range', label: 'Dates', required: true,
-                        min: mockDay(0), max: mockDay(365), labels: { from: 'Check-in', to: 'Check-out' } },
+                        ]
+                    },
+                    {
+                        name: 'dates', kind: 'date_range', label: 'Dates', required: true,
+                        min: mockDay(0), max: mockDay(365), labels: { from: 'Check-in', to: 'Check-out' }
+                    },
                     { name: 'guests', kind: 'guests', label: 'Guests', min: 1, max: 12 }
                 ],
                 submit_label: 'See prices', submit_message: 'Prices for {place}, {dates}'
@@ -1663,9 +1670,11 @@
                     actions: [
                         {
                             type: 'property_cards', total: 1,
-                            items: [{ key: 'duque-nest', name: 'Duque Nest', location: 'Costa Adeje, Tenerife',
+                            items: [{
+                                key: 'duque-nest', name: 'Duque Nest', location: 'Costa Adeje, Tenerife',
                                 image: GALLERY + '1.jpg', price_from: { amount: '26.00', currency: 'EUR' },
-                                cta_label: 'Book now', url: duqueUrl }]
+                                cta_label: 'Book now', url: duqueUrl
+                            }]
                         },
                         {
                             type: 'availability', available: true,
@@ -1685,17 +1694,23 @@
                 actions: [{
                     type: 'property_cards', ordering: 'cheapest', total: 3,
                     items: [
-                        { key: 'duque-nest', name: 'Duque Nest', location: 'Costa Adeje, Tenerife', image: GALLERY + '1.jpg',
+                        {
+                            key: 'duque-nest', name: 'Duque Nest', location: 'Costa Adeje, Tenerife', image: GALLERY + '1.jpg',
                             price_from: { amount: '26.00', currency: 'EUR' },
                             stay_total: { amount: bed, currency: 'EUR', basis: 'per_person' },
-                            cta_label: 'Book now', url: RESERVE + 'R5Sn9T' + stay },
-                        { key: 'medano-nest', name: 'Medano Nest', location: 'El Médano, Tenerife', image: GALLERY + '3.jpg',
+                            cta_label: 'Book now', url: RESERVE + 'R5Sn9T' + stay
+                        },
+                        {
+                            key: 'medano-nest', name: 'Medano Nest', location: 'El Médano, Tenerife', image: GALLERY + '3.jpg',
                             price_from: { amount: '22.00', currency: 'EUR', period: 'night', basis: 'per_person' },
                             stay_total: { amount: room, currency: 'EUR', basis: 'per_unit' },
-                            badge: 'Nest Pass', url: RESERVE + '4VPKYG' + stay },
-                        { key: 'ashavana-nest', name: 'Ashavana Nest', image: GALLERY + '6.jpg',
+                            badge: 'Nest Pass', url: RESERVE + '4VPKYG' + stay
+                        },
+                        {
+                            key: 'ashavana-nest', name: 'Ashavana Nest', image: GALLERY + '6.jpg',
                             price_from: { amount: '24.00', currency: 'EUR', period: 'night', basis: 'per_unit' },
-                            reason: 'Fully booked for these dates', url: RESERVE + 'VKSq5o' + stay }
+                            reason: 'Fully booked for these dates', url: RESERVE + 'VKSq5o' + stay
+                        }
                     ]
                 }]
             };
@@ -1716,19 +1731,25 @@
                     { name: 'note', kind: 'textarea', label: 'Anything we should know?', placeholder: 'Late arrival, allergies…' },
                     { name: 'email', kind: 'email', label: 'Email', required: true, value: 'ana@example.com' },
                     { name: 'phone', kind: 'phone', label: 'Phone', placeholder: '+34 600 000 000' },
-                    { name: 'room', kind: 'select', label: 'Room type', required: true, placeholder: 'Choose…', value: 'private',
+                    {
+                        name: 'room', kind: 'select', label: 'Room type', required: true, placeholder: 'Choose…', value: 'private',
                         options: [
                             { key: 'dorm', label: 'Bed in a shared room' },
                             { key: 'private', label: 'Private room' },
                             { key: '', label: 'skipped: empty key' },
                             { label: 'skipped: no key' }
-                        ] },
-                    { name: 'dates', kind: 'date_range', label: 'Dates (optional)', min: mockDay(0), max: mockDay(365),
-                        value: { from: mockDay(7) }, labels: { from: 'Check-in', to: 'Check-out' } },
+                        ]
+                    },
+                    {
+                        name: 'dates', kind: 'date_range', label: 'Dates (optional)', min: mockDay(0), max: mockDay(365),
+                        value: { from: mockDay(7) }, labels: { from: 'Check-in', to: 'Check-out' }
+                    },
                     { name: 'stay', kind: 'date_range', label: 'Second stay', required: true, min: mockDay(0), max: mockDay(365) },
                     { name: 'guests', kind: 'guests', label: 'Guests', required: true, min: 1, max: 12, value: 2 },
-                    { name: 'terms', kind: 'consent', label: 'I agree to be contacted about this booking', required: true,
-                        link: { label: 'Privacy notice', url: 'https://nestshostels.com/privacy' } }
+                    {
+                        name: 'terms', kind: 'consent', label: 'I agree to be contacted about this booking', required: true,
+                        link: { label: 'Privacy notice', url: 'https://nestshostels.com/privacy' }
+                    }
                 ],
                 submit_label: 'Send',
                 submit_message: 'Details for {name} ({email}): {room}, {stay}, {guests} guests{terms}{nobody}'
@@ -1748,21 +1769,29 @@
                     type: 'form', id: 'xss', title: '<img src=x onerror="window.__ncXss=1"> Title',
                     intro: 'مرحبا — <b>not bold</b>',
                     fields: [
-                        { name: 'who', kind: 'text', required: true,
+                        {
+                            name: 'who', kind: 'text', required: true,
                             label: '<script>window.__ncXss=1<\/script> ' + new Array(121).join('W'),
-                            placeholder: '"><img src=x onerror="window.__ncXss=1">', value: '<b>prefill</b>' },
+                            placeholder: '"><img src=x onerror="window.__ncXss=1">', value: '<b>prefill</b>'
+                        },
                         { name: 'rtl', kind: 'textarea', label: 'الاسم الكامل — full name', value: null },
-                        { name: 'pick', kind: 'select', label: 'Pick <i>one</i>', required: true,
+                        {
+                            name: 'pick', kind: 'select', label: 'Pick <i>one</i>', required: true,
                             options: [
                                 { key: '"><script>window.__ncXss=1<\/script>', label: '<img src=x onerror="window.__ncXss=1">' },
                                 { key: 'ok', label: 'Plain option' },
                                 null
-                            ] },
-                        { name: 'when', kind: 'date_range', label: 'When', min: 'not-a-date', max: '2026-13-45',
-                            value: { from: 'javascript:1', to: '<b>' }, labels: null },
+                            ]
+                        },
+                        {
+                            name: 'when', kind: 'date_range', label: 'When', min: 'not-a-date', max: '2026-13-45',
+                            value: { from: 'javascript:1', to: '<b>' }, labels: null
+                        },
                         { name: 'n', kind: 'guests', label: 'Guests', min: '1', max: 'lots', value: '3' },
-                        { name: 'ok', kind: 'consent', required: true, label: 'I agree <a href="javascript:void 0">here</a>',
-                            link: { label: 'Privacy <b>notice</b>', url: 'javascript:window.__ncXss=1' } }
+                        {
+                            name: 'ok', kind: 'consent', required: true, label: 'I agree <a href="javascript:void 0">here</a>',
+                            link: { label: 'Privacy <b>notice</b>', url: 'javascript:window.__ncXss=1' }
+                        }
                     ],
                     submit_label: '<b>Send</b>', submit_message: '{who} picked {pick} {constructor}{__proto__}'
                 },
@@ -1787,8 +1816,10 @@
             return {
                 type: 'quick_replies', id: 'finder', locale: 'en', heading: 'Where are you headed?',
                 items: [
-                    { label: 'Tenerife', message: 'Tenerife', key: 'island-tenerife', image: GALLERY + '1.jpg',
-                        image_alt: 'Surfers on the beach at El Médano' },
+                    {
+                        label: 'Tenerife', message: 'Tenerife', key: 'island-tenerife', image: GALLERY + '1.jpg',
+                        image_alt: 'Surfers on the beach at El Médano'
+                    },
                     { label: 'Gran Canaria', message: 'Gran Canaria', key: 'island-gran-canaria', image: GALLERY + '4.jpg' },
                     { label: 'Ibiza', message: 'Ibiza', key: 'island-ibiza', image: 'javascript:window.__ncXss=1' },
                     { label: 'Book a bed', message: 'I would like to book a bed', key: 'book-a-bed', image: GALLERY + '6.jpg' },
@@ -2065,8 +2096,10 @@
                         actions: [
                             {
                                 type: 'property_cards', total: 1,
-                                items: [{ key: 'duque-nest', name: 'Duque Nest', location: 'Costa Adeje, Tenerife',
-                                    image: GALLERY + '1.jpg', url: hostileUrl }]
+                                items: [{
+                                    key: 'duque-nest', name: 'Duque Nest', location: 'Costa Adeje, Tenerife',
+                                    image: GALLERY + '1.jpg', url: hostileUrl
+                                }]
                             },
                             {
                                 type: 'availability', available: true,
@@ -2692,7 +2725,7 @@
         var header = el('div', 'nc-header');
         var headerInfo = el('div', 'nc-header-info');
         var headerLogo = el('img', 'nc-header-logo');
-        attrs(headerLogo, { src: assetBase + 'img/germanavatar.png', alt: '', width: '44', height: '44' });
+        attrs(headerLogo, { src: assetBase + 'img/logotipo-nests-tenerife.png', alt: '', width: '44', height: '44' });
         var headerText = el('div', 'nc-header-text');
         var nameRow = el('div', 'nc-name-row');
         // Empty until paintAssistant() runs at the end of this function: the
@@ -2704,8 +2737,6 @@
         var badge = el('span', 'nc-badge', t('aiAssistant'));
         nameRow.appendChild(badge);
         headerText.appendChild(nameRow);
-        var subline = el('span', 'nc-subline', t('subline'));
-        headerText.appendChild(subline);
         headerInfo.appendChild(headerLogo);
         headerInfo.appendChild(headerText);
 
@@ -2844,7 +2875,7 @@
         els = {
             root: root, toggler: toggler, panel: panel, body: body, loader: loader,
             progress: progress, form: form, input: input, send: send, close: closeBtn,
-            title: title, badge: badge, subline: subline, expand: expandBtn,
+            title: title, badge: badge, expand: expandBtn,
             // The header menu. Its open state is a class on headerControls
             // (nc-menu-open), not on the toggle: the CSS keys off the container.
             headerControls: headerControls, menuToggle: menuToggle, menu: menu,
@@ -5711,7 +5742,7 @@
         // Chromium's history-manipulation intervention does not reach this call:
         // it is scoped to the back/forward UI and explicitly not to the
         // history.back()/forward() APIs, so this pop always lands.
-        try { history.back(); } catch (e) {}
+        try { history.back(); } catch (e) { }
     }
 
     /*
@@ -6539,7 +6570,7 @@
         pollEntries = Object.create(null);   // any orphaned poll handle died with its epoch
         followStream = false;     // a follow armed for the old reply must not ride into the new one
         lastDayKey = null;        // the wipe below takes every pill with it; a stale day here
-                                  // would swallow the first real separator of the new conversation
+        // would swallow the first real separator of the new conversation
         chatEpoch += 1;           // orphan any poll still backing off for the dead conversation
         // One offset per CONVERSATION, and this starts a new one. Unlike
         // serverIdleHours — which the init below reassigns unconditionally, so it
@@ -6873,7 +6904,6 @@
         els.teaserBody.textContent = t('teaser');
         els.teaserClose.setAttribute('aria-label', t('teaserDismiss'));
         els.badge.textContent = t('aiAssistant');
-        els.subline.textContent = t('subline');
         els.disclaimer.textContent = t('disclaimer');
         // Only while the widget's OWN pack block is on screen — after the first
         // turn there is nothing to repaint, and the click handlers read their label
