@@ -42,6 +42,14 @@ the click-counting build had been promised; that build (D-113) is now **2.13.6**
 - Folded in before release, at the owner's request, from a 768px tablet screenshot: the first cut
   sat side by side on the expanded sheet only (≥1024px with `.nc-expanded`), which left a fullscreen
   tablet's pair stacked beside half a transcript of empty space.
+- Folded in before release, at the owner's request: **a slimmer header, "Nesti [AI]".** The
+  "Nests Hostels · replies in seconds" line under the name is gone (CSS rule, element, `setLocale()`
+  repaint and the `subline` pack key in all five locales), and the badge's `aiAssistant` string is
+  the short form — `AI` / `IA` / `IA` / `KI` / `IA` — still in the pill and still unconditional,
+  with the disclaimer and the dialog's `assistantRole` carrying the full wording. The avatar stays
+  44px; the header's vertical padding went from 12/15px to an even 10px (desktop and phone), which
+  takes about 7px off the desktop header. The mock's `disclosure` is now the literal server string
+  "AI assistant" rather than the badge's pack string, which the widget never read anyway.
 - "One card" is counted through `renderableCardUrl()`, the gate `propertyCard()` drops by, so the
   card column is never empty; the prices half must draw its card (options, or
   `t('noAvailability')`). A rail of two or more never pairs. `renderAction()`'s switch keeps one
